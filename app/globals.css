@@ -28,6 +28,9 @@
   --wk-primary-from: #ff9a03;
   --wk-primary-to: #f9315f;
   --wk-primary-text: #17140e;
+  /* Text on light accent fills (badges, selected pills) */
+  --wk-on-accent: #17140e;
+  --wk-on-success: #0e2a1b;
 
   /* Modes */
   --wk-relationship: #c78bff; /* logo purple, lightened for text on dark */
@@ -58,6 +61,8 @@
 
   --color-primary: var(--wk-brand-coral);
   --color-primary-foreground: var(--wk-primary-text);
+  --color-on-accent: var(--wk-on-accent);
+  --color-on-success: var(--wk-on-success);
   --color-brand-orange: var(--wk-brand-orange);
   --color-brand-coral: var(--wk-brand-coral);
   --color-brand-magenta: var(--wk-brand-magenta);

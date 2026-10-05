@@ -62,6 +62,7 @@ jobs:
             case "$key" in
               SERVICE_ROLE_KEY) echo "::add-mask::$value"; echo "SUPABASE_SERVICE_ROLE_KEY=$value" >> "$GITHUB_ENV" ;;
               SECRET_KEY) echo "::add-mask::$value"; echo "SUPABASE_SECRET_KEY=$value" >> "$GITHUB_ENV" ;;
+              JWT_SECRET) echo "::add-mask::$value"; echo "SUPABASE_JWT_SECRET=$value" >> "$GITHUB_ENV" ;;
             esac
           done < /tmp/sb.env
           rm -f /tmp/sb.env

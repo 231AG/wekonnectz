@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 const badgeVariants = cva("inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold tracking-wide uppercase", {
   variants: {
     tone: {
-      approved: "bg-success text-[#0E2A1B]",
-      pending: "bg-pending text-[#17140E]",
-      relationship: "bg-relationship text-[#17140E]",
-      casual: "bg-casual text-[#17140E]",
+      approved: "bg-success text-on-success",
+      pending: "bg-pending text-on-accent",
+      relationship: "bg-relationship text-on-accent",
+      casual: "bg-casual text-on-accent",
       danger: "bg-danger/15 text-danger",
       neutral: "bg-surface-2 text-muted-foreground",
     },

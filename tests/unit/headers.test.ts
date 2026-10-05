@@ -15,6 +15,10 @@ describe("security headers (§22)", () => {
     expect(prod.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
   });
 
+  it("does not request HSTS preload before the domain is settled", () => {
+    expect(prod.get("Strict-Transport-Security")).not.toContain("preload");
+  });
+
   it("never allows eval in production", () => {
     expect(prod.get("Content-Security-Policy")).not.toContain("unsafe-eval");
   });

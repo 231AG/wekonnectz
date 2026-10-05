@@ -3,6 +3,15 @@
 -- Rule: every table has RLS enabled and explicit policies in the same migration (spec §6 rule 2).
 
 -- ---------------------------------------------------------------------------
+-- Default privileges. Supabase grants anon/authenticated every table privilege by default.
+-- RLS does not apply to TRUNCATE, REFERENCES or TRIGGER, so remove those for client roles on
+-- every table created from now on. Each table still opts in to SELECT/INSERT/UPDATE/DELETE
+-- explicitly and is then filtered by RLS.
+-- ---------------------------------------------------------------------------
+alter default privileges for role postgres in schema public
+  revoke truncate, references, trigger on tables from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Shared trigger: keep updated_at current on mutable tables (spec §18).
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -37,6 +46,11 @@ alter table public.app_settings enable row level security;
 
 -- Explicit deny for client roles. Members never read settings directly; server-side
 -- functions read them through get_setting(). Staff policies arrive with staff roles (Phase 3).
+-- Client roles get no table privileges at all; server-side functions read via get_setting().
+-- service_role may read (server tooling); changes go through audited functions (Phase 10).
+revoke all on public.app_settings from anon, authenticated;
+revoke insert, update, delete, truncate, references, trigger on public.app_settings from service_role;
+
 create policy app_settings_no_client_access on public.app_settings
   as restrictive
   for all
@@ -108,7 +122,7 @@ create type public.audit_action as enum (
 
 create table public.audit_logs (
   id          uuid primary key default gen_random_uuid(),
-  actor_id    uuid,
+  actor_id    uuid not null,
   action      public.audit_action not null,
   entity_type text not null check (length(entity_type) between 1 and 64),
   entity_id   text,
@@ -125,7 +139,12 @@ create index audit_logs_entity_idx on public.audit_logs (entity_type, entity_id)
 
 alter table public.audit_logs enable row level security;
 
--- Explicit deny for client roles. Read access for ADMIN/SUPER_ADMIN arrives with staff roles.
+-- No direct writes by anyone except through audit(). Clients get no privileges; service_role
+-- may read (admin console, Phase 10). Read access for ADMIN/SUPER_ADMIN arrives with staff roles.
+revoke all on public.audit_logs from anon, authenticated;
+revoke insert, update, delete, truncate, references, trigger on public.audit_logs from service_role;
+
+-- Explicit deny for client roles (defence in depth behind the revoked privileges).
 create policy audit_logs_no_client_access on public.audit_logs
   as restrictive
   for all
@@ -133,7 +152,10 @@ create policy audit_logs_no_client_access on public.audit_logs
   using (false)
   with check (false);
 
--- Append-only: block UPDATE, DELETE and TRUNCATE for every role, including service_role.
+-- Append-only: block UPDATE, DELETE and TRUNCATE. Applies to every API role (anon, authenticated,
+-- service_role). Limitation: the database owner (`postgres`) can still disable triggers or set
+-- session_replication_role. That is documented in docs/SECURITY.md; off-database audit export
+-- is planned for Phase 12.
 create or replace function public.audit_logs_append_only()
 returns trigger
 language plpgsql
@@ -154,7 +176,8 @@ create trigger audit_logs_no_truncate
   for each statement execute function public.audit_logs_append_only();
 
 -- audit(): the only writer. Called from inside staff database functions so the log
--- row commits or rolls back together with the action it records.
+-- row commits or rolls back together with the action it records. Not callable from the API
+-- (not even service_role), so rows can't be forged without an authenticated actor.
 create or replace function public.audit(
   p_action      public.audit_action,
   p_entity_type text,
@@ -167,17 +190,33 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_id uuid;
+  v_id    uuid;
+  v_actor uuid := auth.uid();
+  v_bad   text;
 begin
+  if v_actor is null then
+    raise exception 'audit(): no authenticated actor' using errcode = '42501';
+  end if;
+
+  -- Spec §6 rule 7: never put phone numbers, DOB, storage paths or message text in the log.
+  select k into v_bad
+  from jsonb_object_keys(coalesce(p_metadata, '{}'::jsonb)) as k
+  where lower(k) in ('phone', 'phone_number', 'sender_phone', 'dob', 'date_of_birth',
+                     'storage_path', 'selfie_storage_path', 'evidence_path', 'path',
+                     'body', 'text', 'message', 'message_text', 'bio')
+  limit 1;
+  if v_bad is not null then
+    raise exception 'audit(): metadata key "%" is not allowed (PII)', v_bad using errcode = '22023';
+  end if;
+
   insert into public.audit_logs (actor_id, action, entity_type, entity_id, metadata)
-  values (auth.uid(), p_action, p_entity_type, p_entity_id, coalesce(p_metadata, '{}'::jsonb))
+  values (v_actor, p_action, p_entity_type, p_entity_id, coalesce(p_metadata, '{}'::jsonb))
   returning id into v_id;
   return v_id;
 end;
 $$;
 
-revoke all on function public.audit(public.audit_action, text, text, jsonb) from public, anon, authenticated;
-grant execute on function public.audit(public.audit_action, text, text, jsonb) to service_role;
+revoke all on function public.audit(public.audit_action, text, text, jsonb) from public, anon, authenticated, service_role;
 
 -- Same rule for the trigger helpers: not callable from the API.
 revoke all on function public.set_updated_at() from public, anon, authenticated;

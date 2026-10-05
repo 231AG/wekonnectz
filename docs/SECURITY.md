@@ -31,10 +31,13 @@ with a valid member JWT cannot skip them (plan §1.2).
 
 ## Phase 0 controls in detail
 
-- **Audit log** is append-only for every role (triggers), written only by `audit()` inside the same transaction as the action.
+- **Table privileges**: Supabase grants `anon`/`authenticated` every privilege by default, and RLS does not apply to TRUNCATE, REFERENCES or TRIGGER. The foundation migration revokes those three from client roles **by default for all future tables**, and revokes everything from clients on `app_settings` and `audit_logs`. A pgTAP guard fails if any public table gives a client role TRUNCATE/REFERENCES/TRIGGER.
+- **Audit log** is append-only for every API role (`anon`, `authenticated`, `service_role`): UPDATE/DELETE/TRUNCATE are blocked by triggers and privileges. Only `audit()` writes. It is not callable from the API (not even with the service-role key), requires an authenticated actor (`actor_id NOT NULL`), and rejects PII keys in `metadata`.
+- **Known limitation — database owner**: the `postgres` owner role can disable triggers or set `session_replication_role = replica` and so alter audit rows. Supabase cannot prevent this. Mitigations: nobody uses the owner role from the app; dashboard/SQL access is limited to the owner; Phase 12 adds an off-database export (or hash chain) of audit rows so tampering is detectable.
 - **Settings** with an undecided value raise on read (`get_setting()`), so no invented number can silently reach business logic (§6 rule 9).
-- **Error reporting**: `lib/observability/scrub.ts` drops request bodies, cookies, user details except id, and masks phone numbers, dates, storage paths; message text, bios and notes are dropped by key. Breadcrumbs other than navigation are discarded. Sentry is disabled until a DSN exists.
-- **Headers**: CSP (`frame-ancestors 'none'`, no `unsafe-eval` in production), HSTS 2 years, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy (`geolocation=()` always — BR-20; `camera=(self)` for the verification selfie), COOP same-origin. `X-Powered-By` removed.
+- **Error reporting**: `lib/observability/scrub.ts` drops request bodies, cookies, headers (IP, referer), env and query strings; strips query strings from request and breadcrumb URLs; keeps user id only; masks phone numbers, dates and storage paths in every string (UUIDs kept); drops message text, bios and notes by key. Breadcrumbs other than navigation are discarded. Sentry is disabled until a DSN exists.
+- **Bundle check** scans client JS/CSS (`.next/static`) and prerendered HTML/RSC payloads (`.next/server/app`) for secret names, `sb_secret_` keys, service_role JWTs and the literal values of secret env vars.
+- **Headers**: CSP (`frame-ancestors 'none'`, no `unsafe-eval` in production, explicit `worker-src`/`manifest-src`), HSTS 1 year with `includeSubDomains` (**no `preload`** until the production domain is settled, T-16 — preload is hard to undo), X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy (`geolocation=()` always — BR-20; `camera=(self)` for the verification selfie), COOP same-origin. `X-Powered-By` removed.
 - **Known baseline gap**: production CSP still allows `'unsafe-inline'` scripts (Next.js inline bootstrap). Fixed in Phase 12 with nonces.
 
 ## Liberia-only signup

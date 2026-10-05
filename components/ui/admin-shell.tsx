@@ -5,7 +5,6 @@ import {
   CreditCard,
   Flag,
   Image as ImageIcon,
-  LogOut,
   Settings,
   Shield,
   User,
@@ -82,11 +81,10 @@ function AdminShell({
         </nav>
         <div className="flex items-center gap-3 border-t border-border px-2 pt-4 text-xs text-muted-foreground">
           <User className="size-5" strokeWidth={1.6} aria-hidden />
+          {/* The log-out button arrives with staff auth in Phase 3. */}
           <span className="flex-1">
             {staffName} · {ROLE_LABEL[role]}
           </span>
-          {/* Log out action arrives with staff auth (Phase 3). */}
-          <LogOut className="size-5" strokeWidth={1.6} aria-hidden />
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-8 py-8">{children}</main>

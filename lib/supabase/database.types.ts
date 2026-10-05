@@ -38,13 +38,13 @@ export type Database = {
                   ]
                 },"audit_logs": {
                   Row: {
-                    "action": Database["public"]['Enums']["audit_action"],"actor_id": string | null,"created_at": string,"entity_id": string | null,"entity_type": string,"id": string,"metadata": NonNullable<Json>
+                    "action": Database["public"]['Enums']["audit_action"],"actor_id": string,"created_at": string,"entity_id": string | null,"entity_type": string,"id": string,"metadata": NonNullable<Json>
                   }
                   Insert: {
-                    "action": Database["public"]['Enums']["audit_action"],"actor_id"?: string | null,"created_at"?: string,"entity_id"?: string | null,"entity_type": string,"id"?: string,"metadata"?: NonNullable<Json>
+                    "action": Database["public"]['Enums']["audit_action"],"actor_id": string,"created_at"?: string,"entity_id"?: string | null,"entity_type": string,"id"?: string,"metadata"?: NonNullable<Json>
                   }
                   Update: {
-                    "action"?: Database["public"]['Enums']["audit_action"],"actor_id"?: string | null,"created_at"?: string,"entity_id"?: string | null,"entity_type"?: string,"id"?: string,"metadata"?: NonNullable<Json>
+                    "action"?: Database["public"]['Enums']["audit_action"],"actor_id"?: string,"created_at"?: string,"entity_id"?: string | null,"entity_type"?: string,"id"?: string,"metadata"?: NonNullable<Json>
                   }
                   Relationships: [
                     

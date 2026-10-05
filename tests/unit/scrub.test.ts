@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FILTERED, scrub, scrubEvent, scrubString } from "@/lib/observability/scrub";
+import { FILTERED, scrub, scrubBreadcrumb, scrubEvent, scrubString } from "@/lib/observability/scrub";
 
 // Spec §6 rule 7: never log phone numbers, dates of birth, storage paths or message text.
 describe("scrubString — rule 7", () => {
@@ -77,5 +77,50 @@ describe("scrubEvent", () => {
     const original = { request: { data: { a: 1 } } };
     scrubEvent(original);
     expect(original.request.data).toEqual({ a: 1 });
+  });
+});
+
+describe("scrub — leak paths found in Phase 0 audit", () => {
+  it("removes query strings, headers and env from requests", () => {
+    const out = scrubEvent({
+      request: {
+        url: "https://app.example/verify?otp=123456&dob=1999-1-2",
+        query_string: "otp=123456&dob=1999-1-2",
+        headers: { "X-Forwarded-For": "41.57.1.2", Referer: "https://app.example/?token=abc" },
+        env: { REMOTE_ADDR: "41.57.1.2" },
+        method: "POST",
+      },
+    });
+    expect(out.request).toEqual({ url: "https://app.example/verify", method: "POST" });
+  });
+
+  it("masks non-padded ISO dates and bracketed phone numbers", () => {
+    expect(scrubString("dob 1999-3-4")).toBe("dob [Filtered]");
+    expect(scrubString("call +231 (77) 012-345")).toBe("call [Filtered]");
+  });
+
+  it("keeps UUIDs intact", () => {
+    const id = "a7161234-5678-4abc-9def-123456789012";
+    expect(scrubString(`user ${id} failed`)).toBe(`user ${id} failed`);
+  });
+
+  it("keeps span descriptions and route paths (not PII by themselves)", () => {
+    expect(scrub({ description: "GET /home", path: "/admin/users" })).toEqual({
+      description: "GET /home",
+      path: "/admin/users",
+    });
+  });
+});
+
+describe("scrubBreadcrumb", () => {
+  it("drops non-navigation breadcrumbs", () => {
+    expect(scrubBreadcrumb({ category: "console", data: { arguments: ["+231770123456"] } })).toBeNull();
+  });
+
+  it("strips query strings from navigation breadcrumbs", () => {
+    expect(scrubBreadcrumb({ category: "navigation", data: { from: "/a?otp=1", to: "/b#x" } })).toEqual({
+      category: "navigation",
+      data: { from: "/a", to: "/b" },
+    });
   });
 });

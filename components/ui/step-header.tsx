@@ -30,7 +30,8 @@ function StepHeader({ step, total, backHref }: { step: number; total: number; ba
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
-          aria-label={`Step ${step} of ${total}`}
+          aria-valuetext={`Step ${step} of ${total}`}
+          aria-label="Sign-up progress"
         >
           <div className="bg-primary-gradient h-1 rounded" style={{ width: `${percent}%` }} />
         </div>

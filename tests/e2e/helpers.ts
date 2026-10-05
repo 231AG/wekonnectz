@@ -4,9 +4,11 @@ export const SHOTS = "docs/progress/phase-00/screenshots";
 
 /**
  * Collects console errors (including CSP violations) and failed requests.
- * Next.js prefetches linked routes; links to routes from later phases 404 on prefetch
- * (`_rsc=` requests) until those phases ship. Those are ignored; any other failed
- * request or console error is reported.
+ * Next.js prefetches linked routes; links to routes from later phases return 404 on prefetch
+ * (`_rsc=` requests) until those phases ship. Only that exact case is ignored: any other
+ * failed request (including a 5xx or non-404 4xx on a prefetch) or console error is reported.
+ * The browser's generic "Failed to load resource" console line is dropped because the
+ * response listener already reports the real failure with its URL and status.
  */
 export function trackPageErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -15,7 +17,8 @@ export function trackPageErrors(page: Page): string[] {
   });
   page.on("pageerror", (err) => errors.push(err.message));
   page.on("response", (res) => {
-    if (res.status() >= 400 && !res.url().includes("_rsc=")) errors.push(`${res.status()} ${res.url()}`);
+    const ignoredPrefetch404 = res.status() === 404 && res.url().includes("_rsc=");
+    if (res.status() >= 400 && !ignoredPrefetch404) errors.push(`${res.status()} ${res.url()}`);
   });
   return errors;
 }

@@ -1,4 +1,4 @@
-import { scrubEvent } from "@/lib/observability/scrub";
+import { scrubBreadcrumb, scrubEvent } from "@/lib/observability/scrub";
 
 /**
  * Shared Sentry options. With no DSN set, Sentry stays disabled (owner task T-17).
@@ -13,8 +13,7 @@ export function sentryOptions(dsn: string | undefined) {
     tracesSampleRate: 0.1,
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubEvent,
-    beforeBreadcrumb: (breadcrumb: { category?: string }) =>
-      // Console and fetch breadcrumbs can carry message text or phone numbers; keep navigation only.
-      breadcrumb.category === "navigation" ? breadcrumb : null,
+    // Console and fetch breadcrumbs can carry message text or phone numbers; keep navigation only.
+    beforeBreadcrumb: scrubBreadcrumb,
   };
 }

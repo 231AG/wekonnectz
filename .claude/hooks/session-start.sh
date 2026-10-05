@@ -11,7 +11,7 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
-pnpm install --prefer-offline
+pnpm install --frozen-lockfile --prefer-offline
 
 if ! docker info >/dev/null 2>&1; then
   if command -v dockerd >/dev/null 2>&1; then

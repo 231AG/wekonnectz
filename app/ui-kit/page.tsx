@@ -103,9 +103,13 @@ export default async function UiKitPage() {
             <Label htmlFor="kit-name">Display name</Label>
             <Input id="kit-name" defaultValue="Musu" />
           </div>
+          <div role="radiogroup" aria-label="I am" className="flex flex-wrap gap-2">
+            <Pill mode="radio" selected>
+              Woman
+            </Pill>
+            <Pill mode="radio">Man</Pill>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <Pill selected>Woman</Pill>
-            <Pill>Man</Pill>
             <Pill selected tone="casual">
               Tonight
             </Pill>

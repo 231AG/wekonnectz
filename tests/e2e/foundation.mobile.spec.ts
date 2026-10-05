@@ -26,10 +26,18 @@ test("UI kit: tokens and primitives render; every control is at least 44px", asy
   const errors = trackPageErrors(page);
   await page.goto("/ui-kit");
   await expect(page.getByRole("heading", { name: /UI kit/ })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "Step 1 of 8" })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Sign-up progress" })).toHaveAttribute(
+    "aria-valuetext",
+    "Step 1 of 8",
+  );
+  await expect(page.getByRole("radiogroup", { name: "I am" }).getByRole("radio", { name: "Woman" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
 
-  const controls = page.locator("main button, main a, nav a");
+  // Every interactive element on the page, not just those inside <main>.
+  const controls = page.locator("button:visible, a:visible, input:visible, select:visible, textarea:visible");
   const count = await controls.count();
   expect(count).toBeGreaterThan(10);
   for (let i = 0; i < count; i += 1) {

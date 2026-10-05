@@ -28,6 +28,8 @@ export function buildSecurityHeaders({
       isDev ? "ws://localhost:* ws://127.0.0.1:*" : "",
     ),
     "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
     "frame-ancestors 'none'",
     "form-action 'self'",
     "base-uri 'self'",
@@ -37,7 +39,8 @@ export function buildSecurityHeaders({
 
   return [
     { key: "Content-Security-Policy", value: csp },
-    { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+    // No `preload` until the production domain is settled (T-16); preload is hard to undo.
+    { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
     { key: "X-Frame-Options", value: "DENY" },
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

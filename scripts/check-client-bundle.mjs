@@ -1,44 +1,60 @@
 #!/usr/bin/env node
 // Spec §6 rule 3 / §22 Secrets: no service-role key or other secret may reach browser JavaScript.
-// Scans everything the browser can download (.next/static) after `next build`. Prints file names
-// only, never the matched value.
+// Scans everything the browser can download after `next build`: client JS/CSS in .next/static and
+// prerendered HTML / RSC payloads in .next/server/app. Prints file names only, never the value.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOT = ".next/static";
+const ROOTS = [
+  { dir: ".next/static", ext: /\.(js|mjs|json|html|css|map)$/ },
+  // Only browser-delivered artefacts here; server JS legitimately references env names.
+  { dir: ".next/server/app", ext: /\.(html|rsc|meta|body|segment|txt)$/ },
+];
 const FORBIDDEN_NAMES = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_SECRET_KEY",
   "PHONE_HASH_PEPPER",
   "SENTRY_AUTH_TOKEN",
   "SMS_API_SECRET",
+  "SUPABASE_JWT_SECRET",
 ];
 const SECRET_KEY_PREFIX = /\bsb_secret_[A-Za-z0-9_-]{10,}/;
 const JWT = /eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{10,}/g;
 
 // Literal secret values from the environment, if present (CI exports the local Supabase keys).
-const secretValues = ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "PHONE_HASH_PEPPER"]
+const secretValues = [
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_SECRET_KEY",
+  "SUPABASE_JWT_SECRET",
+  "PHONE_HASH_PEPPER",
+  "SENTRY_AUTH_TOKEN",
+  "SMS_API_SECRET",
+  "SMS_API_KEY",
+]
   .map((name) => process.env[name])
   .filter((v) => typeof v === "string" && v.length >= 16);
 
-function* walk(dir) {
+function* walk(dir, ext) {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) yield* walk(path);
-    else if (/\.(js|mjs|json|html|css|map)$/.test(entry)) yield path;
+    if (statSync(path).isDirectory()) yield* walk(path, ext);
+    else if (ext.test(entry)) yield path;
   }
 }
 
 let files = 0;
 const problems = [];
-try {
-  statSync(ROOT);
-} catch {
-  console.error(`check-client-bundle: ${ROOT} not found. Run \`pnpm build\` first.`);
-  process.exit(2);
+for (const { dir } of ROOTS) {
+  try {
+    statSync(dir);
+  } catch {
+    console.error(`check-client-bundle: ${dir} not found. Run \`pnpm build\` first.`);
+    process.exit(2);
+  }
 }
 
-for (const file of walk(ROOT)) {
+const allFiles = ROOTS.flatMap(({ dir, ext }) => [...walk(dir, ext)]);
+for (const file of allFiles) {
   files += 1;
   const text = readFileSync(file, "utf8");
   for (const name of FORBIDDEN_NAMES) if (text.includes(name)) problems.push(`${file}: contains the name ${name}`);
