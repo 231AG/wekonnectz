@@ -1,7 +1,7 @@
 -- Guards that apply to every table in the public schema (spec §6 rule 2, §22).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(5);
+select plan(7);
 
 select is_empty(
   $$ select c.relname::text
@@ -39,6 +39,22 @@ select is_empty(
         and a.grantee in (0, 'anon'::regrole, 'authenticated'::regrole) $$,
   'default privileges grant nothing to PUBLIC, anon or authenticated'
 );
+
+-- Probe: objects created now (as a migration would) must not be reachable by client roles.
+create function public.zz_probe_fn() returns int language sql as 'select 1';
+create table public.zz_probe_table (id int);
+select ok(
+  not has_function_privilege('anon', 'public.zz_probe_fn()', 'execute')
+  and not has_function_privilege('authenticated', 'public.zz_probe_fn()', 'execute'),
+  'a newly created function is not executable by anon/authenticated'
+);
+select ok(
+  not has_table_privilege('anon', 'public.zz_probe_table', 'select,insert,update,delete,truncate')
+  and not has_table_privilege('authenticated', 'public.zz_probe_table', 'select,insert,update,delete,truncate'),
+  'a newly created table grants nothing to anon/authenticated'
+);
+drop function public.zz_probe_fn();
+drop table public.zz_probe_table;
 
 -- No function in public is executable by client roles unless a later migration grants it on purpose.
 -- (Phase 0 has none. Later phases add their RPCs to this allow-list with a comment.)

@@ -14,6 +14,10 @@ alter default privileges for role postgres in schema public
   revoke all on sequences from anon, authenticated;
 alter default privileges for role postgres in schema public
   revoke execute on functions from public, anon, authenticated;
+-- PUBLIC's EXECUTE on functions is a built-in global default; a schema-scoped statement cannot
+-- remove it, so it is revoked globally for functions created by `postgres` (our migrations).
+alter default privileges for role postgres
+  revoke execute on functions from public;
 
 -- ---------------------------------------------------------------------------
 -- Shared trigger: keep updated_at current on mutable tables (spec §18).
