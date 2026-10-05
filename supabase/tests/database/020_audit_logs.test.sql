@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(18);
 
 -- Simulate an authenticated staff session for audit()'s actor.
 select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
@@ -16,6 +16,11 @@ select throws_ok($$ select public.audit('USER_BANNED', 'users', 'x', '{"phone":"
   '22023', null, 'audit() rejects a phone key in metadata');
 select throws_ok($$ select public.audit('SELFIE_VIEWED', 'verifications', 'x', '{"storage_path":"a/b"}') $$,
   '22023', null, 'audit() rejects a storage path key in metadata');
+
+select throws_ok($$ select public.audit('USER_BANNED', 'users', 'x', '{"meta":{"Phone":"+231770000000"}}') $$,
+  '22023', null, 'audit() rejects a PII key nested inside metadata (case-insensitive)');
+select throws_ok($$ select public.audit('REPORT_RESOLVED', 'reports', 'x', '{"items":[{"note":"words"}]}') $$,
+  '22023', null, 'audit() rejects a PII key inside an array in metadata');
 
 -- No actor, no audit row.
 select set_config('request.jwt.claims', '', true);

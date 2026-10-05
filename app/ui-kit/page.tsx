@@ -6,7 +6,7 @@ import { BottomNav } from "@/components/ui/bottom-nav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
-import { Pill } from "@/components/ui/pill";
+import { Pill, PillRadioGroup } from "@/components/ui/pill";
 import { StepHeader } from "@/components/ui/step-header";
 import { assertUiKitEnabled } from "@/lib/dev/ui-kit";
 
@@ -103,12 +103,14 @@ export default async function UiKitPage() {
             <Label htmlFor="kit-name">Display name</Label>
             <Input id="kit-name" defaultValue="Musu" />
           </div>
-          <div role="radiogroup" aria-label="I am" className="flex flex-wrap gap-2">
-            <Pill mode="radio" selected>
-              Woman
-            </Pill>
-            <Pill mode="radio">Man</Pill>
-          </div>
+          <PillRadioGroup
+            aria-label="I am"
+            defaultValue="woman"
+            options={[
+              { value: "woman", label: "Woman" },
+              { value: "man", label: "Man" },
+            ]}
+          />
           <div className="flex flex-wrap gap-2">
             <Pill selected tone="casual">
               Tonight

@@ -67,3 +67,17 @@ test("keyboard focus is visible on the primary button", async ({ page }) => {
   const outline = await button.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(outline).not.toBe("none");
 });
+
+test("radio pills follow the radio keyboard pattern (one Tab stop, arrows select)", async ({ page }) => {
+  await page.goto("/ui-kit");
+  const group = page.getByRole("radiogroup", { name: "I am" });
+  const woman = group.getByRole("radio", { name: "Woman", exact: true });
+  const man = group.getByRole("radio", { name: "Man", exact: true });
+  await expect(man).toHaveAttribute("tabindex", "-1");
+  await woman.focus();
+  // Radix selects on focus while an arrow key is held; give the key a realistic hold time.
+  await page.keyboard.press("ArrowRight", { delay: 50 });
+  await expect(man).toBeFocused();
+  await expect(man).toHaveAttribute("aria-checked", "true");
+  await expect(woman).toHaveAttribute("aria-checked", "false");
+});

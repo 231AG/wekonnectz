@@ -3,13 +3,17 @@
 -- Rule: every table has RLS enabled and explicit policies in the same migration (spec §6 rule 2).
 
 -- ---------------------------------------------------------------------------
--- Default privileges. Supabase grants anon/authenticated every table privilege by default.
--- RLS does not apply to TRUNCATE, REFERENCES or TRIGGER, so remove those for client roles on
--- every table created from now on. Each table still opts in to SELECT/INSERT/UPDATE/DELETE
--- explicitly and is then filtered by RLS.
+-- Default privileges: deny by default.
+-- Supabase grants anon/authenticated every table privilege and EXECUTE on every function by
+-- default. From here on, new tables and functions in `public` grant nothing to client roles.
+-- Each later migration grants exactly what a table or RPC needs (and RLS still filters rows).
 -- ---------------------------------------------------------------------------
 alter default privileges for role postgres in schema public
-  revoke truncate, references, trigger on tables from anon, authenticated;
+  revoke all on tables from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke all on sequences from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Shared trigger: keep updated_at current on mutable tables (spec §18).
@@ -199,11 +203,18 @@ begin
   end if;
 
   -- Spec §6 rule 7: never put phone numbers, DOB, storage paths or message text in the log.
-  select k into v_bad
-  from jsonb_object_keys(coalesce(p_metadata, '{}'::jsonb)) as k
-  where lower(k) in ('phone', 'phone_number', 'sender_phone', 'dob', 'date_of_birth',
-                     'storage_path', 'selfie_storage_path', 'evidence_path', 'path',
-                     'body', 'text', 'message', 'message_text', 'bio')
+  -- Checks keys at every nesting level. Keep in sync with SENSITIVE_KEYS in lib/observability/scrub.ts.
+  select k.key #>> '{}' into v_bad
+  from jsonb_path_query(
+         coalesce(p_metadata, '{}'::jsonb),
+         'strict $.** ? (@.type() == "object").keyvalue().key'
+       ) as k(key)
+  where lower(k.key #>> '{}') in (
+    'phone', 'phone_number', 'sender_phone', 'dob', 'date_of_birth', 'dateofbirth',
+    'storage_path', 'selfie_storage_path', 'evidence_path', 'path',
+    'body', 'text', 'message', 'message_text', 'bio', 'note', 'member_note',
+    'ip_address', 'password', 'otp', 'token'
+  )
   limit 1;
   if v_bad is not null then
     raise exception 'audit(): metadata key "%" is not allowed (PII)', v_bad using errcode = '22023';
@@ -219,5 +230,5 @@ $$;
 revoke all on function public.audit(public.audit_action, text, text, jsonb) from public, anon, authenticated, service_role;
 
 -- Same rule for the trigger helpers: not callable from the API.
-revoke all on function public.set_updated_at() from public, anon, authenticated;
-revoke all on function public.audit_logs_append_only() from public, anon, authenticated;
+revoke all on function public.set_updated_at() from public, anon, authenticated, service_role;
+revoke all on function public.audit_logs_append_only() from public, anon, authenticated, service_role;
