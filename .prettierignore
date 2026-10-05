@@ -1,0 +1,10 @@
+node_modules
+.next
+pnpm-lock.yaml
+lib/supabase/database.types.ts
+docs/mockups
+docs/spec
+supabase/.temp
+test-results
+playwright-report
+PROMPT.md
