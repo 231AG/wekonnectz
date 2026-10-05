@@ -5,17 +5,19 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 
 ## Summary
 
-| Area | ✅ | 🔄 | ⬜ | ⛔ |
-| --- | --- | --- | --- | --- |
-| Planning | 1 | 0 | 0 | 0 |
-| All build areas | 0 | 0 | 130 | 0 |
+| Area            | ✅  | 🔄  | ⬜  | ⛔  |
+| --------------- | --- | --- | --- | --- |
+| Planning        | 1   | 0   | 0   | 0   |
+| All build areas | 0   | 0   | 130 | 0   |
 
 Nothing is built yet. Plan awaiting approval.
 
 ## Planning
+
 - ✅ Master plan, audit, TODO, owner tasks — Plan
 
 ## Foundation
+
 - ⬜ Next.js + TS strict + Tailwind + shadcn/ui scaffold, pinned versions in CLAUDE.md — P0
 - ⬜ Design tokens reconciled with logo (provisional until T-01) — P0
 - ⬜ Base UI primitives (Button, Input, Card, Pill, Badge, BottomNav, StepHeader, AdminShell) — P0
@@ -30,6 +32,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Bundle check: no service-role key in client JS — P0
 
 ## Auth and geo
+
 - ⬜ `users`, roles, account states, RLS — P1 — BR-5, BR-6, BR-7
 - ⬜ Registration server action: country = LR before OTP, `geo_checks` row — P1 — BR-1
 - ⬜ +231-only phone validation — P1 — BR-2
@@ -44,6 +47,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Welcome, Age gate, Phone + OTP screens — P1 — BR-4
 
 ## Onboarding
+
 - ⬜ DOB stored and locked; under-18 blocked — P1/P2 — BR-4
 - ⬜ Community rules & consents with document version — P2
 - ⬜ About you: name, gender, interested in, county + community, intent — P2 — BR-20
@@ -54,6 +58,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Under review screen with live progress — P4
 
 ## Photos
+
 - ⬜ Private buckets (photos-quarantine, photos, verification, payment-evidence) — P3
 - ⬜ Signed-upload flow with count and rate limit — P3
 - ⬜ Processing: magic bytes, size cap, resize, WebP, EXIF strip — P3 — BR-12
@@ -64,6 +69,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Visibility per OD-3 — P3 ⛔ until OD-3 decided
 
 ## Verification
+
 - ⬜ `verifications`, pose prompts, in-camera capture — P4 — BR-10
 - ⬜ Verification queue with checklist, oldest first — P4 — BR-34
 - ⬜ SELFIE_VIEWED audit per view — P4 — BR-34
@@ -74,6 +80,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ ID document check — P4 ⛔ until OD-5 (only if yes)
 
 ## Safety
+
 - ⬜ Blocks (silent, symmetric, everywhere) — P5 — BR-24
 - ⬜ Reports with categories/priorities — P5
 - ⬜ Under-18 report → instant hide — P5 — BR-32
@@ -87,6 +94,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Behaviour signals (many reports, bursts, duplicate text, short windows) — P5/P8/P9
 
 ## Relationship mode
+
 - ⬜ Discover feed with filters — P6 — BR-8, BR-13
 - ⬜ Like / pass with cool-down — P6
 - ⬜ Atomic match creation (ordered pair) — P6 — BR-23
@@ -96,6 +104,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Home screen — P6
 
 ## Messaging
+
 - ⬜ Conversations, members, messages tables + RLS — P6 — BR-23, BR-24
 - ⬜ Realtime channels authorised by membership — P6
 - ⬜ Text only, detection → flag, not block — P6
@@ -105,6 +114,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Messages list (Chats / Requests tabs) — P6/P9
 
 ## Mobile money access
+
 - ⬜ Plans, subscriptions, payments, payment_events, payment_claims, merchant_accounts tables — P7 — BR-29
 - ⬜ Choose plan → instructions → submit claim → claim status screens — P7
 - ⬜ Evidence pipeline + SHA-256 duplicate flag — P7
@@ -119,6 +129,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Prices, currency, policies — P7 ⛔ until OD-1, 2, 13, 16, 17, 18, 21, 22, T-14
 
 ## Card subscriptions
+
 - ⬜ `CardProcessor` interface + fake adapter — P7b
 - ⬜ Webhook Edge Function (signature, raw log, idempotent, replay) — P7b
 - ⬜ State machine: renew, PAYMENT_FAILED → grace → EXPIRED, CANCELLED to period end — P7b — BR-40
@@ -126,6 +137,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Real processor adapter — P7c ⛔ until OD-4
 
 ## Availability
+
 - ⬜ `availability` table, Now / Schedule / Pause — P8 — BR-18
 - ⬜ Eligibility checks — P8
 - ⬜ Window caps — P8 ⛔ until OD-8
@@ -135,6 +147,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ pg_cron tidy job — P8
 
 ## Casual discovery
+
 - ⬜ Available Now grid, filters, fair rotation, cursor pagination — P9 — BR-16, BR-17
 - ⬜ Exclusions (self, blocks, interested-in, suspended, NOBODY) — P9 — BR-24
 - ⬜ Casual member profile + Send a request (300 chars, detection) — P9 — BR-21, BR-31
@@ -144,6 +157,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Saved profiles — P9
 
 ## Admin console
+
 - ⬜ Staff accounts, MFA (aal2 in DB), admin shell — P3
 - ⬜ Photo queue — P3; Verification queue — P4; Reports & Flags — P5; Claims queue — P7
 - ⬜ Dashboard with real figures — P10
@@ -157,6 +171,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ pgTAP test per §7 permission row — P10
 
 ## Notifications
+
 - ⬜ `notifications` table + `notify()` — P4
 - ⬜ Claim decision, review outcome notifications — P4/P7
 - ⬜ Notifications screen + preferences — P11
@@ -164,6 +179,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Delivery channel — P11 ⛔ until Q3
 
 ## Security and launch
+
 - ⬜ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
 - ⬜ Account deletion + purge job — P10 ⛔ until OD-7 — BR-7
 - ⬜ Data export — P10
@@ -177,19 +193,19 @@ Nothing is built yet. Plan awaiting approval.
 
 ## Business-rule coverage map
 
-| BR | Phase | | BR | Phase | | BR | Phase |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | P1 | | 15 | P4 | | 29 | P7 |
-| 2 | P1 | | 16 | P9 | | 30 | P1→P7 |
-| 3 | P1, P5 | | 17 | P8, P9 | | 31 | P2, P9 |
-| 4 | P1, P2, P10 | | 18 | P8 | | 32 | P5 |
-| 5 | P1, P5, P6 | | 19 | P8, P9 | | 33 | P5 |
-| 6 | P1, P5 | | 20 | P2, P8 | | 34 | P0→P10 |
-| 7 | P1, P10 | | 21 | P9 | | 35 | P7 |
-| 8 | P3, P4, P6 | | 22 | P9 | | 36 | P7 |
-| 9 | P3 | | 23 | P6 | | 37 | P7 |
-| 10 | P4 | | 24 | P5, P6, P9 | | 38 | P7 |
-| 11 | P3 | | 25 | P9 | | 39 | P7 |
-| 12 | P3 | | 26 | P7, P7b | | 40 | P7b |
-| 13 | P4, P6 | | 27 | P7 | | 41 | P7 |
-| 14 | P4 | | 28 | P7 | | | |
+| BR  | Phase       |     | BR  | Phase      |     | BR  | Phase  |
+| --- | ----------- | --- | --- | ---------- | --- | --- | ------ |
+| 1   | P1          |     | 15  | P4         |     | 29  | P7     |
+| 2   | P1          |     | 16  | P9         |     | 30  | P1→P7  |
+| 3   | P1, P5      |     | 17  | P8, P9     |     | 31  | P2, P9 |
+| 4   | P1, P2, P10 |     | 18  | P8         |     | 32  | P5     |
+| 5   | P1, P5, P6  |     | 19  | P8, P9     |     | 33  | P5     |
+| 6   | P1, P5      |     | 20  | P2, P8     |     | 34  | P0→P10 |
+| 7   | P1, P10     |     | 21  | P9         |     | 35  | P7     |
+| 8   | P3, P4, P6  |     | 22  | P9         |     | 36  | P7     |
+| 9   | P3          |     | 23  | P6         |     | 37  | P7     |
+| 10  | P4          |     | 24  | P5, P6, P9 |     | 38  | P7     |
+| 11  | P3          |     | 25  | P9         |     | 39  | P7     |
+| 12  | P3          |     | 26  | P7, P7b    |     | 40  | P7b    |
+| 13  | P4, P6      |     | 27  | P7         |     | 41  | P7     |
+| 14  | P4          |     | 28  | P7         |     |     |        |
