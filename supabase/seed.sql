@@ -1,0 +1,3 @@
+-- Seed data for LOCAL DEVELOPMENT and TESTS only. Fictional people only.
+-- Any setting value here is DEV-ONLY and must never be copied into a migration or production.
+-- (Phase 0 seeds nothing yet.)
