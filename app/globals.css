@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+ * WeKonnectz design tokens — PROPOSAL v1 (Phase 0), pending owner sign-off.
+ * Neutrals, type, spacing and radii come from docs/mockups (README token table).
+ * Accent colours are reconciled with the logo gradient sampled from
+ * docs/brand/wekonnectz-logo.jpg: #FF9A03 → #F9315F → #E0109A → #9A01BE.
+ * The app is dark-only, like the mock-ups.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Neutrals (mock-ups) */
+  --wk-bg: #0d0d11;
+  --wk-surface-1: #17171d;
+  --wk-surface-2: #202028;
+  --wk-border: #30303b;
+  --wk-text: #f3f1ec;
+  --wk-text-muted: #a9a7b2;
+
+  /* Brand (logo) */
+  --wk-brand-orange: #ff9a03;
+  --wk-brand-coral: #f9315f;
+  --wk-brand-magenta: #e0109a;
+  --wk-brand-purple: #9a01be;
+
+  /* Primary action: logo orange → coral. Dark text passes WCAG AA on both ends. */
+  --wk-primary-from: #ff9a03;
+  --wk-primary-to: #f9315f;
+  --wk-primary-text: #17140e;
+
+  /* Modes */
+  --wk-relationship: #c78bff; /* logo purple, lightened for text on dark */
+  --wk-casual: #ffa24c; /* logo orange, softened (mock-up used #F2945C) */
+
+  /* Status (mock-ups) */
+  --wk-verified: #8eb0ff;
+  --wk-success: #6fcf97;
+  --wk-pending: #e3c28e; /* the mock-ups' gold, kept for "In review" / pending */
+  --wk-danger: #ff8a7e;
+
+  --wk-radius-card: 16px;
+  --wk-radius-control: 14px;
+}
+
+@theme inline {
+  --color-background: var(--wk-bg);
+  --color-foreground: var(--wk-text);
+  --color-surface-1: var(--wk-surface-1);
+  --color-surface-2: var(--wk-surface-2);
+  --color-border: var(--wk-border);
+  --color-input: var(--wk-border);
+  --color-muted: var(--wk-surface-2);
+  --color-muted-foreground: var(--wk-text-muted);
+  --color-card: var(--wk-surface-1);
+  --color-card-foreground: var(--wk-text);
+  --color-ring: var(--wk-brand-coral);
+
+  --color-primary: var(--wk-brand-coral);
+  --color-primary-foreground: var(--wk-primary-text);
+  --color-brand-orange: var(--wk-brand-orange);
+  --color-brand-coral: var(--wk-brand-coral);
+  --color-brand-magenta: var(--wk-brand-magenta);
+  --color-brand-purple: var(--wk-brand-purple);
+
+  --color-relationship: var(--wk-relationship);
+  --color-casual: var(--wk-casual);
+  --color-verified: var(--wk-verified);
+  --color-success: var(--wk-success);
+  --color-pending: var(--wk-pending);
+  --color-danger: var(--wk-danger);
+  --color-destructive: var(--wk-danger);
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-manrope), ui-sans-serif, sans-serif;
+
+  --radius-card: var(--wk-radius-card);
+  --radius-control: var(--wk-radius-control);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    background: var(--wk-bg);
+    color: var(--wk-text);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--wk-brand-coral);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility bg-brand-gradient {
+  background-image: linear-gradient(
+    90deg,
+    var(--wk-brand-orange),
+    var(--wk-brand-coral) 45%,
+    var(--wk-brand-magenta) 75%,
+    var(--wk-brand-purple)
+  );
+}
+
+@utility bg-primary-gradient {
+  background-image: linear-gradient(90deg, var(--wk-primary-from), var(--wk-primary-to));
+}
+
+@utility text-brand-gradient {
+  background-image: linear-gradient(
+    90deg,
+    var(--wk-brand-orange),
+    var(--wk-brand-coral) 45%,
+    var(--wk-brand-magenta) 75%,
+    var(--wk-brand-purple)
+  );
+  background-clip: text;
+  color: transparent;
+}
