@@ -17,28 +17,28 @@ Legend: ✅ in a migration · ⬜ planned (phase)
 | updated_by              | uuid, nullable  | Staff user (FK added with `users` in Phase 1)              |
 | created_at / updated_at | timestamptz     | `set_updated_at()` trigger                                 |
 
-RLS: restrictive deny-all for `anon`, `authenticated`. Staff read/write arrives in Phase 3/10 via audited functions (`SETTING_CHANGED`).
+Privileges: none for `anon`/`authenticated`; `service_role` SELECT only. RLS: restrictive deny-all for `anon`, `authenticated`. Staff read/write arrives in Phase 3/10 via audited functions (`SETTING_CHANGED`).
 
 ### `audit_logs` ✅ (Phase 0)
 
-| Column      | Type                | Notes                                                 |
-| ----------- | ------------------- | ----------------------------------------------------- |
-| id          | uuid PK             |                                                       |
-| actor_id    | uuid, nullable      | `auth.uid()` at write time                            |
-| action      | `audit_action` enum | The 19 actions in §18                                 |
-| entity_type | text                |                                                       |
-| entity_id   | text, nullable      | text so non-uuid keys (e.g. setting keys) fit         |
-| metadata    | jsonb               | Never phone numbers, DOB, storage paths, message text |
-| created_at  | timestamptz         |                                                       |
+| Column      | Type                | Notes                                                            |
+| ----------- | ------------------- | ---------------------------------------------------------------- |
+| id          | uuid PK             |                                                                  |
+| actor_id    | uuid, not null      | `auth.uid()` at write time; `audit()` refuses to run without one |
+| action      | `audit_action` enum | The 19 actions in §18                                            |
+| entity_type | text                |                                                                  |
+| entity_id   | text, nullable      | text so non-uuid keys (e.g. setting keys) fit                    |
+| metadata    | jsonb               | Never phone numbers, DOB, storage paths, message text            |
+| created_at  | timestamptz         |                                                                  |
 
-Append-only: triggers block UPDATE, DELETE and TRUNCATE for every role. Only `audit()` writes (not executable by client roles). RLS: deny-all for clients; ADMIN read in Phase 10.
+Append-only: triggers block UPDATE, DELETE and TRUNCATE (owner-role caveat in `docs/SECURITY.md`). Privileges: none for clients; `service_role` SELECT only. Only `audit()` writes; it is not executable from the API, needs an authenticated actor and rejects PII metadata keys. RLS: deny-all for clients; ADMIN read in Phase 10.
 
 ### Functions ✅
 
 | Function                                          | Callable by                      | Purpose                                                  |
 | ------------------------------------------------- | -------------------------------- | -------------------------------------------------------- |
 | `get_setting(key)`                                | service_role, other DB functions | Returns value; raises `P0002` missing, `P0001` undecided |
-| `audit(action, entity_type, entity_id, metadata)` | service_role, other DB functions | Appends one audit row in the caller's transaction        |
+| `audit(action, entity_type, entity_id, metadata)` | other DB functions only          | Appends one audit row in the caller's transaction        |
 | `set_updated_at()`                                | trigger only                     |                                                          |
 | `audit_logs_append_only()`                        | trigger only                     |                                                          |
 
