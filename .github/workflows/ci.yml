@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start -x studio,imgproxy,vector,logflare,supavisor,mailpit
+
+      - name: Database tests (pgTAP)
+        run: pnpm test:db
+
+      - name: Generated types are up to date
+        run: |
+          pnpm db:types
+          git diff --exit-code -- lib/supabase/database.types.ts
+
+      - name: Export local Supabase keys (masked)
+        run: |
+          pnpm exec supabase status -o env > /tmp/sb.env
+          while IFS='=' read -r key value; do
+            value="${value%\"}"; value="${value#\"}"
+            case "$key" in
+              SERVICE_ROLE_KEY) echo "::add-mask::$value"; echo "SUPABASE_SERVICE_ROLE_KEY=$value" >> "$GITHUB_ENV" ;;
+              SECRET_KEY) echo "::add-mask::$value"; echo "SUPABASE_SECRET_KEY=$value" >> "$GITHUB_ENV" ;;
+            esac
+          done < /tmp/sb.env
+          rm -f /tmp/sb.env
+
+      - name: Build
+        run: pnpm build
+
+      - name: No secrets in client bundle
+        run: pnpm check:bundle
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ github.run_id }}
+          path: |
+            test-results/
+            docs/progress/phase-*/screenshots/
+          retention-days: 7
