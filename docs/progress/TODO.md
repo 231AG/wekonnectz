@@ -5,12 +5,28 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 
 ## Summary
 
-| Area            | ✅  | 🔄  | ⬜  | ⛔  |
-| --------------- | --- | --- | --- | --- |
-| Planning        | 1   | 0   | 0   | 0   |
-| All build areas | 0   | 0   | 130 | 0   |
+| Area                | ✅ done | 🔄 in progress | ⬜ not started | ⛔ blocked |
+| ------------------- | ------- | -------------- | -------------- | ---------- |
+| Foundation          | 10      | 2              | 0              | 0          |
+| Auth and geo        | 0       | 0              | 12             | 0          |
+| Onboarding          | 0       | 0              | 8              | 0          |
+| Photos              | 0       | 0              | 8              | 0          |
+| Verification        | 0       | 0              | 6              | 2          |
+| Safety              | 0       | 0              | 11             | 0          |
+| Relationship mode   | 0       | 0              | 6              | 1          |
+| Messaging           | 0       | 0              | 7              | 0          |
+| Mobile money access | 0       | 0              | 11             | 1          |
+| Card subscriptions  | 0       | 0              | 4              | 1          |
+| Availability        | 0       | 0              | 6              | 1          |
+| Casual discovery    | 0       | 0              | 6              | 1          |
+| Admin console       | 0       | 0              | 11             | 0          |
+| Notifications       | 0       | 0              | 5              | 0          |
+| Security and launch | 0       | 0              | 7              | 3          |
+| **Total**           | **10**  | **2**          | **108**        | **10**     |
 
-Nothing is built yet. Plan awaiting approval.
+⛔ = not started and waiting on an owner decision or task.
+
+Plan approved 5 Oct 2026. Phase 0 code complete; CI on GitHub not yet run.
 
 ## Planning
 
@@ -18,18 +34,18 @@ Nothing is built yet. Plan awaiting approval.
 
 ## Foundation
 
-- ⬜ Next.js + TS strict + Tailwind + shadcn/ui scaffold, pinned versions in CLAUDE.md — P0
-- ⬜ Design tokens reconciled with logo (provisional until T-01) — P0
-- ⬜ Base UI primitives (Button, Input, Card, Pill, Badge, BottomNav, StepHeader, AdminShell) — P0
-- ⬜ Supabase CLI local stack, first migration (`app_settings`, `audit_logs`) — P0 — BR-34
-- ⬜ `get_setting()` fails loudly on missing key — P0
-- ⬜ pgTAP "RLS enabled on every table" guard test — P0
-- ⬜ Vitest, Playwright, pgTAP wired; GitHub Actions CI — P0
-- ⬜ Sentry with PII scrubber — P0
-- ⬜ Baseline security headers — P0
-- ⬜ CLAUDE.md, BUSINESS_RULES.md, DATA_MODEL.md, SECURITY.md, DECISIONS.md, SPRINT-00.md — P0
-- ⬜ Session-start hook (Docker + deps) — P0
-- ⬜ Bundle check: no service-role key in client JS — P0
+- ✅ Next.js + TS strict + Tailwind + shadcn/ui scaffold, pinned versions in CLAUDE.md — P0
+- 🔄 Design tokens reconciled with logo — P0 (built; awaiting owner sign-off, T-23)
+- ✅ Base UI primitives (Button, Input, Card, Pill, Badge, BottomNav, StepHeader, AdminShell) — P0
+- ✅ Supabase CLI local stack, first migration (`app_settings`, `audit_logs`) — P0 — BR-34
+- ✅ `get_setting()` fails loudly on missing key — P0
+- ✅ pgTAP "RLS enabled on every table" guard test — P0
+- 🔄 Vitest, Playwright, pgTAP wired ✅; GitHub Actions CI written, not yet run on GitHub (⛔ T-22 main branch, T-03) — P0
+- ✅ Sentry with PII scrubber — P0 (sending off until T-17 DSN)
+- ✅ Baseline security headers — P0
+- ✅ CLAUDE.md, BUSINESS_RULES.md, DATA_MODEL.md, SECURITY.md, DECISIONS.md, SPRINT-00.md — P0
+- ✅ Session-start hook (Docker + deps) — P0
+- ✅ Bundle check: no service-role key in client JS — P0
 
 ## Auth and geo
 
@@ -66,7 +82,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Signed read URLs (120 s) after access check — P3 — BR-11
 - ⬜ Photo queue (approve / reject with reason, audited) — P3 — BR-34
 - ⬜ Dropping below 3 approved → leave discovery, availability UNAVAILABLE — P4/P8 — BR-8
-- ⬜ Visibility per OD-3 — P3 ⛔ until OD-3 decided
+- ⬜ Visibility per OD-3 = A (Relationship members see approved photos) — P3
 
 ## Verification
 
@@ -107,7 +123,7 @@ Nothing is built yet. Plan awaiting approval.
 
 - ⬜ Conversations, members, messages tables + RLS — P6 — BR-23, BR-24
 - ⬜ Realtime channels authorised by membership — P6
-- ⬜ Text only, detection → flag, not block — P6
+- ⬜ Text only; price/payment/money-request patterns flagged, phone numbers not flagged (OD-31) — P6
 - ⬜ Read receipts — P6
 - ⬜ Suspended users cannot send — P6 — BR-5
 - ⬜ CASUAL conversations read-only without access — P9 — BR-25
@@ -153,8 +169,8 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Casual member profile + Send a request (300 chars, detection) — P9 — BR-21, BR-31
 - ⬜ Accept / decline / block — P9 — BR-22
 - ⬜ One pending per pair; caps and cool-down — P9 ⛔ until OD-9
-- ⬜ Request expiry — P9 ⛔ until Q2
-- ⬜ Saved profiles — P9
+- ⬜ Request expiry at recipient's window end (OD-24) — P9
+- ⬜ Saved profiles (Casual only, OD-28) — P9
 
 ## Admin console
 
@@ -162,7 +178,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Photo queue — P3; Verification queue — P4; Reports & Flags — P5; Claims queue — P7
 - ⬜ Dashboard with real figures — P10
 - ⬜ Users (search incl. hashed phone, suspend, ban, restore, DOB correction) — P10 — BR-4, BR-34
-- ⬜ Subscriptions (manual extension, audited) — P10 ⛔ until Q12
+- ⬜ Subscriptions (manual extension of existing only, reason, audited, capped — OD-30) — P10
 - ⬜ Payments & events, card webhook log — P10
 - ⬜ Analytics — P10
 - ⬜ Audit log viewer — P10
@@ -176,7 +192,7 @@ Nothing is built yet. Plan awaiting approval.
 - ⬜ Claim decision, review outcome notifications — P4/P7
 - ⬜ Notifications screen + preferences — P11
 - ⬜ Requests, matches, messages, expiry and renewal reminders — P11
-- ⬜ Delivery channel — P11 ⛔ until Q3
+- ⬜ Delivery: in-app + web push (OD-25) — P11
 
 ## Security and launch
 

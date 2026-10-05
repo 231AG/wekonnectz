@@ -7,29 +7,31 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 
 ## Summary
 
-| ID   | What                                                                              | Blocks                                                   | Status |
-| ---- | --------------------------------------------------------------------------------- | -------------------------------------------------------- | ------ |
-| T-01 | Add the WeKonnectz logo files                                                     | Final colour tokens (Phase 0 sign-off, not the build)    | OPEN   |
-| T-02 | Decide hosting (OD-11) and create the account                                     | Phase 1 geo header choice; Phase 12 deploy               | OPEN   |
-| T-03 | Make sure GitHub Actions is enabled on the repo                                   | Phase 0 CI verification                                  | OPEN   |
-| T-04 | Choose an SMS provider and test delivery to Orange and Lonestar Cell MTN          | Phase 1 verification with real phones; launch            | OPEN   |
-| T-05 | Decide OD-12 and OD-14                                                            | **Phase 1** (geo code)                                   | OPEN   |
-| T-06 | Create a Supabase _development_ cloud project                                     | Phase 1 verification of auth hooks on hosted Supabase    | OPEN   |
-| T-07 | Give the list of first staff (who is SUPER_ADMIN, ADMIN, MODERATOR) and answer Q5 | **Phase 3** (staff console)                              | OPEN   |
-| T-08 | Create the Supabase _production_ project on a plan with backups / PITR            | Launch (Phase 12)                                        | OPEN   |
-| T-09 | Provide the list of areas (county → communities)                                  | **Phase 2** (real data; DEV-ONLY sample used until then) | OPEN   |
-| T-10 | Provide the interests list                                                        | Phase 2 (real data)                                      | OPEN   |
-| T-11 | Review the detection term list                                                    | Phase 2 sign-off                                         | OPEN   |
-| T-12 | Draft Terms, Privacy Policy, Community rules; get Liberian legal review           | Launch (placeholders until then)                         | OPEN   |
-| T-13 | Register Orange Money and MTN merchant wallets under a neutral name               | Launch                                                   | OPEN   |
-| T-14 | Send sample formats of Orange Money / MTN transaction IDs, and answer OD-22       | **Phase 7**                                              | OPEN   |
-| T-15 | Decide the Phase 7 payment ODs (OD-1, 2, 13, 16, 17, 18, 21)                      | **Phase 7**                                              | OPEN   |
-| T-16 | Buy / confirm the domain name                                                     | Launch                                                   | OPEN   |
-| T-17 | Create a Sentry project                                                           | Before launch (Phase 0 works without it)                 | OPEN   |
-| T-18 | Research and choose a card processor (OD-4, 15, 19, 20)                           | Phase 7c only (not launch)                               | OPEN   |
-| T-19 | Approve threshold and limit values                                                | Per row below                                            | OPEN   |
-| T-20 | Web push keys — only if Q3 = web push                                             | Phase 11                                                 | OPEN   |
-| T-21 | Remaining product decisions (OD-3, 5, 6, 7, 8, 9, 10; Q1–Q12)                     | Per row below                                            | OPEN   |
+| ID   | What                                                                                                                              | Blocks                                                   | Status                                                                              |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| T-01 | Add the WeKonnectz logo files                                                                                                     | Final colour tokens (Phase 0 sign-off, not the build)    | DONE (confirmed by owner) — logo supplied 5 Oct; an SVG would be sharper (optional) |
+| T-02 | Hosting decided: **Vercel** (OD-11). Still to do: create the Vercel account and import the repo                                   | Phase 1 hosted geo-header check; Phase 12 deploy         | OPEN (decision DONE)                                                                |
+| T-03 | Make sure GitHub Actions is enabled on the repo                                                                                   | Phase 0 CI verification (needs T-22 first)               | OPEN                                                                                |
+| T-04 | Choose an SMS provider and test delivery to Orange and Lonestar Cell MTN                                                          | Phase 1 verification with real phones; launch            | OPEN                                                                                |
+| T-05 | Decide OD-12 and OD-14                                                                                                            | **Phase 1** (geo code)                                   | DONE (confirmed by owner) — OD-12 country only; OD-14 roaming blocked               |
+| T-06 | Create a Supabase _development_ cloud project                                                                                     | Phase 1 verification of auth hooks on hosted Supabase    | OPEN                                                                                |
+| T-07 | Give the list of first staff (who is SUPER_ADMIN, ADMIN, MODERATOR). Login method decided: email + password + TOTP (OD-27)        | **Phase 3** (staff console)                              | OPEN                                                                                |
+| T-08 | Create the Supabase _production_ project on a plan with backups / PITR                                                            | Launch (Phase 12)                                        | OPEN                                                                                |
+| T-09 | Provide the list of areas (county → communities)                                                                                  | **Phase 2** (real data; DEV-ONLY sample used until then) | OPEN                                                                                |
+| T-10 | Provide the interests list                                                                                                        | Phase 2 (real data)                                      | OPEN                                                                                |
+| T-11 | Review the detection term list                                                                                                    | Phase 2 sign-off                                         | OPEN                                                                                |
+| T-12 | Draft Terms, Privacy Policy, Community rules; get Liberian legal review                                                           | Launch (placeholders until then)                         | OPEN                                                                                |
+| T-13 | Register Orange Money and MTN merchant wallets under a neutral name                                                               | Launch                                                   | OPEN                                                                                |
+| T-14 | Send sample formats of Orange Money / MTN transaction IDs, and answer OD-22                                                       | **Phase 7**                                              | OPEN                                                                                |
+| T-15 | Decide the Phase 7 payment ODs (OD-1, 2, 13, 16, 17, 18, 21)                                                                      | **Phase 7**                                              | OPEN                                                                                |
+| T-16 | Buy / confirm the domain name                                                                                                     | Launch                                                   | OPEN                                                                                |
+| T-17 | Create a Sentry project                                                                                                           | Before launch (Phase 0 works without it)                 | OPEN                                                                                |
+| T-18 | Research and choose a card processor (OD-4, 15, 19, 20)                                                                           | Phase 7c only (not launch)                               | OPEN                                                                                |
+| T-19 | Approve threshold and limit values                                                                                                | Per row below                                            | OPEN                                                                                |
+| T-20 | Web push keys (OD-25 = in-app + web push)                                                                                         | Phase 11                                                 | OPEN                                                                                |
+| T-21 | Remaining product decisions: OD-5, 6 (Phase 4), OD-10 (Phase 6), OD-8 (Phase 8), OD-9 (Phase 9), OD-7 (Phase 10), OD-33 (Phase 5) | Per row below                                            | OPEN                                                                                |
+| T-22 | Create the `main` branch on GitHub                                                                                                | **Phase 0 PR and CI** (a PR needs a base branch)         | OPEN                                                                                |
+| T-23 | Approve design tokens v1 (or tell me what to change)                                                                              | Phase 0 sign-off only (Phase 1 can start)                | OPEN                                                                                |
 
 ---
 
@@ -195,37 +197,37 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **What:** Approve or change each value below. Recommendations are mine unless marked "spec".
 - **Why:** Spec rule 9: no invented numbers in business logic. Keys exist in `app_settings` with no default; DEV-ONLY values in `seed.sql` until you approve.
 
-| Setting key                                                       | Meaning                          | Recommendation                 | Needed by |
-| ----------------------------------------------------------------- | -------------------------------- | ------------------------------ | --------- |
-| `otp.max_per_phone_per_hour`                                      | OTP sends per phone              | 5                              | Phase 1   |
-| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                 | 20                             | Phase 1   |
-| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION      | SIGNUP_ONLY (spec)             | Phase 1   |
-| `photos.max_per_user`                                             | Max photos                       | 6 (spec "recommended")         | Phase 3   |
-| `photos.max_upload_bytes`                                         | Upload size cap                  | 10 MB                          | Phase 3   |
-| `photos.uploads_per_day`                                          | Upload rate limit                | 30                             | Phase 3   |
-| `storage.signed_url_ttl_seconds`                                  | Signed URL lifetime              | 120 (spec)                     | Phase 3   |
-| `verification.rejections_before_escalation`                       | Repeated rejections → admin      | 3                              | Phase 4   |
-| `verification.pose_prompts`                                       | Pose list                        | I propose 8 prompts in Phase 4 | Phase 4   |
-| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h        | 3 (spec)                       | Phase 5   |
-| `reports.per_user_per_day`                                        | Report rate limit                | 10                             | Phase 5   |
-| `relationship.pass_cooldown_days`                                 | Passed profile returns after     | 30                             | Phase 6   |
-| `relationship.daily_like_cap`                                     | OD-10                            | — your call                    | Phase 6   |
-| `claims.rejections_before_flag`                                   | Rejected claims → member flagged | 3                              | Phase 7   |
-| `claims.evidence_max_bytes`                                       | Screenshot size cap              | 10 MB                          | Phase 7   |
-| `availability.max_window_hours`                                   | OD-8                             | 12 (spec)                      | Phase 8   |
-| `availability.max_lead_days`                                      | OD-8                             | 7 (spec)                       | Phase 8   |
-| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag    | 30 min / 5 per week            | Phase 8   |
-| `requests.daily_cap`                                              | OD-9                             | — your call                    | Phase 9   |
-| `requests.decline_cooldown_days`                                  | OD-9                             | — your call                    | Phase 9   |
-| `requests.expiry_hours`                                           | Q2                               | 24 h or window end             | Phase 9   |
-| `signals.requests_burst`                                          | "Many requests in a short time"  | 10 in 10 min                   | Phase 9   |
-| `signals.duplicate_text_recipients`                               | "Same text to many members"      | 5 in 24 h                      | Phase 9   |
+| Setting key                                                       | Meaning                             | Recommendation                 | Needed by |
+| ----------------------------------------------------------------- | ----------------------------------- | ------------------------------ | --------- |
+| `otp.max_per_phone_per_hour`                                      | OTP sends per phone                 | 5                              | Phase 1   |
+| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                    | 20                             | Phase 1   |
+| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION         | SIGNUP_ONLY (spec)             | Phase 1   |
+| `photos.max_per_user`                                             | Max photos                          | 6 (spec "recommended")         | Phase 3   |
+| `photos.max_upload_bytes`                                         | Upload size cap                     | 10 MB                          | Phase 3   |
+| `photos.uploads_per_day`                                          | Upload rate limit                   | 30                             | Phase 3   |
+| `storage.signed_url_ttl_seconds`                                  | Signed URL lifetime                 | 120 (spec)                     | Phase 3   |
+| `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                              | Phase 4   |
+| `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4 | Phase 4   |
+| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h           | 3 (spec)                       | Phase 5   |
+| `reports.per_user_per_day`                                        | Report rate limit                   | 10                             | Phase 5   |
+| `relationship.pass_cooldown_days`                                 | Passed profile returns after        | 30                             | Phase 6   |
+| `relationship.daily_like_cap`                                     | OD-10                               | — your call                    | Phase 6   |
+| `claims.rejections_before_flag`                                   | Rejected claims → member flagged    | 3                              | Phase 7   |
+| `claims.evidence_max_bytes`                                       | Screenshot size cap                 | 10 MB                          | Phase 7   |
+| `availability.max_window_hours`                                   | OD-8                                | 12 (spec)                      | Phase 8   |
+| `availability.max_lead_days`                                      | OD-8                                | 7 (spec)                       | Phase 8   |
+| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag       | 30 min / 5 per week            | Phase 8   |
+| `requests.daily_cap`                                              | OD-9                                | — your call                    | Phase 9   |
+| `requests.decline_cooldown_days`                                  | OD-9                                | — your call                    | Phase 9   |
+| `subscriptions.manual_extension_max_days`                         | OD-30 cap on admin manual extension | 7 days                         | Phase 10  |
+| `signals.requests_burst`                                          | "Many requests in a short time"     | 10 in 10 min                   | Phase 9   |
+| `signals.duplicate_text_recipients`                               | "Same text to many members"         | 5 in 24 h                      | Phase 9   |
 
 - **Steps:** Reply "approve T-19" or list changes.
 - **Blocks:** Each phase in the last column (I can build with DEV-ONLY values but can't call the phase complete without approved values).
 - **Requested in:** Plan.
 
-### T-20 — Web push keys (only if Q3 = web push)
+### T-20 — Web push keys (OD-25: web push confirmed)
 
 - **What:** Nothing yet — I'll generate VAPID keys with a script on your machine and you put them in env as `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`.
 - **Blocks:** Phase 11.
@@ -250,3 +252,24 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | Q9, Q11 (confirmations)                                           | Phase 5 / 6 |
 
 - **Requested in:** Plan.
+
+### T-22 — Create `main`
+
+- **What:** Create a `main` branch in `231ag/wekonnectz`.
+- **Why:** One PR per phase goes into `main` (OD-32). A PR needs a base branch, and CI runs on PRs.
+- **Steps:**
+  1. GitHub → repo → branch dropdown → type `main`.
+  2. Create it **from the first commit `736e44e`** ("Add spec, mock-ups and Stage A master plan") so the Phase 0 PR shows only Phase 0 work. (Creating it from `claude/new-session-82wl3k` would include Phase 0 already and leave the PR empty.)
+  3. Settings → General → Default branch → `main`.
+  4. Optional: Settings → Branches → protect `main` (require PR + the `CI / verify` check).
+  5. Reply "main created"; I open the Phase 0 PR and watch CI.
+- **Blocks:** Phase 0 PR and CI run.
+- **Requested in:** Phase 0.
+
+### T-23 — Design tokens v1
+
+- **What:** Look at `docs/progress/phase-00/screenshots/foundation-ui-kit-full.png` and approve or change the colours.
+- **Why:** The mock-ups' gold buttons and blue Relationship colour are replaced by logo colours: primary = orange→coral gradient, Relationship = light purple `#C78BFF`, Casual = orange `#FFA24C`. Gold stays for "pending" badges, blue for the verified tick.
+- **Steps:** Reply "tokens approved" or say what to change.
+- **Blocks:** Phase 0 sign-off only.
+- **Requested in:** Phase 0.
