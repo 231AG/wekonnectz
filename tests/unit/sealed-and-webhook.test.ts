@@ -22,7 +22,11 @@ describe("sealed cookie values", () => {
     const token = seal({ dob: "1999-03-14" }, SECRET, 60, 1_000);
     expect(unseal(token, SECRET, 1_000 + 61_000)).toBeNull();
     const [iv, tag, data] = token.split(".");
-    const flipped = `${iv}.${tag}.${data.slice(0, -2)}${data.endsWith("A") ? "B" : "A"}${data.slice(-1)}`;
+    // Always change the character (a fixed replacement could equal the original 1 time in 64).
+    const i = 1;
+    const flippedChar = data[i] === "A" ? "B" : "A";
+    const flipped = `${iv}.${tag}.${data.slice(0, i)}${flippedChar}${data.slice(i + 1)}`;
+    expect(flipped).not.toBe(token);
     expect(unseal(flipped, SECRET, 2_000)).toBeNull();
     expect(unseal(token, "y".repeat(48), 2_000)).toBeNull();
     expect(unseal("garbage", SECRET)).toBeNull();
