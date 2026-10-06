@@ -161,7 +161,7 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -219,7 +219,7 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
-enable_signup = true
+enable_signup = false
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -257,13 +257,16 @@ otp_expiry = 3600
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+# Members sign up with +231 phone OTP only (BR-2). The before-user-created hook enforces the rest.
+enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
-enable_confirmations = false
+# MUST be true: otherwise a phone + password signUp would be auto-confirmed without an OTP (BR-2).
+enable_confirmations = true
 # Template for sending OTP to users
-template = "Your code is {{ .Code }}"
+template = "Your WeKonnectz code is {{ .Code }}"
 # Controls the minimum amount of time that must pass before sending another sms otp.
-max_frequency = "5s"
+# Matches the 60-second "Resend code" countdown on the phone screen.
+max_frequency = "60s"
 
 # Use pre-defined map of phone number to OTP for testing.
 # [auth.sms.test_otp]
@@ -277,9 +280,17 @@ max_frequency = "5s"
 # inactivity_timeout = "8h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# [auth.hook.before_user_created]
-# enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+# WeKonnectz: +231 only, phone blocklist, and a fresh single-use geo pass from our server action (plan §1.5).
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/hook_before_user_created"
+
+# WeKonnectz: every OTP SMS goes through our route (per-phone rate limit, SMS provider adapter).
+# SEND_SMS_HOOK_URI / SEND_SMS_HOOK_SECRET come from supabase/.env (created by `pnpm env:setup`).
+[auth.hook.send_sms]
+enabled = true
+uri = "env(SEND_SMS_HOOK_URI)"
+secrets = "env(SEND_SMS_HOOK_SECRET)"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]
@@ -287,12 +298,15 @@ max_frequency = "5s"
 # uri = "pg-functions://<database>/<schema>/<hook_name>"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
+# WeKonnectz: the Send-SMS hook above delivers every SMS, so this provider is never called.
+# The CLI disables phone login when no provider is enabled, so a placeholder is enabled here
+# for LOCAL DEV only. Hosted projects enable the phone provider with the Send-SMS hook instead (T-06).
 [auth.sms.twilio]
-enabled = false
-account_sid = ""
-message_service_sid = ""
+enabled = true
+account_sid = "local-dev-unused-send-sms-hook-handles-sms"
+message_service_sid = "local-dev-unused"
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
-auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
+auth_token = "local-dev-unused"
 
 # Multi-factor-authentication is available to Supabase Pro plan.
 [auth.mfa]

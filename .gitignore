@@ -29,3 +29,6 @@ blob-report/
 *.pem
 npm-debug.log*
 .vercel
+
+# local SMS outbox (fake provider)
+.dev-sms-outbox/

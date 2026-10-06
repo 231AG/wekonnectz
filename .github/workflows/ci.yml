@@ -43,8 +43,8 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      - name: Start local Supabase
-        run: pnpm exec supabase start -x studio,imgproxy,vector,logflare,supavisor,mailpit
+      - name: Start local Supabase (writes gitignored supabase/.env and .env.local with random dev secrets)
+        run: pnpm db:start
 
       - name: Database tests (pgTAP)
         run: pnpm test:db

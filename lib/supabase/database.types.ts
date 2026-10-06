@@ -49,21 +49,169 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"consents": {
+                  Row: {
+                    "accepted_at": string,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"id": string,"user_id": string,"version": string
+                  }
+                  Insert: {
+                    "accepted_at"?: string,"created_at"?: string,"document": Database["public"]['Enums']["consent_document"],"id"?: string,"user_id": string,"version": string
+                  }
+                  Update: {
+                    "accepted_at"?: string,"created_at"?: string,"document"?: Database["public"]['Enums']["consent_document"],"id"?: string,"user_id"?: string,"version"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "consents_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"geo_checks": {
+                  Row: {
+                    "created_at": string,"id": string,"ip_country": string | null,"phone_country": string | null,"phone_hash": string | null,"result": Database["public"]['Enums']["geo_result"]
+                  }
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"ip_country"?: string | null,"phone_country"?: string | null,"phone_hash"?: string | null,"result": Database["public"]['Enums']["geo_result"]
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"ip_country"?: string | null,"phone_country"?: string | null,"phone_hash"?: string | null,"result"?: Database["public"]['Enums']["geo_result"]
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"geo_passes": {
+                  Row: {
+                    "created_at": string,"expires_at": string,"phone_hash": string,"used_at": string | null
+                  }
+                  Insert: {
+                    "created_at"?: string,"expires_at": string,"phone_hash": string,"used_at"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"expires_at"?: string,"phone_hash"?: string,"used_at"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"phone_blocklist": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"phone_hash": string,"reason": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"phone_hash": string,"reason": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"phone_hash"?: string,"reason"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "phone_blocklist_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "created_at": string,"date_of_birth": string,"dob_locked": boolean,"updated_at": string,"user_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"date_of_birth": string,"dob_locked"?: boolean,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"date_of_birth"?: string,"dob_locked"?: boolean,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "profiles_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"rate_limit_counters": {
+                  Row: {
+                    "bucket": string,"count": number,"subject_hash": string,"window_start": string
+                  }
+                  Insert: {
+                    "bucket": string,"count"?: number,"subject_hash": string,"window_start": string
+                  }
+                  Update: {
+                    "bucket"?: string,"count"?: number,"subject_hash"?: string,"window_start"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"users": {
+                  Row: {
+                    "created_at": string,"deleted_at": string | null,"id": string,"last_seen_at": string | null,"role": Database["public"]['Enums']["user_role"],"status": Database["public"]['Enums']["account_status"],"suspended_until": string | null,"updated_at": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"deleted_at"?: string | null,"id": string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"deleted_at"?: string | null,"id"?: string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            "audit":
+            "age_in_years":
+{ Args: { "p_dob": string,"p_on"?: string }; Returns: number
+                           },
+"audit":
 { Args: { "p_action": Database["public"]['Enums']["audit_action"],"p_entity_id": string,"p_entity_type": string,"p_metadata"?: Json }; Returns: string
+                           },
+"begin_signup":
+{ Args: { "p_ip": string,"p_ip_country": string,"p_phone": string }; Returns: Database["public"]['Enums']["geo_result"]
+                           },
+"current_user_status":
+{ Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["account_status"]
+                           },
+"effective_account_status":
+{ Args: { "p_status": Database["public"]['Enums']["account_status"],"p_suspended_until": string }; Returns: Database["public"]['Enums']["account_status"]
                            },
 "get_setting":
 { Args: { "p_key": string }; Returns: Json
+                           },
+"hmac_with_pepper":
+{ Args: { "p_value": string }; Returns: string
+                           },
+"hook_before_user_created":
+{ Args: { "event": Json }; Returns: Json
+                           },
+"is_liberian_phone":
+{ Args: { "p_phone": string }; Returns: boolean
+                           },
+"normalize_phone":
+{ Args: { "p_phone": string }; Returns: string
+                           },
+"otp_ip_allowed":
+{ Args: { "p_ip": string }; Returns: boolean
+                           },
+"otp_send_allowed":
+{ Args: { "p_phone": string }; Returns: boolean
+                           },
+"phone_hash":
+{ Args: { "p_phone": string }; Returns: string
+                           },
+"rate_limit_hit":
+{ Args: { "p_bucket": string,"p_max": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
+                           },
+"set_date_of_birth":
+{ Args: { "p_dob": string }; Returns: undefined
                            }
           }
           Enums: {
-            "audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -183,7 +331,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"]
           }
         }
 } as const

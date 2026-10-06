@@ -18,12 +18,13 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:db": "supabase test db",
-    "db:start": "supabase start",
+    "db:start": "node scripts/setup-local-env.mjs && supabase start -x studio,imgproxy,vector,logflare,supavisor,mailpit && node scripts/setup-local-env.mjs",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "check:bundle": "node scripts/check-client-bundle.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle",
+    "env:setup": "node scripts/setup-local-env.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "11.4.0",
@@ -31,6 +32,7 @@
     "@supabase/supabase-js": "2.117.2",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "libphonenumber-js": "1.13.14",
     "lucide-react": "1.52.0",
     "next": "16.3.8",
     "radix-ui": "1.6.7",

@@ -57,14 +57,18 @@ drop function public.zz_probe_fn();
 drop table public.zz_probe_table;
 
 -- No function in public is executable by client roles unless a later migration grants it on purpose.
--- (Phase 0 has none. Later phases add their RPCs to this allow-list with a comment.)
+-- Each phase adds its member RPCs to this allow-list with a comment saying why it is safe.
 select is_empty(
   $$ select p.proname::text
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
         and (has_function_privilege('anon', p.oid, 'execute')
           or has_function_privilege('authenticated', p.oid, 'execute'))
-        and p.proname <> all (array[]::text[]) -- allow-list: none yet $$,
+        and p.proname <> all (array[
+          'effective_account_status', -- Phase 1: pure helper, no data access
+          'current_user_status',      -- Phase 1: caller's own status only
+          'set_date_of_birth'         -- Phase 1: caller's own DOB, once (BR-4)
+        ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
 

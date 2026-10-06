@@ -2,12 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import { SHOTS, trackPageErrors } from "./helpers";
 
-test("home placeholder renders with brand, no console or CSP errors", async ({ page }) => {
+test("home renders with brand, no console or CSP errors", async ({ page }) => {
   const errors = trackPageErrors(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Meet with intention." })).toBeVisible();
   await expect(page.getByRole("img", { name: "WeKonnectz" })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/foundation-home-placeholder.png`, fullPage: true });
   expect(errors).toEqual([]);
 });
 
