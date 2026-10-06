@@ -42,15 +42,42 @@ Append-only: triggers block UPDATE, DELETE and TRUNCATE (owner-role caveat in `d
 | `set_updated_at()`                                | trigger only                     |                                                          |
 | `audit_logs_append_only()`                        | trigger only                     |                                                          |
 
+### Phase 1 tables ✅ (`20261006000000_auth_geo.sql`)
+
+| Table                 | Key columns                                                                                        | Client access       | Notes                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `users`               | id (= auth.users.id), role, status, suspended_until, last_seen_at, deleted_at                      | SELECT own row      | Created by trigger on auth.users. Role/status never member-writable. BANNED/DELETED → `auth.users.banned_until` = now + 100 years |
+| `profiles`            | user_id PK, date_of_birth, dob_locked                                                              | SELECT own row      | Phase 1 holds DOB only. Written once via `set_date_of_birth()`. Trigger refuses under-18 and locked changes (BR-4)                |
+| `geo_checks`          | id, phone_hash, ip_country, phone_country, result, created_at                                      | none                | One row per signup attempt. Country codes only (OD-12)                                                                            |
+| `geo_passes`          | phone_hash PK, expires_at, used_at                                                                 | none                | Single-use, 10 min; consumed by the before-user-created hook                                                                      |
+| `phone_blocklist`     | phone_hash PK, reason, created_by                                                                  | none                | BR-3. Filled by the Phase 5 ban function                                                                                          |
+| `consents`            | id, user_id, document (TERMS/PRIVACY/RULES), version, accepted_at; unique(user, document, version) | SELECT + INSERT own | Used from Phase 2                                                                                                                 |
+| `rate_limit_counters` | bucket, subject_hash, window_start, count                                                          | none                | Fixed-window counters; subjects HMAC-hashed                                                                                       |
+
+Enums: `user_role`, `account_status`, `geo_result` (PASS, BLOCKED_COUNTRY, BLOCKED_PHONE, BLOCKED_LIST, RATE_LIMITED), `consent_document`.
+
+| Function                                                           | Callable by         | Purpose                                                                               |
+| ------------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------- |
+| `normalize_phone`, `is_liberian_phone`, `age_in_years`             | DB functions only   | Helpers                                                                               |
+| `phone_hash(phone)`                                                | service_role        | HMAC-SHA256 with Vault secret `phone_hash_pepper` (raises if missing)                 |
+| `rate_limit_hit(bucket, subject, window, max)`                     | service_role        | Fixed-window counter; true = allowed                                                  |
+| `otp_ip_allowed(ip)`, `otp_send_allowed(phone)`                    | service_role        | §22 OTP limits from `otp.max_per_ip_per_hour` / `otp.max_per_phone_per_hour`          |
+| `begin_signup(phone, ip_country, ip)`                              | service_role        | §3 pre-filter: IP limit → country → +231 → blocklist → geo pass. Records `geo_checks` |
+| `hook_before_user_created(event)`                                  | supabase_auth_admin | +231, blocklist, consumes geo pass; allows email-only (admin-created staff)           |
+| `set_date_of_birth(dob)`                                           | authenticated       | Own DOB, once, 18+                                                                    |
+| `current_user_status()`, `effective_account_status(status, until)` | authenticated       | Expired suspension reads ACTIVE                                                       |
+
+Settings added: `geo.enforcement_mode` = "SIGNUP_ONLY" (owner decision), `otp.max_per_phone_per_hour` and `otp.max_per_ip_per_hour` = NULL ([DECISION] T-19; DEV-ONLY values in seed).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                              | Phase |
 | ---------------------------------- | ----- | --- | -------------------------------------------------- | ----- |
-| users                              | 1     |     | payments                                           | 7     |
-| profiles                           | 1–2   |     | payment_events                                     | 7     |
-| geo_checks                         | 1     |     | payment_claims                                     | 7     |
-| phone_blocklist                    | 1     |     | merchant_accounts                                  | 7     |
-| consents                           | 1–2   |     | card_customers                                     | 7     |
+| users ✅                           | 1     |     | payments                                           | 7     |
+| profiles ✅                        | 1–2   |     | payment_events                                     | 7     |
+| geo_checks ✅                      | 1     |     | payment_claims                                     | 7     |
+| phone_blocklist ✅                 | 1     |     | merchant_accounts                                  | 7     |
+| consents ✅                        | 1–2   |     | card_customers                                     | 7     |
 | areas                              | 2     |     | likes                                              | 6     |
 | interests / user_interests         | 2     |     | passes                                             | 6     |
 | user_settings                      | 2     |     | matches                                            | 6     |

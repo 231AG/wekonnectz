@@ -4,7 +4,7 @@
 
 Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/WeKonnectz_MVP_Build_Spec_v3.pdf` (**source of truth**). Plan: `docs/plan/MASTER_PLAN.md`. Owner workflow: `PROMPT.md`.
 
-**Current phase:** Phase 0 — Foundation (see `docs/sprints/SPRINT-00.md`). Next: Phase 1 — Auth, geo & age gate.
+**Current phase:** Phase 1 — Auth, geo & age gate (see `docs/sprints/SPRINT-01.md`). Next: Phase 2 — Profile & onboarding.
 
 ## Stack (pinned exactly; record changes here)
 
@@ -25,13 +25,16 @@ Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/We
 | eslint / eslint-config-next           | 9.39.5 / 16.3.8   | ESLint 10 not used: React plugins don't support it yet                                                                                                 |
 | prettier                              | 3.9.9             | printWidth 120                                                                                                                                         |
 
-Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion, sharp, libphonenumber-js.
+Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation).
+
+Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion, sharp.
 
 ## Commands
 
 ```bash
 pnpm install
-pnpm db:start            # local Supabase (Docker). In cloud sessions the session-start hook starts dockerd.
+pnpm db:start            # writes gitignored supabase/.env + .env.local (random dev secrets), starts local Supabase (Docker)
+pnpm env:setup           # re-create/refresh .env.local and supabase/.env without printing secrets
 pnpm db:reset            # re-apply migrations + supabase/seed.sql
 pnpm db:types            # regenerate lib/supabase/database.types.ts — run after EVERY migration
 pnpm dev                 # http://localhost:3000 ; ENABLE_UI_KIT=1 pnpm dev for /ui-kit
@@ -39,7 +42,8 @@ pnpm lint | pnpm typecheck | pnpm format:check
 pnpm test                # Vitest unit tests (tests/unit)
 pnpm test:db             # pgTAP (supabase/tests/database) — needs db:start
 pnpm build && pnpm check:bundle   # production build + client-bundle secret scan
-pnpm test:e2e            # Playwright against `next start` (build first). Cloud: PW_CHROMIUM_PATH is set by the hook.
+pnpm test:e2e            # Playwright against `next start` on port 3000 (build first; stop `pnpm dev`). Uses the local Supabase
+                         # stack; OTP codes come from the fake SMS outbox (.dev-sms-outbox/). Cloud: PW_CHROMIUM_PATH is set by the hook.
 ```
 
 New migration: `pnpm exec supabase migration new <name>` → write SQL (table + RLS + policies + tests together) → `pnpm db:reset` → `pnpm db:types` → `pnpm test:db`.
