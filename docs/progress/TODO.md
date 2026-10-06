@@ -8,8 +8,8 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Area                | ✅ done | 🔄 in progress | ⬜ not started | ⛔ blocked |
 | ------------------- | ------- | -------------- | -------------- | ---------- |
 | Foundation          | 10      | 2              | 0              | 0          |
-| Auth and geo        | 0       | 0              | 12             | 0          |
-| Onboarding          | 0       | 0              | 8              | 0          |
+| Auth and geo        | 12      | 1              | 1              | 1          |
+| Onboarding          | 1       | 0              | 7              | 0          |
 | Photos              | 0       | 0              | 8              | 0          |
 | Verification        | 0       | 0              | 6              | 2          |
 | Safety              | 0       | 0              | 11             | 0          |
@@ -22,11 +22,11 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Admin console       | 0       | 0              | 11             | 0          |
 | Notifications       | 0       | 0              | 5              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **10**  | **2**          | **108**        | **10**     |
+| **Total**           | **23**  | **3**          | **96**         | **11**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete; CI on GitHub not yet run.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending.
 
 ## Planning
 
@@ -49,22 +49,25 @@ Plan approved 5 Oct 2026. Phase 0 code complete; CI on GitHub not yet run.
 
 ## Auth and geo
 
-- ⬜ `users`, roles, account states, RLS — P1 — BR-5, BR-6, BR-7
-- ⬜ Registration server action: country = LR before OTP, `geo_checks` row — P1 — BR-1
-- ⬜ +231-only phone validation — P1 — BR-2
-- ⬜ Send-SMS auth hook (geo pass, rate limits, provider adapter) — P1 — BR-1, BR-2
-- ⬜ Before-user-created hook (+231, blocklist) — P1 — BR-2, BR-3
-- ⬜ One account per phone; phone HMAC hashing — P1 — BR-3
-- ⬜ OTP rate limits per phone and per IP — P1
-- ⬜ `GEO_ENFORCEMENT_MODE` flag — P1
-- ⬜ Banned users cannot authenticate — P1 — BR-6
-- ⬜ Suspension auto-lift by time comparison — P1 — BR-5
-- ⬜ Public pages: Landing, About, Safety, Terms, Privacy, Rules, Login, Register, Region blocked — P1
-- ⬜ Welcome, Age gate, Phone + OTP screens — P1 — BR-4
+- ✅ `users`, roles, account states, RLS — P1 — BR-5, BR-6, BR-7
+- ✅ Registration server action: country = LR before OTP, `geo_checks` row — P1 — BR-1
+- ✅ +231-only phone validation — P1 — BR-2
+- ✅ Send-SMS auth hook (geo pass, rate limits, provider adapter) — P1 — BR-1, BR-2
+- ✅ Before-user-created hook (+231, blocklist) — P1 — BR-2, BR-3
+- ✅ One account per phone; phone HMAC hashing — P1 — BR-3
+- 🔄 OTP rate limits per phone and per IP — P1 (built; values ⛔ T-19)
+- ✅ `GEO_ENFORCEMENT_MODE` flag — P1
+- ✅ Banned users cannot authenticate — P1 — BR-6
+- ✅ Suspension auto-lift by time comparison — P1 — BR-5
+- ✅ Public pages: Landing, About, Safety, Terms, Privacy, Rules, Login, Register, Region blocked — P1
+- ✅ Welcome, Age gate, Phone + OTP screens — P1 — BR-4
+- ✅ No public signup; members never use passwords; phone changes blocked — P1 — BR-2, BR-3
+- ⬜ Verified on hosted Supabase + Vercel with a real SMS provider — P1 ⛔ T-02, T-04, T-06, T-24
+- ⬜ CAPTCHA on sign-in (if T-25 = yes) — P12
 
 ## Onboarding
 
-- ⬜ DOB stored and locked; under-18 blocked — P1/P2 — BR-4
+- ✅ DOB stored and locked; under-18 blocked — P1 — BR-4
 - ⬜ Community rules & consents with document version — P2
 - ⬜ About you: name, gender, interested in, county + community, intent — P2 — BR-20
 - ⬜ Interests (≥3) & bio (≤500, detection) — P2 — BR-31
@@ -197,7 +200,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete; CI on GitHub not yet run.
 ## Security and launch
 
 - ⬜ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
-- ⬜ Account deletion + purge job — P10 ⛔ until OD-7 — BR-7
+- ⬜ Account deletion + purge job (incl. never-verified accounts) — P10 ⛔ until OD-7 — BR-7
 - ⬜ Data export — P10
 - ⬜ Full RLS / pgTAP pass — P12
 - ⬜ CSP, HSTS, X-Frame-Options DENY, Referrer-Policy — P12

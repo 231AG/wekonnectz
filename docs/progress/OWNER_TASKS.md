@@ -27,10 +27,13 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-16 | Buy / confirm the domain name                                                                                                     | Launch                                                   | OPEN                                                                                |
 | T-17 | Create a Sentry project                                                                                                           | Before launch (Phase 0 works without it)                 | OPEN                                                                                |
 | T-18 | Research and choose a card processor (OD-4, 15, 19, 20)                                                                           | Phase 7c only (not launch)                               | OPEN                                                                                |
-| T-19 | Approve threshold and limit values                                                                                                | Per row below                                            | OPEN                                                                                |
+| T-19 | Approve threshold and limit values                                                                                                | **Phase 1 sign-off** (OTP limits), then per row below    | OPEN                                                                                |
 | T-20 | Web push keys (OD-25 = in-app + web push)                                                                                         | Phase 11                                                 | OPEN                                                                                |
 | T-21 | Remaining product decisions: OD-5, 6 (Phase 4), OD-10 (Phase 6), OD-8 (Phase 8), OD-9 (Phase 9), OD-7 (Phase 10), OD-33 (Phase 5) | Per row below                                            | OPEN                                                                                |
 | T-22 | Create the `main` branch on GitHub                                                                                                | **Phase 0 PR and CI** (a PR needs a base branch)         | OPEN                                                                                |
+| T-24 | Create the phone-hashing secret in each hosted Supabase project (Vault)                                                           | Phase 1 hosted verification (T-06); launch               | OPEN                                                                                |
+| T-25 | Decide on CAPTCHA (Cloudflare Turnstile) for sign-in and create the keys                                                          | Recommended before launch (Phase 12)                     | OPEN                                                                                |
+| T-26 | Decide whether members may ever change their phone number (Q13)                                                                   | Nothing now; a future phase if yes                       | OPEN                                                                                |
 | T-23 | Approve design tokens v1 (or tell me what to change)                                                                              | Phase 0 sign-off only (Phase 1 can start)                | OPEN                                                                                |
 
 ---
@@ -89,12 +92,17 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 
 ### T-06 — Supabase development project
 
-- **What:** Create a Supabase cloud project for development/staging.
-- **Why:** Local Supabase covers most testing, but auth hooks and SMS need checking on hosted Supabase before launch.
+- **What:** Create a Supabase cloud project for development/staging and configure Auth like the local setup.
+- **Why:** Local Supabase covers the tests, but hooks, phone sign-in and the Vault secret must be proven on hosted Supabase before launch.
 - **Steps:**
-  1. supabase.com → New project → name `wekonnectz-dev`, region closest to West Africa offered (e.g. Frankfurt / London), strong DB password (keep it in your password manager).
-  2. Project Settings → API: copy the URL and anon key into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`; the service role key as `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_`).
-  3. For this cloud session instead: add the same three variables in the environment's settings (environment menu → Edit → environment variables). Tell me when done; I'll check they exist.
+  1. supabase.com → New project → name `wekonnectz-dev`. Pick the closest region offered (e.g. Frankfurt or London) and a strong DB password, kept in your password manager.
+  2. Project Settings → API: put the URL and anon key in `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Put the service role key in `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_`). For this cloud session, add the same three in the environment settings instead (environment menu → Edit → environment variables).
+  3. Tell me when that's done. I'll then apply the migrations with the Supabase CLI and give you a short checklist for the dashboard settings that must match `supabase/config.toml`:
+     - signups off;
+     - Phone provider on with the Send-SMS hook;
+     - phone confirmations on;
+     - before-user-created and password-verification hooks;
+     - anonymous sign-ins off.
 - **Blocks:** Phase 1 hosted verification only.
 - **Requested in:** Plan.
 
@@ -197,31 +205,33 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **What:** Approve or change each value below. Recommendations are mine unless marked "spec".
 - **Why:** Spec rule 9: no invented numbers in business logic. Keys exist in `app_settings` with no default; DEV-ONLY values in `seed.sql` until you approve.
 
-| Setting key                                                       | Meaning                             | Recommendation                 | Needed by |
-| ----------------------------------------------------------------- | ----------------------------------- | ------------------------------ | --------- |
-| `otp.max_per_phone_per_hour`                                      | OTP sends per phone                 | 5                              | Phase 1   |
-| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                    | 20                             | Phase 1   |
-| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION         | SIGNUP_ONLY (spec)             | Phase 1   |
-| `photos.max_per_user`                                             | Max photos                          | 6 (spec "recommended")         | Phase 3   |
-| `photos.max_upload_bytes`                                         | Upload size cap                     | 10 MB                          | Phase 3   |
-| `photos.uploads_per_day`                                          | Upload rate limit                   | 30                             | Phase 3   |
-| `storage.signed_url_ttl_seconds`                                  | Signed URL lifetime                 | 120 (spec)                     | Phase 3   |
-| `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                              | Phase 4   |
-| `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4 | Phase 4   |
-| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h           | 3 (spec)                       | Phase 5   |
-| `reports.per_user_per_day`                                        | Report rate limit                   | 10                             | Phase 5   |
-| `relationship.pass_cooldown_days`                                 | Passed profile returns after        | 30                             | Phase 6   |
-| `relationship.daily_like_cap`                                     | OD-10                               | — your call                    | Phase 6   |
-| `claims.rejections_before_flag`                                   | Rejected claims → member flagged    | 3                              | Phase 7   |
-| `claims.evidence_max_bytes`                                       | Screenshot size cap                 | 10 MB                          | Phase 7   |
-| `availability.max_window_hours`                                   | OD-8                                | 12 (spec)                      | Phase 8   |
-| `availability.max_lead_days`                                      | OD-8                                | 7 (spec)                       | Phase 8   |
-| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag       | 30 min / 5 per week            | Phase 8   |
-| `requests.daily_cap`                                              | OD-9                                | — your call                    | Phase 9   |
-| `requests.decline_cooldown_days`                                  | OD-9                                | — your call                    | Phase 9   |
-| `subscriptions.manual_extension_max_days`                         | OD-30 cap on admin manual extension | 7 days                         | Phase 10  |
-| `signals.requests_burst`                                          | "Many requests in a short time"     | 10 in 10 min                   | Phase 9   |
-| `signals.duplicate_text_recipients`                               | "Same text to many members"         | 5 in 24 h                      | Phase 9   |
+| Setting key                                                       | Meaning                             | Recommendation                   | Needed by |
+| ----------------------------------------------------------------- | ----------------------------------- | -------------------------------- | --------- |
+| `otp.max_per_phone_per_hour`                                      | OTP sends per phone                 | 5                                | Phase 1   |
+| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                    | 20                               | Phase 1   |
+| Supabase Auth `sms_sent` (per hour, whole project)                | Hard cap on all OTP SMS per hour    | Size to launch traffic, e.g. 500 | Launch    |
+| Supabase Auth `sign_in_sign_ups` (per 5 min per IP)               | Our server calls Auth from one IP   | e.g. 300                         | Launch    |
+| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION         | SIGNUP_ONLY (spec)               | Phase 1   |
+| `photos.max_per_user`                                             | Max photos                          | 6 (spec "recommended")           | Phase 3   |
+| `photos.max_upload_bytes`                                         | Upload size cap                     | 10 MB                            | Phase 3   |
+| `photos.uploads_per_day`                                          | Upload rate limit                   | 30                               | Phase 3   |
+| `storage.signed_url_ttl_seconds`                                  | Signed URL lifetime                 | 120 (spec)                       | Phase 3   |
+| `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                                | Phase 4   |
+| `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4   | Phase 4   |
+| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h           | 3 (spec)                         | Phase 5   |
+| `reports.per_user_per_day`                                        | Report rate limit                   | 10                               | Phase 5   |
+| `relationship.pass_cooldown_days`                                 | Passed profile returns after        | 30                               | Phase 6   |
+| `relationship.daily_like_cap`                                     | OD-10                               | — your call                      | Phase 6   |
+| `claims.rejections_before_flag`                                   | Rejected claims → member flagged    | 3                                | Phase 7   |
+| `claims.evidence_max_bytes`                                       | Screenshot size cap                 | 10 MB                            | Phase 7   |
+| `availability.max_window_hours`                                   | OD-8                                | 12 (spec)                        | Phase 8   |
+| `availability.max_lead_days`                                      | OD-8                                | 7 (spec)                         | Phase 8   |
+| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag       | 30 min / 5 per week              | Phase 8   |
+| `requests.daily_cap`                                              | OD-9                                | — your call                      | Phase 9   |
+| `requests.decline_cooldown_days`                                  | OD-9                                | — your call                      | Phase 9   |
+| `subscriptions.manual_extension_max_days`                         | OD-30 cap on admin manual extension | 7 days                           | Phase 10  |
+| `signals.requests_burst`                                          | "Many requests in a short time"     | 10 in 10 min                     | Phase 9   |
+| `signals.duplicate_text_recipients`                               | "Same text to many members"         | 5 in 24 h                        | Phase 9   |
 
 - **Steps:** Reply "approve T-19" or list changes.
 - **Blocks:** Each phase in the last column (I can build with DEV-ONLY values but can't call the phase complete without approved values).
@@ -273,3 +283,31 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **Steps:** Reply "tokens approved" or say what to change.
 - **Blocks:** Phase 0 sign-off only.
 - **Requested in:** Phase 0.
+
+### T-24 — Phone-hashing secret (Vault)
+
+- **What:** In each hosted Supabase project (dev, then prod), create the Vault secret that phone numbers are hashed with.
+- **Why:** Phone numbers are stored only as keyed hashes. Without this secret, signup refuses to run (it fails closed).
+- **Steps:**
+  1. Supabase dashboard → SQL Editor → New query.
+  2. Run: `select vault.create_secret(encode(gen_random_bytes(48), 'base64'), 'phone_hash_pepper', 'Phone hashing pepper');`
+  3. Don't copy or save the value anywhere. It never needs to leave the database. **Never change it after launch**: every stored hash would stop matching, including the banned-number list.
+  4. Reply "pepper created in dev" (and later "in prod").
+- **Blocks:** hosted verification of Phase 1 (dev); launch (prod).
+- **Requested in:** Phase 1.
+
+### T-25 — CAPTCHA (Cloudflare Turnstile)
+
+- **What:** Decide whether to add a CAPTCHA to sign-up and login. If yes, create a Turnstile site in Cloudflare.
+- **Why:** Anyone can ask Supabase to text a code to an existing member's number. Limits stop large abuse, but a determined person can use up one member's hourly codes. A CAPTCHA stops scripted abuse and saves SMS money.
+- **Steps (if yes):** Cloudflare dashboard → Turnstile → Add site (your domain). Put the site key in `.env.local` as `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Enter the secret key directly into Supabase → Authentication → Attack Protection, never into chat.
+- **Blocks:** nothing now; recommended before launch.
+- **Requested in:** Phase 1.
+
+### T-26 — Phone number changes (Q13)
+
+- **What:** Decide whether a member may ever change their phone number.
+- **Why:** The spec doesn't cover it. A change must re-apply the +231, banned-number and Liberia rules, or it becomes a way around them. For now I've blocked phone changes completely.
+- **Steps:** Reply "no changes in MVP" (my recommendation; members contact support), or "allow" and I'll plan a reviewed flow.
+- **Blocks:** nothing now.
+- **Requested in:** Phase 1.
