@@ -2,7 +2,7 @@
 -- no phone changes, staff check needs MFA, hook replays refused, DOB plausibility.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(23);
 
 insert into auth.users (id, phone, aud, role) values
   ('bbbbbbbb-0000-0000-0000-000000000001', '231770000501', 'authenticated', 'authenticated'),
@@ -66,6 +66,14 @@ select lives_ok($$ update auth.users set phone_confirmed_at = now() where id = '
 -- Hook replay protection.
 select ok(public.claim_hook_receipt('msg_test_1'), 'first delivery of a hook message is processed');
 select ok(not public.claim_hook_receipt('msg_test_1'), 'a replayed hook message is refused');
+select lives_ok($$ select public.release_hook_receipt('msg_test_1') $$, 'a failed delivery releases its message id');
+select ok(public.claim_hook_receipt('msg_test_1'), 'a retry after a failed delivery is processed');
+
+-- Members never store a password; staff may.
+select throws_ok($$ update auth.users set encrypted_password = 'x' where id = 'bbbbbbbb-0000-0000-0000-000000000001' $$,
+  '42501', 'PASSWORD_NOT_ALLOWED', 'a member account cannot get a password');
+select lives_ok($$ update auth.users set encrypted_password = 'x' where id = 'bbbbbbbb-0000-0000-0000-000000000002' $$,
+  'a staff account can have a password');
 
 select * from finish();
 rollback;

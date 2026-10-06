@@ -231,6 +231,9 @@ isOneToOne: true
 "rate_limit_hit":
 { Args: { "p_bucket": string,"p_max": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
                            },
+"release_hook_receipt":
+{ Args: { "p_message_id": string }; Returns: undefined
+                           },
 "set_date_of_birth":
 { Args: { "p_dob": string }; Returns: undefined
                            }

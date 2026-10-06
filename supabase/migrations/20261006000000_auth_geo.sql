@@ -562,6 +562,16 @@ create policy auth_hook_receipts_no_client_access on public.auth_hook_receipts
   as restrictive for all to anon, authenticated
   using (false) with check (false);
 
+-- Lets a delivery that failed (rate limit, provider error) be retried with the same message id.
+create or replace function public.release_hook_receipt(p_message_id text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  delete from public.auth_hook_receipts where message_id = p_message_id;
+$$;
+
 -- True the first time a message id is seen, false on a replay. Prunes ids older than a day.
 create or replace function public.claim_hook_receipt(p_message_id text)
 returns boolean
@@ -626,6 +636,28 @@ create trigger guard_auth_phone_change
   before update of phone, phone_change on auth.users
   for each row execute function public.guard_auth_phone_change();
 
+-- Members never have a password (phone OTP only). Refusing to store one closes the gap even where
+-- the password-verification hook is not available on the hosted plan [VERIFY T-06].
+create or replace function public.guard_member_password()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if coalesce(new.encrypted_password, '') <> ''
+     and new.encrypted_password is distinct from old.encrypted_password
+     and coalesce((select u.role from public.users u where u.id = new.id), 'USER') = 'USER' then
+    raise exception 'PASSWORD_NOT_ALLOWED' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_member_password
+  before update of encrypted_password on auth.users
+  for each row execute function public.guard_member_password();
+
 -- ---------------------------------------------------------------------------
 -- Privileges. Nothing is callable by clients unless listed here (guard test allow-list).
 -- ---------------------------------------------------------------------------
@@ -648,6 +680,8 @@ revoke all on function public.hook_before_user_created(jsonb) from public, anon,
 revoke all on function public.hook_password_verification_attempt(jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.guard_auth_phone_change() from public, anon, authenticated, service_role;
 revoke all on function public.claim_hook_receipt(text) from public, anon, authenticated;
+revoke all on function public.release_hook_receipt(text) from public, anon, authenticated;
+revoke all on function public.guard_member_password() from public, anon, authenticated, service_role;
 revoke all on function public.current_user_can_act() from public, anon;
 revoke all on function public.is_staff(public.user_role) from public, anon;
 
@@ -665,6 +699,7 @@ grant execute on function public.begin_signup(text, text, text) to service_role;
 grant execute on function public.otp_send_allowed(text) to service_role;
 grant execute on function public.otp_ip_allowed(text) to service_role;
 grant execute on function public.claim_hook_receipt(text) to service_role;
+grant execute on function public.release_hook_receipt(text) to service_role;
 
 -- Supabase Auth runs the hook as supabase_auth_admin.
 grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;

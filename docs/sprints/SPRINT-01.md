@@ -29,6 +29,9 @@ Onboarding steps 4–8 (Phase 2), staff login and MFA (Phase 3), the ban/suspend
 - [x] Expired suspension reads as ACTIVE (BR-5, §8)
 - [x] OTP limits per phone and per IP (§22) — values DEV-ONLY until T-19
 - [x] Login doesn't reveal whether a number has an account
+- [x] No public signup; members cannot store or use a password; phone numbers cannot be changed
+- [x] Bans delete existing sessions; old access tokens cannot write
+- [x] Independent audit: 2 HIGH, 4 MEDIUM, 11 LOW found and fixed or accepted (see phase report)
 - [x] pgTAP, unit and e2e tests name their rules
 - [ ] Owner approves OTP limit values (T-19)
 - [ ] Verified on hosted Supabase + Vercel with a real SMS provider (T-02, T-04, T-06, T-24)

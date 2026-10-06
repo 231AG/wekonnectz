@@ -64,14 +64,20 @@ export async function POST(request: Request) {
   // A replayed message was already handled: acknowledge without sending again.
   if (!firstTime) return NextResponse.json({});
 
+  // Any failure below releases the message id so a retry of the same delivery is not swallowed.
+  const fail = async (status: number, message: string) => {
+    await admin.rpc("release_hook_receipt", { p_message_id: messageId });
+    return hookError(status, message);
+  };
+
   const { data: allowed, error } = await admin.rpc("otp_send_allowed", { p_phone: phone.e164 });
-  if (error) return hookError(500, "Sign-in is temporarily unavailable.");
-  if (!allowed) return hookError(429, "Too many codes requested for this number. Try again later.");
+  if (error) return fail(500, "Sign-in is temporarily unavailable.");
+  if (!allowed) return fail(429, "Too many codes requested for this number. Try again later.");
 
   try {
     await getSmsProvider().sendOtp({ phoneE164: phone.e164, code });
   } catch {
-    return hookError(502, "We couldn't send the code. Try again shortly.");
+    return fail(502, "We couldn't send the code. Try again shortly.");
   }
 
   return NextResponse.json({});

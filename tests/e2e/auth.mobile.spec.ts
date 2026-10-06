@@ -203,12 +203,14 @@ test("members can never sign in with a password (phone OTP only)", async () => {
   const phone = randomLiberianPhone();
   const id = await createMember(phone.e164);
   const admin = adminClient();
+  // A member account cannot even store a password (database guard)...
   const { error: setError } = await admin.auth.admin.updateUserById(id, { password: "Test-password-123" });
-  expect(setError).toBeNull();
+  expect(setError).not.toBeNull();
   const { createClient } = await import("@supabase/supabase-js");
   const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false },
   });
+  // ...and password sign-in is refused regardless.
   const { data, error } = await anon.auth.signInWithPassword({ phone: phone.e164, password: "Test-password-123" });
   expect(error).not.toBeNull();
   expect(data.session).toBeNull();
@@ -380,6 +382,26 @@ test("BR-6: banning ends an existing session, blocks sign-in, and BR-3: the numb
   await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
   await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "This number can't be used to sign up." })).toBeVisible();
+});
+
+test("visiting the sign-out URL does not log out an active member (no cross-site logout)", async ({ page }) => {
+  const phone = randomLiberianPhone();
+  await createMember(phone.e164);
+  await page.goto("/login");
+  await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
+  const since = Date.now();
+  await page.getByRole("button", { name: "Send code" }).click();
+  await enterCode(page, await readOtp(phone.e164, since));
+  await enterDob(page, "14", "03", adultYear);
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await page.goto("/auth/signout");
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/onboarding$/);
+  // The real log-out button still works.
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("signed-out visitors cannot open member pages", async ({ page }) => {
