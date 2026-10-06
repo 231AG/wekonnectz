@@ -4,7 +4,7 @@
 
 Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/WeKonnectz_MVP_Build_Spec_v3.pdf` (**source of truth**). Plan: `docs/plan/MASTER_PLAN.md`. Owner workflow: `PROMPT.md`.
 
-**Current phase:** Phase 1 — Auth, geo & age gate (see `docs/sprints/SPRINT-01.md`). Next: Phase 2 — Profile & onboarding.
+**Current phase:** Phase 2 — Profile & onboarding (see `docs/sprints/SPRINT-02.md`). Next: Phase 3 — Photos & private storage.
 
 ## Stack (pinned exactly; record changes here)
 

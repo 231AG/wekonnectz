@@ -78,6 +78,18 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - BANNED and DELETED are mirrored into `auth.users.banned_until` (now + 100 years — Supabase Auth cannot read `infinity`) and **all their sessions are deleted**, so refresh fails at once. An access token issued earlier stays valid until it expires (≤ 1 h), so member writes and RPCs also check `current_user_can_act()` in the database, and `requireMember()` sends such sessions to sign-out.
 - The age gate carries the DOB to account creation in an AES-256-GCM sealed, http-only cookie (30 min). An under-18 result is remembered on the device for 24 h. Clearing cookies resets that — accepted: the age gate cannot stop someone lying about their DOB; human review of the selfie (Phase 4) is the next check (spec §9).
 
+## Content checks and profile writes (Phase 2)
+
+- The detection engine (`lib/domain/detection.ts`) runs in server actions. In **profile mode** (bios, display names, first message requests) any phone number, link, handle, contact term, price or money request is rejected with the neutral message "Contact details and prices aren’t allowed." (§17). It never says which check matched. **Conversation mode** (OD-31) flags only prices, payment terms and money requests.
+- The term lists live in `app_settings.detection.terms` (moderators update them; Phase 10 adds the screen). If the setting is missing, content is refused rather than accepted unchecked.
+- **Write pattern.** Profile fields are never member-writable through the API. A server action:
+  1. authenticates (`requireMember`);
+  2. validates with the shared Zod schema;
+  3. runs detection;
+  4. calls a `service_role`-only database function with the member's own id from the session.
+
+  The function re-checks the account state (PENDING/ACTIVE only) and every rule SQL can enforce (lengths, ≥3 active interests, area from the list, current document versions, step order).
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,
