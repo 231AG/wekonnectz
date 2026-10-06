@@ -36,6 +36,19 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"areas": {
+                  Row: {
+                    "active": boolean,"county": string,"created_at": string,"id": string,"name": string,"updated_at": string
+                  }
+                  Insert: {
+                    "active"?: boolean,"county": string,"created_at"?: string,"id"?: string,"name": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"county"?: string,"created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"audit_logs": {
                   Row: {
                     "action": Database["public"]['Enums']["audit_action"],"actor_id": string,"created_at": string,"entity_id": string | null,"entity_type": string,"id": string,"metadata": NonNullable<Json>
@@ -74,6 +87,12 @@ export type Database = {
                   }
                   Relationships: [
                     {
+      foreignKeyName: "consents_document_version_fk"
+      columns: ["document","version"]
+isOneToOne: false
+      referencedRelation: "legal_documents"
+      referencedColumns: ["document","version"]
+    },{
       foreignKeyName: "consents_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
@@ -107,6 +126,32 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"interests": {
+                  Row: {
+                    "active": boolean,"created_at": string,"id": string,"name": string,"slug": string,"updated_at": string
+                  }
+                  Insert: {
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"name": string,"slug": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"name"?: string,"slug"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"legal_documents": {
+                  Row: {
+                    "created_at": string,"document": Database["public"]['Enums']["consent_document"],"is_current": boolean,"published_at": string,"title": string,"version": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"document": Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title": string,"version": string
+                  }
+                  Update: {
+                    "created_at"?: string,"document"?: Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title"?: string,"version"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"phone_blocklist": {
                   Row: {
                     "created_at": string,"created_by": string | null,"phone_hash": string,"reason": string
@@ -128,16 +173,22 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"date_of_birth": string,"dob_locked": boolean,"updated_at": string,"user_id": string
+                    "area_id": string | null,"bio": string | null,"created_at": string,"date_of_birth": string,"display_name": string | null,"dob_locked": boolean,"gender": Database["public"]['Enums']["gender"] | null,"intent_casual": boolean,"intent_relationship": boolean,"is_profile_complete": boolean,"seeking_genders": (Database["public"]['Enums']["gender"])[] | null,"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"date_of_birth": string,"dob_locked"?: boolean,"updated_at"?: string,"user_id": string
+                    "area_id"?: string | null,"bio"?: string | null,"created_at"?: string,"date_of_birth": string,"display_name"?: string | null,"dob_locked"?: boolean,"gender"?: Database["public"]['Enums']["gender"] | null,"intent_casual"?: boolean,"intent_relationship"?: boolean,"is_profile_complete"?: boolean,"seeking_genders"?: (Database["public"]['Enums']["gender"])[] | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"date_of_birth"?: string,"dob_locked"?: boolean,"updated_at"?: string,"user_id"?: string
+                    "area_id"?: string | null,"bio"?: string | null,"created_at"?: string,"date_of_birth"?: string,"display_name"?: string | null,"dob_locked"?: boolean,"gender"?: Database["public"]['Enums']["gender"] | null,"intent_casual"?: boolean,"intent_relationship"?: boolean,"is_profile_complete"?: boolean,"seeking_genders"?: (Database["public"]['Enums']["gender"])[] | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "profiles_area_id_fkey"
+      columns: ["area_id"]
+isOneToOne: false
+      referencedRelation: "areas"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "profiles_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: true
@@ -158,6 +209,50 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
+                },"user_interests": {
+                  Row: {
+                    "created_at": string,"interest_id": string,"user_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"interest_id": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"interest_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "user_interests_interest_id_fkey"
+      columns: ["interest_id"]
+isOneToOne: false
+      referencedRelation: "interests"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "user_interests_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"user_settings": {
+                  Row: {
+                    "casual_message_permission": Database["public"]['Enums']["message_permission"],"created_at": string,"notification_prefs": NonNullable<Json>,"updated_at": string,"user_id": string
+                  }
+                  Insert: {
+                    "casual_message_permission"?: Database["public"]['Enums']["message_permission"],"created_at"?: string,"notification_prefs"?: NonNullable<Json>,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "casual_message_permission"?: Database["public"]['Enums']["message_permission"],"created_at"?: string,"notification_prefs"?: NonNullable<Json>,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "user_settings_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"users": {
                   Row: {
                     "created_at": string,"deleted_at": string | null,"id": string,"last_seen_at": string | null,"role": Database["public"]['Enums']["user_role"],"status": Database["public"]['Enums']["account_status"],"suspended_until": string | null,"updated_at": string
@@ -177,8 +272,14 @@ isOneToOne: true
             [_ in never]: never
           }
           Functions: {
-            "age_in_years":
+            "accept_current_documents":
+{ Args: { "p_user_id": string,"p_versions": Json }; Returns: undefined
+                           },
+"age_in_years":
 { Args: { "p_dob": string,"p_on"?: string }; Returns: number
+                           },
+"assert_can_edit_profile":
+{ Args: { "p_user_id": string }; Returns: undefined
                            },
 "audit":
 { Args: { "p_action": Database["public"]['Enums']["audit_action"],"p_entity_id": string,"p_entity_type": string,"p_metadata"?: Json }; Returns: string
@@ -201,6 +302,9 @@ isOneToOne: true
 "get_setting":
 { Args: { "p_key": string }; Returns: Json
                            },
+"has_accepted_current_documents":
+{ Args: { "p_user_id": string }; Returns: boolean
+                           },
 "hmac_with_pepper":
 { Args: { "p_value": string }; Returns: string
                            },
@@ -219,6 +323,12 @@ isOneToOne: true
 "normalize_phone":
 { Args: { "p_phone": string }; Returns: string
                            },
+"onboarding_progress":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"onboarding_progress_for":
+{ Args: { "p_user_id": string }; Returns: Json
+                           },
 "otp_ip_allowed":
 { Args: { "p_ip": string }; Returns: boolean
                            },
@@ -234,12 +344,18 @@ isOneToOne: true
 "release_hook_receipt":
 { Args: { "p_message_id": string }; Returns: undefined
                            },
+"save_interests_and_bio":
+{ Args: { "p_bio": string,"p_interest_ids": (string)[],"p_user_id": string }; Returns: undefined
+                           },
+"save_profile_basics":
+{ Args: { "p_area_id": string,"p_display_name": string,"p_gender": Database["public"]['Enums']["gender"],"p_intent_casual": boolean,"p_intent_relationship": boolean,"p_seeking_genders": (Database["public"]['Enums']["gender"])[],"p_user_id": string }; Returns: undefined
+                           },
 "set_date_of_birth":
 { Args: { "p_dob": string }; Returns: undefined
                            }
           }
           Enums: {
-            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","message_permission": "ANYONE"|"NOBODY","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -359,7 +475,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"message_permission": ["ANYONE", "NOBODY"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"]
           }
         }
 } as const

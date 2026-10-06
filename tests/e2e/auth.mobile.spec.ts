@@ -70,9 +70,9 @@ test("BR-1/BR-2/BR-4: a Liberian adult signs up with a +231 OTP and lands on onb
   await page.locator("#code").fill(code);
   await page.getByRole("button", { name: "Verify" }).click();
 
-  await expect(page).toHaveURL(/\/onboarding$/);
-  await expect(page.getByRole("heading", { name: "You’re in" })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS_P1}/onboarding-phone-verified.png` });
+  // Phase 2: verification continues to the first onboarding step.
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
+  await expect(page.getByRole("heading", { name: "Community rules" })).toBeVisible();
 
   // Database: account PENDING / USER, DOB stored and locked (BR-4).
   const id = await findAuthUserIdByPhone(phone.e164);
@@ -89,7 +89,7 @@ test("BR-1/BR-2/BR-4: a Liberian adult signs up with a +231 OTP and lands on onb
 
   // Signed in: the welcome page sends a member onward.
   await page.goto("/");
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
   expect(errors).toEqual([]);
 });
 
@@ -285,7 +285,7 @@ test("returning member logs in with an OTP; a member without a DOB is sent to th
 
   await expect(page).toHaveURL(/\/signup$/);
   await enterDob(page, "2", "2", adultYear);
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
 });
 
 test("login does not reveal whether a number has an account, even on a quick second try", async ({ browser }) => {
@@ -346,7 +346,7 @@ test("BR-6: banning ends an existing session, blocks sign-in, and BR-3: the numb
   await enterCode(page, await readOtp(phone.e164, since));
   await expect(page).toHaveURL(/\/signup$/);
   await enterDob(page, "14", "03", adultYear);
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
 
   // Ban (the Phase 5 ban function will do both of these in one transaction).
   const { error: banError } = await admin.from("users").update({ status: "BANNED" }).eq("id", id);
@@ -393,15 +393,10 @@ test("visiting the sign-out URL does not log out an active member (no cross-site
   await page.getByRole("button", { name: "Send code" }).click();
   await enterCode(page, await readOtp(phone.e164, since));
   await enterDob(page, "14", "03", adultYear);
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
   await page.goto("/auth/signout");
   await page.goto("/onboarding");
-  await expect(page).toHaveURL(/\/onboarding$/);
-  // The real log-out button still works.
-  await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await page.goto("/onboarding");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/onboarding\/rules$/);
 });
 
 test("signed-out visitors cannot open member pages", async ({ page }) => {

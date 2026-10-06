@@ -108,3 +108,12 @@ export function signHook(body: string, id = `msg_${randomInt(1e9)}`, ts = Math.f
     "content-type": "application/json",
   };
 }
+
+/** Logs a member in through the UI (phone + OTP). Lands wherever their onboarding resumes. */
+export async function loginViaUi(page: Page, phone: { national: string; e164: string }) {
+  await page.goto("/login");
+  await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
+  const since = Date.now();
+  await page.getByRole("button", { name: "Send code" }).click();
+  await enterCode(page, await readOtp(phone.e164, since));
+}
