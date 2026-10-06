@@ -143,6 +143,8 @@ begin
   if new.status in ('BANNED', 'DELETED') then
     -- A finite date: Supabase Auth (Go) cannot read 'infinity' and its admin API fails on it.
     update auth.users set banned_until = now() + interval '100 years' where id = new.id;
+    -- End every existing session now; refresh tokens go with them (BR-6).
+    delete from auth.sessions where user_id = new.id;
   elsif old.status in ('BANNED', 'DELETED') then
     update auth.users set banned_until = null where id = new.id;
   end if;
@@ -180,6 +182,42 @@ as $$
   select public.effective_account_status(u.status, u.suspended_until)
   from public.users u
   where u.id = auth.uid();
+$$;
+
+-- Member writes and RPCs require an account that may still act. An access token issued before a
+-- ban stays cryptographically valid until it expires, so writes check status in the database (BR-6).
+create or replace function public.current_user_can_act()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(public.current_user_status() not in ('BANNED', 'DELETED'), false);
+$$;
+
+-- Staff check for admin RLS and functions: role at or above p_min_role AND an MFA (aal2) session.
+-- Staff accounts and MFA enrolment arrive in Phase 3; the check is defined now so it is never skipped.
+create or replace function public.is_staff(p_min_role public.user_role default 'MODERATOR')
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select case u.role
+             when 'SUPER_ADMIN' then 4 when 'ADMIN' then 3 when 'MODERATOR' then 2 else 1
+           end
+           >= case p_min_role
+             when 'SUPER_ADMIN' then 4 when 'ADMIN' then 3 when 'MODERATOR' then 2 else 1
+           end
+       and u.role <> 'USER'
+       and public.effective_account_status(u.status, u.suspended_until) not in ('BANNED', 'DELETED', 'SUSPENDED')
+       and coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+    from public.users u
+    where u.id = auth.uid()
+  ), false);
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -226,6 +264,9 @@ begin
     if new.date_of_birth > current_date or public.age_in_years(new.date_of_birth) < 18 then
       raise exception 'UNDER_18' using errcode = '22023';
     end if;
+    if public.age_in_years(new.date_of_birth) > 120 then
+      raise exception 'IMPLAUSIBLE_DOB' using errcode = '22023';
+    end if;
   end if;
 
   if tg_op = 'UPDATE' and new.date_of_birth is distinct from old.date_of_birth and old.dob_locked
@@ -256,7 +297,7 @@ begin
     raise exception 'NOT_AUTHENTICATED' using errcode = '42501';
   end if;
 
-  if not exists (select 1 from public.users where id = v_uid) then
+  if not exists (select 1 from public.users where id = v_uid) or not public.current_user_can_act() then
     raise exception 'NO_ACCOUNT' using errcode = '42501';
   end if;
 
@@ -323,7 +364,8 @@ create policy phone_blocklist_no_client_access on public.phone_blocklist
 
 -- ---------------------------------------------------------------------------
 -- consents — acceptance of Terms / Privacy / Community rules with document version (§10 step 4).
--- Written in Phase 2. Members may read and add their own; never change or delete them.
+-- Members may read their own. Writes arrive in Phase 2 through an RPC that checks the document
+-- version exists and sets accepted_at itself; members never insert rows directly.
 -- ---------------------------------------------------------------------------
 create table public.consents (
   id          uuid primary key default gen_random_uuid(),
@@ -337,15 +379,12 @@ create table public.consents (
 
 alter table public.consents enable row level security;
 
-grant select, insert on public.consents to authenticated;
+grant select on public.consents to authenticated;
 
 create policy consents_select_own on public.consents
   for select to authenticated
   using (user_id = auth.uid());
 
-create policy consents_insert_own on public.consents
-  for insert to authenticated
-  with check (user_id = auth.uid());
 
 -- ---------------------------------------------------------------------------
 -- rate_limit_counters — fixed-window counters (spec §5: Postgres counters). Subjects are hashed.
@@ -510,6 +549,84 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Auth hook replay protection: each Standard Webhooks message id is processed once.
+-- ---------------------------------------------------------------------------
+create table public.auth_hook_receipts (
+  message_id  text primary key check (length(message_id) between 1 and 200),
+  received_at timestamptz not null default now()
+);
+
+alter table public.auth_hook_receipts enable row level security;
+
+create policy auth_hook_receipts_no_client_access on public.auth_hook_receipts
+  as restrictive for all to anon, authenticated
+  using (false) with check (false);
+
+-- True the first time a message id is seen, false on a replay. Prunes ids older than a day.
+create or replace function public.claim_hook_receipt(p_message_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_inserted text;
+begin
+  delete from public.auth_hook_receipts where received_at < now() - interval '1 day';
+  insert into public.auth_hook_receipts (message_id) values (p_message_id)
+  on conflict (message_id) do nothing
+  returning message_id into v_inserted;
+  return v_inserted is not null;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Supabase Auth "password verification attempt" hook: members never sign in with a password
+-- (spec §5: phone OTP). Only staff accounts (email + password + TOTP, OD-27) may.
+-- ---------------------------------------------------------------------------
+create or replace function public.hook_password_verification_attempt(event jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_role public.user_role;
+begin
+  select u.role into v_role from public.users u where u.id = (event ->> 'user_id')::uuid;
+  if v_role is null or v_role = 'USER' then
+    return jsonb_build_object('decision', 'reject', 'message', 'Sign in with your phone number.', 'should_logout_user', true);
+  end if;
+  return jsonb_build_object('decision', 'continue');
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Phone numbers cannot be changed in the MVP. A change would need the same +231, blocklist and
+-- geo rules as signup (BR-2, BR-3); until a reviewed flow exists, Auth refuses it at the database.
+-- ---------------------------------------------------------------------------
+create or replace function public.guard_auth_phone_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if coalesce(new.phone_change, '') <> coalesce(old.phone_change, '') and coalesce(new.phone_change, '') <> '' then
+    raise exception 'PHONE_CHANGE_NOT_ALLOWED' using errcode = '42501';
+  end if;
+  if old.phone is not null and old.phone <> '' and new.phone is distinct from old.phone then
+    raise exception 'PHONE_CHANGE_NOT_ALLOWED' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_auth_phone_change
+  before update of phone, phone_change on auth.users
+  for each row execute function public.guard_auth_phone_change();
+
+-- ---------------------------------------------------------------------------
 -- Privileges. Nothing is callable by clients unless listed here (guard test allow-list).
 -- ---------------------------------------------------------------------------
 revoke all on function public.normalize_phone(text) from public, anon, authenticated;
@@ -528,11 +645,18 @@ revoke all on function public.begin_signup(text, text, text) from public, anon, 
 revoke all on function public.otp_send_allowed(text) from public, anon, authenticated;
 revoke all on function public.otp_ip_allowed(text) from public, anon, authenticated;
 revoke all on function public.hook_before_user_created(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.hook_password_verification_attempt(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.guard_auth_phone_change() from public, anon, authenticated, service_role;
+revoke all on function public.claim_hook_receipt(text) from public, anon, authenticated;
+revoke all on function public.current_user_can_act() from public, anon;
+revoke all on function public.is_staff(public.user_role) from public, anon;
 
 -- Members (signed in): their own status, their own DOB once.
 grant execute on function public.effective_account_status(public.account_status, timestamptz) to authenticated;
 grant execute on function public.current_user_status() to authenticated;
 grant execute on function public.set_date_of_birth(date) to authenticated;
+grant execute on function public.current_user_can_act() to authenticated;
+grant execute on function public.is_staff(public.user_role) to authenticated;
 
 -- Server (service role) only.
 grant execute on function public.phone_hash(text) to service_role;
@@ -540,7 +664,9 @@ grant execute on function public.rate_limit_hit(text, text, integer, integer) to
 grant execute on function public.begin_signup(text, text, text) to service_role;
 grant execute on function public.otp_send_allowed(text) to service_role;
 grant execute on function public.otp_ip_allowed(text) to service_role;
+grant execute on function public.claim_hook_receipt(text) to service_role;
 
 -- Supabase Auth runs the hook as supabase_auth_admin.
 grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;
+grant execute on function public.hook_password_verification_attempt(jsonb) to supabase_auth_admin;
 grant usage on schema public to supabase_auth_admin;

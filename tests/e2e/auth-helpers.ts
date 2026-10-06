@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHmac, randomInt } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,7 +14,7 @@ export function randomLiberianPhone(): { national: string; e164: string } {
 const OUTBOX = process.env.SMS_DEV_OUTBOX_DIR ?? ".dev-sms-outbox";
 
 function outboxFile(e164: string) {
-  return join(OUTBOX, `${createHash("sha256").update(e164).digest("hex")}.json`);
+  return join(OUTBOX, `${createHmac("sha256", process.env.APP_COOKIE_SECRET!).update(e164).digest("hex")}.json`);
 }
 
 export function outboxHasCodeSince(e164: string, since: number): boolean {
@@ -60,6 +60,9 @@ export async function createMember(e164: string): Promise<string> {
   expect(geo).toBe("PASS");
   const { data, error } = await admin.auth.admin.createUser({ phone: e164, phone_confirm: true });
   expect(error).toBeNull();
+  // The trigger creates the users row; make sure it exists before tests rely on it.
+  const { data: row } = await admin.from("users").select("id").eq("id", data.user!.id).single();
+  expect(row).not.toBeNull();
   return data.user!.id;
 }
 
@@ -79,4 +82,29 @@ export async function enterDob(page: Page, d: string, m: string, y: string) {
 export async function enterCode(page: Page, code: string) {
   await page.locator("#code").fill(code);
   await page.getByRole("button", { name: "Verify" }).click();
+}
+
+/** Signs a member in through the real Auth API with an OTP from the dev outbox; returns their client. */
+export async function signInMemberViaApi(e164: string) {
+  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const since = Date.now();
+  const { error: otpError } = await client.auth.signInWithOtp({ phone: e164, options: { shouldCreateUser: false } });
+  expect(otpError).toBeNull();
+  const { error } = await client.auth.verifyOtp({ phone: e164, token: await readOtp(e164, since), type: "sms" });
+  expect(error).toBeNull();
+  return client;
+}
+
+/** Signs a Send-SMS hook request the way Supabase Auth does (Standard Webhooks). */
+export function signHook(body: string, id = `msg_${randomInt(1e9)}`, ts = Math.floor(Date.now() / 1000)) {
+  const key = Buffer.from(process.env.SEND_SMS_HOOK_SECRET!.replace(/^v1,whsec_/, ""), "base64");
+  const signature = createHmac("sha256", key).update(`${id}.${ts}.${body}`).digest("base64");
+  return {
+    "webhook-id": id,
+    "webhook-timestamp": String(ts),
+    "webhook-signature": `v1,${signature}`,
+    "content-type": "application/json",
+  };
 }

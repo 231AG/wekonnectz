@@ -67,7 +67,9 @@ select is_empty(
         and p.proname <> all (array[
           'effective_account_status', -- Phase 1: pure helper, no data access
           'current_user_status',      -- Phase 1: caller's own status only
-          'set_date_of_birth'         -- Phase 1: caller's own DOB, once (BR-4)
+          'set_date_of_birth',        -- Phase 1: caller's own DOB, once (BR-4)
+          'current_user_can_act',     -- Phase 1: caller's own status only
+          'is_staff'                  -- Phase 1: caller's own role + MFA level only
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );

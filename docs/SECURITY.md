@@ -44,22 +44,38 @@ with a valid member JWT cannot skip them (plan §1.2).
 
 The **+231 OTP is the real control**; the IP-country check is a pre-filter that VPNs defeat (plan §1.5).
 
-| Layer                      | Where                                                              | What it enforces                                                                                                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Registration server action | `lib/auth/actions/signup.ts` → `begin_signup()`                    | Per-IP limit, request country = LR (from `x-vercel-ip-country`, trusted only on Vercel), +231, blocklist. Writes `geo_checks` (country codes only) and a single-use 10-minute geo pass. Runs **before** any OTP is requested.                                        |
-| Before-user-created hook   | `hook_before_user_created()` (Postgres, runs inside Supabase Auth) | Every new user — including direct API calls with the public anon key — needs +231, a non-blocklisted number and an unused geo pass. Email-only users are allowed because public email signup is disabled; only the admin API (SUPER_ADMIN, Phase 3) can create them. |
-| Send-SMS hook              | `app/api/auth/hooks/send-sms/route.ts`                             | Standard Webhooks signature (only Supabase Auth can call it), +231, per-phone hourly limit, then the SMS provider adapter. Never logs number or code.                                                                                                                |
-| Auth config                | `supabase/config.toml`                                             | Phone signup on, **phone confirmations on** (a phone + password signUp still needs the OTP), email signup off, anonymous sign-in off, 60 s between OTPs.                                                                                                             |
+| Layer                      | Where                                                                | What it enforces                                                                                                                                                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth config                | `supabase/config.toml`                                               | **No public signup of any kind** (`[auth] enable_signup = false`). Members cannot be created through the public API, with or without a password. Anonymous sign-in off. 60 s between OTPs.                                                                                          |
+| Registration server action | `lib/auth/actions/signup.ts` → `begin_signup()` → admin `createUser` | Per-IP limit, request country = LR (from `x-vercel-ip-country`, trusted only on Vercel), +231, blocklist. Writes `geo_checks` (country codes only) and a single-use 10-minute geo pass, then creates the account server-side and requests the OTP. Runs **before** any OTP is sent. |
+| Before-user-created hook   | `hook_before_user_created()`                                         | Defence in depth for every user creation (including the admin API): +231, not blocklisted, unused geo pass. Email-only users are allowed: only SUPER_ADMIN creates them (Phase 3).                                                                                                  |
+| Password hook              | `hook_password_verification_attempt()`                               | Members (`role = USER`) can never sign in with a password, even if one is set. Staff can (then TOTP).                                                                                                                                                                               |
+| Send-SMS hook              | `app/api/auth/hooks/send-sms/route.ts`                               | Standard Webhooks signature, each message processed once (replays refused), destination must be the account's own number (no SMS to a new number), +231 only, per-phone hourly limit, then the SMS provider adapter. Never logs number or code.                                     |
+| Phone change               | `guard_auth_phone_change()` trigger on `auth.users`                  | Phone numbers cannot be changed in the MVP; a change would bypass BR-2/BR-3.                                                                                                                                                                                                        |
 
-Known limits: VPNs defeat the country check (accepted, spec §3 audit note). Off Vercel the country header is spoofable, so it is ignored unless `GEO_TRUST_HEADER=1` (tests only). On Vercel the header and `x-real-ip` are set by Vercel's edge [VERIFY T-02].
+**Account possession.** The server creates the account already "confirmed" so Auth can send a login code. Nobody gets a session without the OTP, and passwords are refused for members, so an account created by someone typing another person's number is useless to them. It stays PENDING with no date of birth. (Cleanup of never-used accounts: Phase 10.)
 
-**Hosted setup must mirror local config** (T-06/T-08): enable the Phone provider with the Send-SMS hook, enable phone confirmations, disable email signup and anonymous sign-ins, register the before-user-created hook, and create the Vault secret `phone_hash_pepper` (T-24).
+**Known limits.**
+
+- VPNs defeat the country check (accepted, spec §3 audit note).
+- Off Vercel the country header is spoofable, so it is ignored unless `GEO_TRUST_HEADER=1` (tests only). The dev fallback `DEV_GEO_COUNTRY` is ignored in production builds.
+- On Vercel, `x-vercel-ip-country` and `x-real-ip` are set by Vercel's edge [VERIFY T-02].
+- Anyone can ask Supabase Auth directly to text a code to an **existing** member's number. Each request is limited per phone (our hook) and by Supabase's per-IP limits. Repeated requests can still use up a member's hourly limit. Mitigation: Cloudflare Turnstile CAPTCHA on Auth (owner task T-25, recommended before launch).
+- Server-side OTP calls reach Supabase Auth from the server's IP, so Supabase's own per-IP limits apply to all users together. Our own per-IP limit (real client IP) is the effective one. Supabase's global limits (`sms_sent` per hour, `sign_in_sign_ups`) must be sized for launch traffic (T-19).
+
+**Hosted setup must mirror local config** (T-06/T-08):
+
+- Disable signups.
+- Enable the Phone provider with the Send-SMS hook.
+- Register the before-user-created and password-verification hooks.
+- Disable anonymous sign-ins.
+- Create the Vault secret `phone_hash_pepper` (T-24).
 
 ## Accounts (Phase 1)
 
 - Members can read only their own `users`/`profiles` rows. Role, status and DOB are not member-writable (BR-30, BR-4).
 - DOB is written once by `set_date_of_birth()`, 18+ enforced in the database, then locked; only the audited Phase 10 admin path may correct it.
-- BANNED and DELETED are mirrored into `auth.users.banned_until` (now + 100 years — Supabase Auth cannot read `infinity`), so Supabase Auth refuses sign-in and token refresh. `requireMember()` also signs such sessions out.
+- BANNED and DELETED are mirrored into `auth.users.banned_until` (now + 100 years — Supabase Auth cannot read `infinity`) and **all their sessions are deleted**, so refresh fails at once. An access token issued earlier stays valid until it expires (≤ 1 h), so member writes and RPCs also check `current_user_can_act()` in the database, and `requireMember()` sends such sessions to sign-out.
 - The age gate carries the DOB to account creation in an AES-256-GCM sealed, http-only cookie (30 min). An under-18 result is remembered on the device for 24 h. Clearing cookies resets that — accepted: the age gate cannot stop someone lying about their DOB; human review of the selfie (Phase 4) is the next check (spec §9).
 
 ## Logging rule (§6 rule 7)

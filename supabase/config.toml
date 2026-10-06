@@ -174,7 +174,10 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+# WeKonnectz: OFF. No public signup of any kind; only our server creates member accounts through the
+# admin API, after the Liberia pre-filter (plan §1.5, Phase 1 audit). Admin-created users still pass
+# the before-user-created hook.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -257,7 +260,7 @@ otp_expiry = 3600
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
-# Members sign up with +231 phone OTP only (BR-2). The before-user-created hook enforces the rest.
+# In the CLI this flag also switches the phone provider on. Public signup is off globally ([auth] above).
 enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
 # MUST be true: otherwise a phone + password signUp would be auto-confirmed without an OTP (BR-2).
@@ -284,6 +287,11 @@ max_frequency = "60s"
 [auth.hook.before_user_created]
 enabled = true
 uri = "pg-functions://postgres/public/hook_before_user_created"
+
+# WeKonnectz: members never sign in with a password; only staff (OD-27) may.
+[auth.hook.password_verification_attempt]
+enabled = true
+uri = "pg-functions://postgres/public/hook_password_verification_attempt"
 
 # WeKonnectz: every OTP SMS goes through our route (per-phone rate limit, SMS provider adapter).
 # SEND_SMS_HOOK_URI / SEND_SMS_HOOK_SECRET come from supabase/.env (created by `pnpm env:setup`).

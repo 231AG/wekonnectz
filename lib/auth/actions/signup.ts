@@ -94,10 +94,22 @@ export async function sendSignupCode(_prev: PhoneStepState, formData: FormData):
       break;
   }
 
+  // Only our server creates member accounts (public signup is off in Auth config), and only after the
+  // pre-filter above. Auth marks the number confirmed so it can send a login code; possession is still
+  // proven by the OTP before anyone gets a session, and members can never use a password (Auth hook).
+  // Until then the account is PENDING with no date of birth and cannot do anything.
+  const { error: createError } = await createAdminClient().auth.admin.createUser({
+    phone: phone.e164,
+    phone_confirm: true,
+  });
+  if (createError && createError.code !== "phone_exists") {
+    return { stage: "phone", phone: raw, error: MESSAGES.unavailableService };
+  }
+
   const supabase = await createClient();
   const { error: otpError } = await supabase.auth.signInWithOtp({
     phone: phone.e164,
-    options: { shouldCreateUser: true, channel: "sms" },
+    options: { shouldCreateUser: false, channel: "sms" },
   });
   if (otpError) {
     return {
@@ -144,7 +156,9 @@ export async function verifySignupCode(prev: PhoneStepState, formData: FormData)
   redirect(nextStepFor({ ...member, hasDateOfBirth: true }));
 }
 
-/** Single entry point for the phone screen: `intent` = "send" (or resend) | "verify". */
+/** Single entry point for the phone screen: `intent` = "send" (or resend) | "verify" | "change". */
 export async function signupPhoneStep(prev: PhoneStepState, formData: FormData): Promise<PhoneStepState> {
-  return formData.get("intent") === "verify" ? verifySignupCode(prev, formData) : sendSignupCode(prev, formData);
+  const intent = formData.get("intent");
+  if (intent === "change") return { stage: "phone" };
+  return intent === "verify" ? verifySignupCode(prev, formData) : sendSignupCode(prev, formData);
 }

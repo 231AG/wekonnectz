@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import {
   adminClient,
+  signHook,
+  signInMemberViaApi,
   createMember,
   enterCode,
   enterDob,
@@ -172,23 +174,99 @@ test("plan §1.5: a direct Supabase API signup that skips our server is refused,
     headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "Content-Type": "application/json" },
     data: { phone: phone.e164, create_user: true },
   });
-  expect(res.status()).toBe(403);
+  // Refused before any user exists: public signup is off (422), and the hook would refuse it anyway (403).
+  expect([403, 422]).toContain(res.status());
   await new Promise((r) => setTimeout(r, 1000));
   expect(outboxHasCodeSince(phone.e164, since)).toBe(false);
   expect(await findAuthUserIdByPhone(phone.e164)).toBeNull();
 });
 
-test("BR-2: a phone + password signUp through the API is not auto-confirmed", async ({ request }) => {
+test("plan §1.5: no public signup of any kind (phone + password, OTP to a new number)", async ({ request }) => {
   const phone = randomLiberianPhone();
-  // Even with a valid geo pass, a password signUp must still prove the SIM with an OTP.
+  // Even holding a fresh geo pass, the public API cannot create the account; only our server can.
   await adminClient().rpc("begin_signup", { p_phone: phone.e164, p_ip_country: "LR", p_ip: "203.0.113.201" });
-  const res = await request.post(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/signup`, {
-    headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "Content-Type": "application/json" },
+  const headers = { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "Content-Type": "application/json" };
+  const signUp = await request.post(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/signup`, {
+    headers,
     data: { phone: phone.e164, password: "Test-password-123" },
   });
-  const body = (await res.json()) as { access_token?: string; phone_confirmed_at?: string | null };
-  expect(body.access_token, "no session without OTP").toBeUndefined();
-  expect(body.phone_confirmed_at ?? null).toBeNull();
+  expect(signUp.status()).toBeGreaterThanOrEqual(400);
+  const otp = await request.post(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/otp`, {
+    headers,
+    data: { phone: phone.e164, create_user: true },
+  });
+  expect(otp.status()).toBeGreaterThanOrEqual(400);
+  expect(await findAuthUserIdByPhone(phone.e164)).toBeNull();
+});
+
+test("members can never sign in with a password (phone OTP only)", async () => {
+  const phone = randomLiberianPhone();
+  const id = await createMember(phone.e164);
+  const admin = adminClient();
+  const { error: setError } = await admin.auth.admin.updateUserById(id, { password: "Test-password-123" });
+  expect(setError).toBeNull();
+  const { createClient } = await import("@supabase/supabase-js");
+  const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false },
+  });
+  const { data, error } = await anon.auth.signInWithPassword({ phone: phone.e164, password: "Test-password-123" });
+  expect(error).not.toBeNull();
+  expect(data.session).toBeNull();
+});
+
+test("BR-2/BR-3: a member cannot change their phone number, and no SMS goes to the new number", async () => {
+  const phone = randomLiberianPhone();
+  await createMember(phone.e164);
+  const client = await signInMemberViaApi(phone.e164);
+  const foreign = "+12025550199";
+  const since = Date.now();
+  const { error } = await client.auth.updateUser({ phone: foreign });
+  expect(error).not.toBeNull();
+  await new Promise((r) => setTimeout(r, 1000));
+  expect(outboxHasCodeSince(foreign, since)).toBe(false);
+  const { data } = await adminClient().auth.admin.getUserById((await client.auth.getUser()).data.user!.id);
+  expect(data.user?.phone).toBe(phone.e164.slice(1));
+});
+
+test.describe("Send-SMS hook route", () => {
+  const url = "/api/auth/hooks/send-sms";
+
+  test("refuses unsigned or badly signed calls", async ({ request }) => {
+    const body = JSON.stringify({ user: { phone: "231770000001" }, sms: { otp: "123456", phone: "231770000001" } });
+    expect((await request.post(url, { data: body, headers: { "content-type": "application/json" } })).status()).toBe(
+      401,
+    );
+    const headers = signHook(body);
+    expect((await request.post(url, { data: `${body} `, headers })).status()).toBe(401);
+  });
+
+  test("BR-2: refuses a non-Liberian destination and sends nothing", async ({ request }) => {
+    const body = JSON.stringify({ user: { phone: "12025550123" }, sms: { otp: "123456", phone: "12025550123" } });
+    const since = Date.now();
+    const res = await request.post(url, { data: body, headers: signHook(body) });
+    expect(res.status()).toBe(403);
+    expect(outboxHasCodeSince("+12025550123", since)).toBe(false);
+  });
+
+  test("refuses a destination that is not the account's own number (phone change)", async ({ request }) => {
+    const body = JSON.stringify({
+      user: { phone: "231770000001", new_phone: "231880000002" },
+      sms: { otp: "123456", phone: "231880000002" },
+    });
+    expect((await request.post(url, { data: body, headers: signHook(body) })).status()).toBe(403);
+  });
+
+  test("a replayed message is acknowledged without sending a second SMS", async ({ request }) => {
+    const phone = randomLiberianPhone();
+    const digits = phone.e164.slice(1);
+    const body = JSON.stringify({ user: { phone: digits }, sms: { otp: "654321", phone: digits } });
+    const headers = signHook(body);
+    expect((await request.post(url, { data: body, headers })).status()).toBe(200);
+    const after = Date.now() + 5;
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await request.post(url, { data: body, headers })).status()).toBe(200);
+    expect(outboxHasCodeSince(phone.e164, after), "no second SMS for a replay").toBe(false);
+  });
 });
 
 test("returning member logs in with an OTP; a member without a DOB is sent to the age gate first", async ({ page }) => {
@@ -208,13 +286,34 @@ test("returning member logs in with an OTP; a member without a DOB is sent to th
   await expect(page).toHaveURL(/\/onboarding$/);
 });
 
-test("login does not reveal whether a number has an account", async ({ page }) => {
+test("login does not reveal whether a number has an account, even on a quick second try", async ({ browser }) => {
+  const known = randomLiberianPhone();
+  await createMember(known.e164);
+  const unknown = randomLiberianPhone();
+  const messages: string[] = [];
+  for (const phone of [known, unknown]) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const page = await browser.newPage({ extraHTTPHeaders: { "x-vercel-ip-country": "LR" } });
+      await page.goto("/login");
+      await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
+      await page.getByRole("button", { name: "Send code" }).click();
+      await expect(page.getByLabel("Enter code")).toBeVisible();
+      messages.push(await page.locator("main").innerText());
+      await page.close();
+    }
+  }
+  const normalise = (t: string) => t.replace(/\d+ • • • • \d+/g, "N").replace(/Resend code in \d:\d\d/g, "R");
+  expect(new Set(messages.map(normalise)).size, "same screen for known and unknown numbers").toBe(1);
+  expect(await findAuthUserIdByPhone(unknown.e164), "login never creates accounts").toBeNull();
+});
+
+test("the code step can go back to change the number", async ({ page }) => {
   const phone = randomLiberianPhone();
   await page.goto("/login");
   await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
   await page.getByRole("button", { name: "Send code" }).click();
-  await expect(page.getByText("If this number has an account, we've sent it a code.")).toBeVisible();
-  expect(await findAuthUserIdByPhone(phone.e164), "login never creates accounts").toBeNull();
+  await page.getByRole("button", { name: "Change number" }).click();
+  await expect(page.getByLabel("Phone number, Liberian (+231)")).toBeEditable();
 });
 
 test("wrong code shows a neutral error", async ({ page }) => {
@@ -230,29 +329,50 @@ test("wrong code shows a neutral error", async ({ page }) => {
   await page.screenshot({ path: `${SHOTS_P1}/login-error-wrong-code.png` });
 });
 
-test("BR-6: a banned member cannot sign in, and BR-3: their number cannot sign up again", async ({ page }) => {
+test("BR-6: banning ends an existing session, blocks sign-in, and BR-3: the number cannot sign up again", async ({
+  page,
+}) => {
   const phone = randomLiberianPhone();
   const id = await createMember(phone.e164);
   const admin = adminClient();
-  await admin.from("users").update({ status: "BANNED" }).eq("id", id);
-  // The Phase 5 ban function will also add the number to the blocklist; simulate that here.
-  const { data: hash } = await admin.rpc("phone_hash", { p_phone: phone.e164 });
-  await admin.from("phone_blocklist").insert({ phone_hash: hash as string, reason: "e2e test ban" });
 
+  // Signed in and working before the ban.
   await page.goto("/login");
   await page.getByLabel("Phone number, Liberian (+231)").fill(phone.national);
-  const since = Date.now();
+  let since = Date.now();
   await page.getByRole("button", { name: "Send code" }).click();
-  await page.waitForTimeout(1500);
-  if (outboxHasCodeSince(phone.e164, since)) {
-    await enterCode(page, await readOtp(phone.e164, since));
-  } else {
-    await enterCode(page, "123456");
-  }
+  await enterCode(page, await readOtp(phone.e164, since));
+  await expect(page).toHaveURL(/\/signup$/);
+  await enterDob(page, "14", "03", adultYear);
+  await expect(page).toHaveURL(/\/onboarding$/);
+
+  // Ban (the Phase 5 ban function will do both of these in one transaction).
+  const { error: banError } = await admin.from("users").update({ status: "BANNED" }).eq("id", id);
+  expect(banError).toBeNull();
+  const { data: hash } = await admin.rpc("phone_hash", { p_phone: phone.e164 });
+  const { error: listError } = await admin
+    .from("phone_blocklist")
+    .insert({ phone_hash: hash as string, reason: "e2e test ban" });
+  expect(listError).toBeNull();
+
+  // The existing session is gone (sessions deleted, token refused): member pages send them to login.
+  await page.goto("/onboarding");
   await expect(page).toHaveURL(/\/login/);
-  await expect(
-    page.getByRole("alert").filter({ hasText: /wrong or has expired|isn’t available|isn't available/ }),
-  ).toBeVisible();
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/login/);
+
+  // A fresh sign-in attempt gets no session: Supabase Auth refuses banned users.
+  const anon = (await import("@supabase/supabase-js")).createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } },
+  );
+  since = Date.now();
+  await anon.auth.signInWithOtp({ phone: phone.e164, options: { shouldCreateUser: false } });
+  await new Promise((r) => setTimeout(r, 1000));
+  expect(outboxHasCodeSince(phone.e164, since), "no code is sent to a banned member").toBe(false);
+  const { data: verify } = await anon.auth.verifyOtp({ phone: phone.e164, token: "123456", type: "sms" });
+  expect(verify.session).toBeNull();
 
   // BR-3: the banned number cannot start a new signup either.
   await page.goto("/signup");

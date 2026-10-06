@@ -10,7 +10,7 @@ import { checkLiberianPhone, maskPhone } from "@/lib/domain/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-const GENERIC_SENT = "If this number has an account, we've sent it a code.";
+const GENERIC_SENT = "If this number has an account, we've sent it a code. No code? Wait a minute and resend.";
 
 /**
  * Login code. Existing members are not re-checked for location (§3 rule 6) unless the owner
@@ -33,13 +33,10 @@ export async function sendLoginCode(_prev: PhoneStepState, formData: FormData): 
   if (mode === "EVERY_SESSION" && !isAllowedCountry(await currentRequestCountry())) redirect("/region-blocked");
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    phone: phone.e164,
-    options: { shouldCreateUser: false, channel: "sms" },
-  });
-  if (error?.status === 429) return { stage: "phone", phone: raw, error: "Too many attempts. Try again later." };
+  // Every outcome (sent, unknown number, per-number limit, resend too soon) gets the same screen,
+  // so the response never reveals whether a number has an account.
+  await supabase.auth.signInWithOtp({ phone: phone.e164, options: { shouldCreateUser: false, channel: "sms" } });
 
-  // Unknown numbers get the same screen as known ones (no account enumeration).
   return {
     stage: "code",
     phone: phone.e164,
@@ -80,7 +77,9 @@ export async function signOut() {
   redirect("/");
 }
 
-/** Single entry point for the login screen: `intent` = "send" (or resend) | "verify". */
+/** Single entry point for the login screen: `intent` = "send" (or resend) | "verify" | "change". */
 export async function loginPhoneStep(prev: PhoneStepState, formData: FormData): Promise<PhoneStepState> {
-  return formData.get("intent") === "verify" ? verifyLoginCode(prev, formData) : sendLoginCode(prev, formData);
+  const intent = formData.get("intent");
+  if (intent === "change") return { stage: "phone" };
+  return intent === "verify" ? verifyLoginCode(prev, formData) : sendLoginCode(prev, formData);
 }

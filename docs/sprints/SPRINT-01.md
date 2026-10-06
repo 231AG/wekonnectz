@@ -3,6 +3,7 @@
 **Goal:** a Liberian adult can create an account with a +231 OTP; everyone else is stopped before an SMS is sent.
 
 ## Scope
+
 - Tables: `users`, `profiles` (DOB), `geo_checks`, `geo_passes`, `phone_blocklist`, `consents` (table only), `rate_limit_counters`.
 - Roles USER / MODERATOR / ADMIN / SUPER_ADMIN; account states PENDING / ACTIVE / SUSPENDED / BANNED / DELETED.
 - Liberia pre-filter (`begin_signup`) → single-use geo pass → Supabase before-user-created hook; Send-SMS hook route with per-phone limit; per-IP limit for signup and login.
@@ -11,9 +12,11 @@
 - BANNED / DELETED mirrored into Supabase Auth so Auth itself refuses sign-in.
 
 ## Out of scope
+
 Onboarding steps 4–8 (Phase 2), staff login and MFA (Phase 3), the ban/suspend actions themselves (Phase 5), real SMS provider (T-04).
 
 ## Acceptance checklist
+
 - [x] Non-LR request country → region-blocked screen with the exact §3 copy; no OTP, no account; `geo_checks` row with country codes only (BR-1)
 - [x] Non-+231 number refused in the action, in `begin_signup` and in the Auth hook (BR-2)
 - [x] Direct Supabase API signup that skips our server is refused: no account, no SMS (plan §1.5)

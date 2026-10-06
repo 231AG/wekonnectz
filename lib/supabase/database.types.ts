@@ -49,6 +49,19 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"auth_hook_receipts": {
+                  Row: {
+                    "message_id": string,"received_at": string
+                  }
+                  Insert: {
+                    "message_id": string,"received_at"?: string
+                  }
+                  Update: {
+                    "message_id"?: string,"received_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"consents": {
                   Row: {
                     "accepted_at": string,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"id": string,"user_id": string,"version": string
@@ -173,6 +186,12 @@ isOneToOne: true
 "begin_signup":
 { Args: { "p_ip": string,"p_ip_country": string,"p_phone": string }; Returns: Database["public"]['Enums']["geo_result"]
                            },
+"claim_hook_receipt":
+{ Args: { "p_message_id": string }; Returns: boolean
+                           },
+"current_user_can_act":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "current_user_status":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["account_status"]
                            },
@@ -188,8 +207,14 @@ isOneToOne: true
 "hook_before_user_created":
 { Args: { "event": Json }; Returns: Json
                            },
+"hook_password_verification_attempt":
+{ Args: { "event": Json }; Returns: Json
+                           },
 "is_liberian_phone":
 { Args: { "p_phone": string }; Returns: boolean
+                           },
+"is_staff":
+{ Args: { "p_min_role"?: Database["public"]['Enums']["user_role"] }; Returns: boolean
                            },
 "normalize_phone":
 { Args: { "p_phone": string }; Returns: string

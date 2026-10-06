@@ -46,11 +46,8 @@ export async function getMember(): Promise<Member | null> {
 export async function requireMember(): Promise<Member> {
   const member = await getMember();
   if (!member) redirect("/login");
-  if (!canHoldSession(member.status)) {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-    redirect("/login?notice=unavailable");
-  }
+  // Server Components can't change cookies, so the sign-out happens in a route handler.
+  if (!canHoldSession(member.status)) redirect("/auth/signout?notice=unavailable");
   return member;
 }
 

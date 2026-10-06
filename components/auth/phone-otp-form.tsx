@@ -18,49 +18,64 @@ function PhoneOtpForm({ action }: { action: Action }) {
   const codeStage = state.stage === "code" ? state : null;
   const phoneError = state.stage === "phone" ? state.error : undefined;
 
+  const prefix = (
+    <span
+      aria-hidden
+      className="flex min-h-[52px] items-center rounded-control border-[1.5px] border-border bg-surface-2 px-3.5 font-bold"
+    >
+      +231
+    </span>
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-5">
-      <form action={dispatch} className="flex flex-col gap-2" noValidate>
-        <input type="hidden" name="intent" value="send" />
-        <Label htmlFor="phone">Phone number</Label>
-        <div className="flex gap-2.5">
-          <span
-            aria-hidden
-            className="flex min-h-[52px] items-center rounded-control border-[1.5px] border-border bg-surface-2 px-3.5 font-bold"
-          >
-            +231
-          </span>
-          <Input
-            key={codeStage ? "locked" : "editable"}
-            id="phone"
-            name="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel-national"
-            placeholder="77 012 3456"
-            defaultValue={codeStage ? codeStage.maskedPhone.replace(/^\+231 /, "") : (state.phone ?? "")}
-            readOnly={Boolean(codeStage)}
-            aria-label="Phone number, Liberian (+231)"
-            aria-invalid={phoneError ? true : undefined}
-            aria-describedby="phone-error"
-            required
-          />
-        </div>
-        <FormError id="phone-error">{phoneError}</FormError>
-        {!codeStage ? (
+      {!codeStage ? (
+        <form action={dispatch} className="flex flex-col gap-2" noValidate>
+          <input type="hidden" name="intent" value="send" />
+          <Label htmlFor="phone">Phone number</Label>
+          <div className="flex gap-2.5">
+            {prefix}
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              placeholder="77 012 3456"
+              defaultValue={state.phone ?? ""}
+              aria-label="Phone number, Liberian (+231)"
+              aria-invalid={phoneError ? true : undefined}
+              aria-describedby="phone-error"
+              required
+            />
+          </div>
+          <FormError id="phone-error">{phoneError}</FormError>
           <Button type="submit" disabled={pending} className="mt-2">
             {pending ? "Sending…" : "Send code"}
           </Button>
-        ) : null}
-      </form>
-
-      {codeStage ? (
+        </form>
+      ) : (
         <>
+          <div className="flex flex-col gap-2">
+            <p className="text-[13px] font-semibold text-muted-foreground">Phone number</p>
+            <div className="flex items-center gap-2.5">
+              {prefix}
+              <p className="flex min-h-[52px] flex-1 items-center rounded-control border-[1.5px] border-border bg-surface-1 px-4 text-base">
+                <span className="sr-only">Code sent to </span>
+                {codeStage.maskedPhone.replace(/^\+231 /, "")}
+              </p>
+            </div>
+            <form action={dispatch}>
+              <input type="hidden" name="intent" value="change" />
+              <Button type="submit" variant="link" size="md" className="px-0">
+                Change number
+              </Button>
+            </form>
+          </div>
           <form id="verify-form" action={dispatch} className="flex flex-col gap-2" noValidate>
             <input type="hidden" name="intent" value="verify" />
             <input type="hidden" name="phone" value={codeStage.phone} />
             <Label htmlFor="code">Enter code</Label>
-            <p className="sr-only">We sent a 6-digit code to {codeStage.maskedPhone}.</p>
             <OtpInput
               key={codeStage.sentAt}
               name="code"
@@ -77,7 +92,7 @@ function PhoneOtpForm({ action }: { action: Action }) {
             {pending ? "Checking…" : "Verify"}
           </Button>
         </>
-      ) : null}
+      )}
     </div>
   );
 }

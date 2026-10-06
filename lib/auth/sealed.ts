@@ -25,7 +25,8 @@ export function unseal<T>(token: string | undefined, secret: string, now = Date.
   if (parts.length !== 3) return null;
   try {
     const [iv, tag, data] = parts.map((p) => Buffer.from(p, "base64url"));
-    const decipher = createDecipheriv("aes-256-gcm", key(secret), iv);
+    if (iv.length !== 12 || tag.length !== 16) return null;
+    const decipher = createDecipheriv("aes-256-gcm", key(secret), iv, { authTagLength: 16 });
     decipher.setAuthTag(tag);
     const plain = Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
     const parsed = JSON.parse(plain) as { v: T; exp: number };

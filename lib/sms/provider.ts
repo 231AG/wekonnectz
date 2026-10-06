@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -14,15 +14,18 @@ export interface SmsProvider {
 
 /**
  * Local development and tests only. Sends nothing; writes the code to a gitignored outbox file named
- * by a hash of the number so automated tests can complete sign-up. Never logs the number or code.
+ * by a keyed hash of the number so automated tests can complete sign-up. Never logs the number or code.
  */
 class FakeSmsProvider implements SmsProvider {
   readonly id = "fake";
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly key: string,
+  ) {}
 
   async sendOtp({ phoneE164, code }: { phoneE164: string; code: string }) {
     await mkdir(this.dir, { recursive: true });
-    const name = createHash("sha256").update(phoneE164).digest("hex");
+    const name = createHmac("sha256", this.key).update(phoneE164).digest("hex");
     await writeFile(join(this.dir, `${name}.json`), JSON.stringify({ code, at: Date.now() }), { mode: 0o600 });
   }
 }
@@ -34,6 +37,6 @@ export function getSmsProvider(): SmsProvider {
       if (env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
         throw new Error("The fake SMS provider cannot run in production. Configure the real provider (T-04).");
       }
-      return new FakeSmsProvider(env.SMS_DEV_OUTBOX_DIR);
+      return new FakeSmsProvider(env.SMS_DEV_OUTBOX_DIR, env.APP_COOKIE_SECRET);
   }
 }
