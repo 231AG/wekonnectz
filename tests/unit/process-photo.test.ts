@@ -57,8 +57,14 @@ describe("BR-12: uploads have EXIF metadata stripped", () => {
 
   it("BR-12 strips metadata from PNG and WebP uploads too", async () => {
     for (const input of [
-      await photo(500, 500).withExif({ IFD0: { Copyright: "Musu Kollie" } }).png().toBuffer(),
-      await photo(500, 500).withExif({ IFD0: { Copyright: "Musu Kollie" } }).webp().toBuffer(),
+      await photo(500, 500)
+        .withExif({ IFD0: { Copyright: "Musu Kollie" } })
+        .png()
+        .toBuffer(),
+      await photo(500, 500)
+        .withExif({ IFD0: { Copyright: "Musu Kollie" } })
+        .webp()
+        .toBuffer(),
     ]) {
       const out = await processPhoto(input);
       expect((await sharp(out).metadata()).exif).toBeUndefined();

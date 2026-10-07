@@ -82,7 +82,8 @@ test("§10 steps 4–8: a new member completes rules, about you, interests and b
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding\/photos$/);
   await expect(page.getByRole("heading", { name: "Add your photos" })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS_P2}/onboarding-photos-next.png` });
+  // Photos (Phase 3) can't be skipped.
+  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
 
   // Database: consents with versions, profile fields, interests.
   const id = (await findAuthUserIdByPhone(phone.e164))!;
@@ -110,9 +111,6 @@ test("§10 steps 4–8: a new member completes rules, about you, interests and b
   const { count } = await admin.from("user_interests").select("*", { count: "exact", head: true }).eq("user_id", id);
   expect(count).toBe(3);
 
-  // Log out from the last step works.
-  await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(/\/$/);
   expect(errors).toEqual([]);
 });
 

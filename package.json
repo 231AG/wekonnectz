@@ -24,7 +24,8 @@
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "check:bundle": "node scripts/check-client-bundle.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle",
-    "env:setup": "node scripts/setup-local-env.mjs"
+    "env:setup": "node scripts/setup-local-env.mjs",
+    "admin:create-first": "node scripts/create-first-admin.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "11.4.0",
