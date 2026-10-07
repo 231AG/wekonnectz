@@ -52,7 +52,10 @@ export async function startVerification(
  * A one-off upload URL for the captured selfie (re-taking overwrites the same quarantine file). Only
  * for the member's own open capture, and stray quarantine files are cleared first.
  */
-export async function selfieUploadUrl(userId: string, verificationId: string): Promise<string | null> {
+export async function selfieUploadUrl(
+  userId: string,
+  verificationId: string,
+): Promise<{ url: string } | { error: "NO_OPEN_CAPTURE" | "storage" }> {
   const admin = createAdminClient();
   const { data: open } = await admin
     .from("verifications")
@@ -62,12 +65,12 @@ export async function selfieUploadUrl(userId: string, verificationId: string): P
     .eq("status", "AWAITING_SELFIE")
     .is("processing_started_at", null)
     .maybeSingle();
-  if (!open) return null;
+  if (!open) return { error: "NO_OPEN_CAPTURE" };
   await sweepQuarantine(userId);
   const { data } = await admin.storage
     .from(QUARANTINE)
     .createSignedUploadUrl(selfieQuarantinePath(userId, verificationId), { upsert: true });
-  return data?.signedUrl ?? null;
+  return data?.signedUrl ? { url: data.signedUrl } : { error: "storage" };
 }
 
 /** Processes the uploaded selfie and submits it for human review. */

@@ -1,7 +1,7 @@
 -- Phase 4: verification, account state and notifications (spec §8, §9, §21; BR-10, 13, 14, 15, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(63);
 
 -- Fixtures: two members who finished steps 4–9 (3 photos in review), one who hasn't added photos,
 -- a moderator and an admin.
@@ -139,6 +139,9 @@ select is((select escalated from public.verifications where id = (select id from
   'one earlier rejection is below the escalation threshold');
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select throws_ok($$ select public.review_verification((select id from vx where n = 'b'), false, 'UNCLEAR') $$, '42501', 'SELFIE_NOT_VIEWED',
+  'a reviewer cannot decide a selfie they never opened');
+select public.log_selfie_view((select id from vx where n = 'b'));
 select lives_ok($$ select public.review_verification((select id from vx where n = 'b'), false, 'AGE_DOUBT') $$,
   'moderator rejects for doubt about age');
 reset role;
@@ -154,6 +157,7 @@ select set_config('request.jwt.claims', (select c from claims where who = 'mod')
 select throws_ok($$ select public.review_verification((select id from vx where n = 'c'), true) $$, '42501', 'ADMIN_REQUIRED',
   'a moderator cannot decide an escalated verification');
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select public.log_selfie_view((select id from vx where n = 'c'));
 select lives_ok($$ select public.review_verification((select id from vx where n = 'c'), true) $$, 'an admin approves it');
 reset role;
 select set_config('request.jwt.claims', '', true);
@@ -270,6 +274,7 @@ select public.claim_verification_selfie('eeeeeeee-0000-0000-0000-000000000002', 
 select public.submit_verification('eeeeeeee-0000-0000-0000-000000000002', (select id from vx where n = 'd'), (select id from vx where n = 'd') || '.webp');
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select public.log_selfie_view((select id from vx where n = 'd'));
 select public.review_verification((select id from vx where n = 'd'), false, 'UNCLEAR');
 reset role;
 select set_config('request.jwt.claims', '', true);

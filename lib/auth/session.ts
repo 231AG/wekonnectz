@@ -98,13 +98,15 @@ export function nextStepFor(
   member: Pick<Member, "hasDateOfBirth" | "onboarding"> & { role?: UserRole; status?: AccountStatus },
 ): string {
   if (member.role && member.role !== "USER") return "/admin";
+  // Suspended members can't edit anything; they may sign in and view their own account (§8), which
+  // the Home screen explains — whatever step they had reached.
+  if (member.status === "SUSPENDED") return MEMBER_HOME;
   if (!member.hasDateOfBirth) return "/signup";
   if (!member.onboarding.rulesAccepted) return ONBOARDING_STEPS.rules;
   if (!member.onboarding.basicsDone) return ONBOARDING_STEPS.about;
   if (!member.onboarding.interestsBioDone) return ONBOARDING_STEPS.interests;
   // ACTIVE = verified with 3 approved photos (spec §10). A rejected photo later doesn't send them back.
-  // Suspended members may sign in and view their own account (§8): the Home screen explains it.
-  if (member.status === "ACTIVE" || member.status === "SUSPENDED") return MEMBER_HOME;
+  if (member.status === "ACTIVE") return MEMBER_HOME;
   if (!member.onboarding.photosDone) return ONBOARDING_STEPS.photos;
   const v = member.onboarding.verification;
   if (v === "NOT_STARTED" || v === "REJECTED") return ONBOARDING_STEPS.verify;
@@ -116,6 +118,8 @@ type StepKey = keyof typeof ONBOARDING_STEPS;
 /** For a step page: the member may open this step only once every earlier step is done. */
 export async function requireOnboardingStep(step: StepKey): Promise<Member> {
   const member = await requireMember();
+  // Suspended accounts can't edit (§8); their Home screen explains the restriction.
+  if (member.status === "SUSPENDED") redirect(MEMBER_HOME);
   const order: StepKey[] = ["rules", "about", "interests", "photos", "verify", "review"];
   const next = nextStepFor(member);
   // ACTIVE members may revisit any step (editing their profile).

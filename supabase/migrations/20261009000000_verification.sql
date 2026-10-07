@@ -502,6 +502,15 @@ begin
   if v_escalated and not public.is_staff('ADMIN') then
     raise exception 'ADMIN_REQUIRED' using errcode = '42501';
   end if;
+  -- A decision needs this reviewer to have opened this selfie (a logged SELFIE_VIEWED): nobody approves
+  -- a face they never saw.
+  if not exists (
+    select 1 from public.audit_logs
+    where action = 'SELFIE_VIEWED' and entity_type = 'verification'
+      and entity_id = p_verification_id::text and actor_id = auth.uid()
+  ) then
+    raise exception 'SELFIE_NOT_VIEWED' using errcode = '42501';
+  end if;
 
   update public.verifications
      set status = case when p_approve then 'VERIFIED'::public.verification_status

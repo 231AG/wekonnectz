@@ -1,7 +1,6 @@
 import Link from "next/link";
 
-import { VerificationMedia } from "@/components/admin/verification-media";
-import { VerificationReviewForm } from "@/components/admin/verification-review-form";
+import { VerificationPanel } from "@/components/admin/verification-panel";
 import { Badge } from "@/components/ui/badge";
 import { openVerificationMedia, reviewVerificationAction } from "@/lib/admin/verification-actions";
 import { requireStaff } from "@/lib/auth/staff";
@@ -121,11 +120,7 @@ export default async function VerificationQueuePage({ searchParams }: PageProps<
                 <Badge tone="neutral">DOB {formatDob(detail.date_of_birth)}</Badge>
                 {detail.escalated ? <Badge tone="danger">Escalated · admin decides</Badge> : null}
               </div>
-              <VerificationMedia
-                verificationId={detail.verification_id}
-                pose={detail.pose_prompt}
-                open={openVerificationMedia}
-              />
+
               {detail.previous_rejections > 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {detail.previous_rejections} earlier selfie{detail.previous_rejections === 1 ? " was" : "s were"}{" "}
@@ -137,10 +132,13 @@ export default async function VerificationQueuePage({ searchParams }: PageProps<
                   Escalated: only an admin can approve or reject this one.
                 </p>
               ) : null}
-              <VerificationReviewForm
+              <VerificationPanel
+                key={detail.verification_id}
                 verificationId={detail.verification_id}
-                action={reviewVerificationAction}
+                pose={detail.pose_prompt}
                 locked={!canDecide}
+                open={openVerificationMedia}
+                decide={reviewVerificationAction}
               />
             </div>
           ) : null}

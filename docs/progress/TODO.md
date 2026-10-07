@@ -12,7 +12,7 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Onboarding          | 7       | 2              | 0              | 0          |
 | Photos              | 6       | 1              | 1              | 0          |
 | Verification        | 3       | 4              | 0              | 1          |
-| Safety              | 0       | 0              | 11             | 0          |
+| Safety              | 0       | 0              | 12             | 0          |
 | Relationship mode   | 0       | 0              | 6              | 1          |
 | Messaging           | 0       | 0              | 7              | 0          |
 | Mobile money access | 0       | 0              | 11             | 1          |
@@ -22,7 +22,7 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **40**  | **12**         | **72**         | **10**     |
+| **Total**           | **40**  | **12**         | **73**         | **10**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
@@ -101,6 +101,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Safety
 
+- ⬜ An expired suspension restores the status the account had before (a never-verified PENDING account must not read as ACTIVE) — P5 — BR-5 (found in Phase 4 audit; `effective_account_status` today maps any expired suspension to ACTIVE, harmless until `suspend_user` exists)
 - ⬜ Blocks (silent, symmetric, everywhere) — P5 — BR-24
 - ⬜ Reports with categories/priorities — P5
 - ⬜ Under-18 report → instant hide — P5 — BR-32

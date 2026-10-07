@@ -36,8 +36,9 @@ export async function prepareSelfieUpload(verificationId: string): Promise<{ upl
   const member = await requireMember();
   const parsed = id.safeParse(verificationId);
   if (!parsed.success) return { error: GENERIC };
-  const uploadUrl = await selfieUploadUrl(member.id, parsed.data);
-  return uploadUrl ? { uploadUrl } : { error: MESSAGES.VERIFICATION_NOT_FOUND };
+  const result = await selfieUploadUrl(member.id, parsed.data);
+  if ("url" in result) return { uploadUrl: result.url };
+  return { error: result.error === "storage" ? MESSAGES.storage : MESSAGES.VERIFICATION_NOT_FOUND };
 }
 
 /** The selfie is uploaded: process it and send it for review, then show the Under review screen. */

@@ -117,6 +117,8 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Escalation.** After `verification.rejections_before_escalation` rejections, or any rejection for doubt about age, the next selfie is escalated: moderators can see it but only ADMIN and above can decide (`ADMIN_REQUIRED`).
 - **Account state.** `recompute_account_state()` turns PENDING into ACTIVE only when the latest verification is VERIFIED and 3 photos are APPROVED (BR-13); it never changes SUSPENDED, BANNED or DELETED accounts. After photo decisions it runs at commit (deferred trigger), so it judges the final state — e.g. after a rejected main photo's successor goes back to review — never an intermediate one.
 - **Retention (OD-6).** `/api/cron/selfie-retention` (Vercel Cron, `Authorization: Bearer $CRON_SECRET`, constant-time compare; refuses when unset) deletes images past `verification.selfie_retention_days`; `mark_selfies_deleted()` re-checks the period, and the decision record stays.
+- **Decisions need a view.** `review_verification()` refuses (`SELFIE_NOT_VIEWED`) unless this reviewer has a logged `SELFIE_VIEWED` for that verification, and the queue rebuilds its panel per submission with decisions locked until the selfie is on screen — so no one approves a face they never saw.
+- **Known issue for Phase 5.** `effective_account_status()` (Phase 1) reads any expired suspension as ACTIVE. Once suspensions exist (Phase 5), a suspended never-verified PENDING account would come back as ACTIVE; Phase 5 must restore the previous status instead (TODO, Safety).
 - **Notifications.** `notify()` is the only writer; payloads hold ids and reason codes, never personal data. Members read only their own rows.
 
 ## Logging rule (§6 rule 7)

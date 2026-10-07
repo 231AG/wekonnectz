@@ -49,6 +49,8 @@ function SelfieCapture({
         media.getTracks().forEach((t) => t.stop());
         return;
       }
+      // Only one camera stream at a time (a retake, or a late answer to an earlier prompt).
+      stream.current?.getTracks().forEach((t) => t.stop());
       stream.current = media;
       if (video.current) {
         video.current.srcObject = media;

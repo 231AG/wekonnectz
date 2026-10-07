@@ -14,10 +14,13 @@ function VerificationMedia({
   verificationId,
   pose,
   open,
+  onReady,
 }: {
   verificationId: string;
   pose: string;
   open: (id: string) => Promise<ReviewMedia>;
+  /** Called with true once this submission's selfie is on screen (decisions unlock), false on failure. */
+  onReady?: (ok: boolean) => void;
 }) {
   const [media, setMedia] = useState<ReviewMedia | null>(null);
 
@@ -25,16 +28,19 @@ function VerificationMedia({
     let cancelled = false;
     open(verificationId)
       .then((m) => {
-        if (!cancelled) setMedia(m);
+        if (cancelled) return;
+        setMedia(m);
+        onReady?.(!m.error && Boolean(m.selfie));
       })
       .catch(() => {
-        if (!cancelled)
-          setMedia({ selfie: null, photos: [], error: "Couldn’t load the selfie. Refresh to try again." });
+        if (cancelled) return;
+        setMedia({ selfie: null, photos: [], error: "Couldn’t load the selfie. Refresh to try again." });
+        onReady?.(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [verificationId, open]);
+  }, [verificationId, open, onReady]);
 
   if (media?.error) return <p role="alert">{media.error}</p>;
 
