@@ -173,13 +173,13 @@ isOneToOne: false
                   ]
                 },"profile_photos": {
                   Row: {
-                    "created_at": string,"id": string,"is_primary": boolean,"rejection_reason": Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_at": string | null,"reviewed_by": string | null,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string | null,"submitted_at": string | null,"updated_at": string,"user_id": string
+                    "created_at": string,"id": string,"is_primary": boolean,"processing_started_at": string | null,"rejection_reason": Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_as_primary": boolean,"reviewed_at": string | null,"reviewed_by": string | null,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string | null,"submitted_at": string | null,"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"id"?: string,"is_primary"?: boolean,"rejection_reason"?: Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sort_order"?: number,"status"?: Database["public"]['Enums']["photo_status"],"storage_path"?: string | null,"submitted_at"?: string | null,"updated_at"?: string,"user_id": string
+                    "created_at"?: string,"id"?: string,"is_primary"?: boolean,"processing_started_at"?: string | null,"rejection_reason"?: Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_as_primary"?: boolean,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sort_order"?: number,"status"?: Database["public"]['Enums']["photo_status"],"storage_path"?: string | null,"submitted_at"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"is_primary"?: boolean,"rejection_reason"?: Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sort_order"?: number,"status"?: Database["public"]['Enums']["photo_status"],"storage_path"?: string | null,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "created_at"?: string,"id"?: string,"is_primary"?: boolean,"processing_started_at"?: string | null,"rejection_reason"?: Database["public"]['Enums']["photo_rejection_reason"] | null,"reviewed_as_primary"?: boolean,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sort_order"?: number,"status"?: Database["public"]['Enums']["photo_status"],"storage_path"?: string | null,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -330,6 +330,9 @@ isOneToOne: true
 "claim_hook_receipt":
 { Args: { "p_message_id": string }; Returns: boolean
                            },
+"claim_photo_upload":
+{ Args: { "p_photo_id": string,"p_user_id": string }; Returns: boolean
+                           },
 "complete_photo_upload":
 { Args: { "p_photo_id": string,"p_storage_path": string,"p_user_id": string }; Returns: undefined
                            },
@@ -433,6 +436,9 @@ isOneToOne: true
                            },
 "staff_queue_counts":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"staff_sign_in_allowed":
+{ Args: { "p_account": string,"p_ip": string }; Returns: boolean
                            }
           }
           Enums: {

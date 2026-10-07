@@ -34,7 +34,7 @@ test("§11: a member uploads 3 photos; each is processed, stored privately and w
   const rows = await storedPhotos(userId);
   expect(rows.map((r) => r.status)).toEqual(["PENDING_REVIEW", "PENDING_REVIEW", "PENDING_REVIEW"]);
   expect(rows[0].is_primary).toBe(true);
-  for (const r of rows) expect(r.storage_path).toBe(`${userId}/${r.id}.webp`);
+  for (const r of rows) expect(r.storage_path).toBe(`${r.id}.webp`); // opaque: no user id in signed URLs
 
   // The page never contains a storage path, only signed URLs (spec §6 rule 5, BR-11).
   const html = await page.content();
@@ -112,8 +112,9 @@ test("a member can choose the main photo and remove photos", async ({ page }) =>
   await expect(page.getByRole("button", { name: /^Photo \d/ })).toHaveCount(1);
   const rows = await storedPhotos(userId);
   expect(rows.map((r) => [r.id, r.is_primary])).toEqual([[first.id, true]]);
-  const { data: gone } = await adminClient().storage.from("photos").list(userId);
-  expect((gone ?? []).map((f) => f.name)).toEqual([`${first.id}.webp`]);
+  const photos = adminClient().storage.from("photos");
+  expect((await photos.list("", { search: second.id })).data ?? []).toHaveLength(0);
+  expect(((await photos.list("", { search: first.id })).data ?? []).map((f) => f.name)).toEqual([`${first.id}.webp`]);
 });
 
 test("BR-11: another member cannot read a photo by path, even signed in", async ({ page }) => {
@@ -130,6 +131,6 @@ test("BR-11: another member cannot read a photo by path, even signed in", async 
   expect(error).not.toBeNull();
   const { data: signed } = await otherClient.storage.from("photos").createSignedUrl(row.storage_path, 60);
   expect(signed).toBeNull();
-  const { data: listed } = await otherClient.storage.from("photos").list(userId);
+  const { data: listed } = await otherClient.storage.from("photos").list("", { search: row.id });
   expect(listed ?? []).toHaveLength(0);
 });

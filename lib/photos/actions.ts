@@ -28,7 +28,7 @@ const MESSAGES: Record<string, string> = {
   TOO_LARGE: "That photo is too big. Choose one under 10 MB.",
   NOT_AN_IMAGE: "That file isn’t a photo we can use. Choose a JPG, PNG or WebP photo.",
   TOO_SMALL: "That photo is too small. Choose a larger, clearer one.",
-  PHOTO_LIMIT_REACHED: "You already have 6 photos. Remove one to add another.",
+  PHOTO_LIMIT_REACHED: "You’ve reached the photo limit. Remove one to add another.",
   RATE_LIMITED: "You’ve added a lot of photos in a short time. Please try again later.",
   ACCOUNT_CANNOT_EDIT: "Your account is restricted right now, so your photos can’t be changed.",
   PHOTO_NOT_FOUND: "That photo was already changed. The page has been updated.",

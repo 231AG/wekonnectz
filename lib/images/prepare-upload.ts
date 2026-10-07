@@ -24,15 +24,25 @@ export async function prepareForUpload(file: File): Promise<Blob> {
   }
 }
 
+export type UploadOutcome = "ok" | "rejected" | "too-large" | "failed";
+
 /** Uploads to a signed upload URL (the URL carries a one-off token; no session is sent). */
-export async function putToSignedUrl(uploadUrl: string, body: Blob): Promise<boolean> {
+export async function putToSignedUrl(uploadUrl: string, body: Blob): Promise<UploadOutcome> {
   const form = new FormData();
   form.append("cacheControl", "3600");
   form.append("", body);
   try {
     const res = await fetch(uploadUrl, { method: "PUT", body: form, headers: { "x-upsert": "false" } });
-    return res.ok;
+    if (res.ok) return "ok";
+    // The quarantine bucket refuses other file types (415) and files over its size limit (413).
+    if (res.status === 415) return "rejected";
+    if (res.status === 413) return "too-large";
+    // Storage reports some refusals as 400 with the reason in the body.
+    const text = await res.text().catch(() => "");
+    if (/mime type|invalid_mime_type/i.test(text)) return "rejected";
+    if (/maximum allowed size|entity too large/i.test(text)) return "too-large";
+    return "failed";
   } catch {
-    return false;
+    return "failed";
   }
 }

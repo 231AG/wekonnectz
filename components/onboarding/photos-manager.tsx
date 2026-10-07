@@ -7,7 +7,7 @@ import { FormError } from "@/components/layout/mobile-screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
-import { prepareForUpload, putToSignedUrl } from "@/lib/images/prepare-upload";
+import { prepareForUpload, putToSignedUrl, type UploadOutcome } from "@/lib/images/prepare-upload";
 import type { PhotosResult, UploadSlot } from "@/lib/photos/actions";
 import { REJECTION_REASONS } from "@/lib/photos/reasons";
 import type { OwnPhoto } from "@/lib/storage/photos";
@@ -20,6 +20,15 @@ type Actions = {
   refresh: () => Promise<PhotosResult>;
   continueStep: () => Promise<{ error: string }>;
 };
+
+/** Shown when the storage bucket itself refused the file, before the server could look at it. */
+const UPLOAD_MESSAGES: Partial<Record<UploadOutcome, string>> = {
+  rejected: "That file isn’t a photo we can use. Choose a JPG, PNG or WebP photo.",
+  "too-large": "That photo is too big. Choose one under 10 MB.",
+};
+
+/** Signed URLs last 120 s; refresh at most this often when images start failing. */
+const REFRESH_EVERY_MS = 30_000;
 
 const STATUS: Record<OwnPhoto["status"], { label: string; tone: "approved" | "pending" | "danger" | "neutral" }> = {
   APPROVED: { label: "Approved", tone: "approved" },
@@ -47,7 +56,7 @@ function PhotosManager({
   const [uploading, setUploading] = useState(0);
   const [selected, setSelected] = useState<OwnPhoto | null>(null);
   const [sheetBusy, startSheetAction] = useTransition();
-  const refreshed = useRef(false);
+  const lastRefresh = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const [continueState, continueAction, continuing] = useActionState(actions.continueStep, { error: "" });
 
@@ -71,11 +80,14 @@ function PhotosManager({
           setError(slot.error);
           break;
         }
-        await putToSignedUrl(slot.uploadUrl, await prepareForUpload(file));
+        const outcome = await putToSignedUrl(slot.uploadUrl, await prepareForUpload(file));
         // Always finish: the server checks the file (or frees the slot if the upload failed).
         const result = await actions.completeUpload(slot.photoId);
-        apply(result);
+        apply(UPLOAD_MESSAGES[outcome] ? { ...result, error: UPLOAD_MESSAGES[outcome] } : result);
         if (result.error) break;
+      } catch {
+        setError("The upload didn’t finish. Check your connection and try again.");
+        break;
       } finally {
         setUploading((n) => n - 1);
       }
@@ -86,16 +98,23 @@ function PhotosManager({
     if (!selected) return;
     const id = selected.id;
     startSheetAction(async () => {
-      apply(await action(id));
+      try {
+        apply(await action(id));
+      } catch {
+        setError("That didn’t work. Check your connection and try again.");
+      }
       setSelected(null);
     });
   }
 
-  // Signed URLs last 120 s; if one has expired (page left open), fetch fresh ones once.
+  // Signed URLs last 120 s; when one has expired (page left open), fetch fresh ones.
   function onImageError() {
-    if (refreshed.current) return;
-    refreshed.current = true;
-    actions.refresh().then(apply);
+    if (Date.now() - lastRefresh.current < REFRESH_EVERY_MS) return;
+    lastRefresh.current = Date.now();
+    actions
+      .refresh()
+      .then(apply)
+      .catch(() => undefined);
   }
 
   return (
@@ -199,7 +218,7 @@ function PhotosManager({
             ? REJECTION_REASONS[selected.rejectionReason].member
             : selected?.isPrimary
               ? "Your main photo must clearly show your face."
-              : undefined
+              : "Your main photo must clearly show your face. A new main photo is checked again before others see it."
         }
       >
         {selected && !selected.isPrimary && selected.status !== "REJECTED" && selected.status !== "HIDDEN" ? (

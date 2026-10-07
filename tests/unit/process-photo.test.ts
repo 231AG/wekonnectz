@@ -73,6 +73,48 @@ describe("BR-12: uploads have EXIF metadata stripped", () => {
   });
 });
 
+describe("BR-12: other metadata and hostile images", () => {
+  it("BR-12 removes ICC profiles and XMP (which can carry location and device data)", async () => {
+    const xmp =
+      '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+      '<rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:GPSLatitude="6,18.0N"/></rdf:RDF></x:xmpmeta>';
+    const input = await photo(600, 600).withIccProfile("p3").withXmp(xmp).jpeg().toBuffer();
+    const inMeta = await sharp(input).metadata();
+    expect(inMeta.icc).toBeDefined();
+    expect(inMeta.xmp).toBeDefined(); // the fixture really carries both
+
+    const out = await processPhoto(input);
+    const outMeta = await sharp(out).metadata();
+    expect(outMeta.icc).toBeUndefined();
+    expect(outMeta.xmp).toBeUndefined();
+    expect(out.toString("latin1")).not.toContain("GPSLatitude");
+  });
+
+  it("rejects a decompression bomb (more pixels than the limit) without decoding it", async () => {
+    const bomb = await sharp({ create: { width: 7200, height: 7200, channels: 3, background: "#000" } })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    expect(bomb.byteLength).toBeLessThan(MAX_UPLOAD_BYTES);
+    expect(await rejection(bomb)).toBe("NOT_AN_IMAGE");
+  }, 30_000);
+
+  it("keeps only the first frame of an animated image", async () => {
+    const frames = await Promise.all(
+      [0, 120, 240].map((r) =>
+        sharp({ create: { width: 400, height: 400, channels: 3, background: { r, g: 80, b: 80 } } })
+          .png()
+          .toBuffer(),
+      ),
+    );
+    const animated = await sharp(frames, { join: { animated: true } })
+      .webp({ loop: 0 })
+      .toBuffer();
+    expect((await sharp(animated).metadata()).pages).toBe(3);
+    const outMeta = await sharp(await processPhoto(animated)).metadata();
+    expect(outMeta.pages ?? 1).toBe(1);
+  });
+});
+
 describe("type is decided by magic bytes, not the file name (spec §4)", () => {
   it("recognises JPEG, PNG and WebP signatures", async () => {
     expect(sniffImageType(await photo(10, 10).jpeg().toBuffer())).toBe("jpeg");

@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { currentRequestIp } from "@/lib/auth/request-context";
 import { getStaffSession } from "@/lib/auth/staff";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -17,14 +19,29 @@ export type EnrolState = { error?: string; factorId?: string; qrCode?: string; s
 const WRONG = "Email or password is wrong.";
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(1).max(200) });
 const code = z.string().regex(/^\d{6}$/);
+const TOO_MANY = "Too many attempts. Try again later.";
+
+/**
+ * Per client IP and per account (email or user id). Supabase Auth's own per-IP limits see only our
+ * server's address, so this is the brute-force limit for staff sign-in. Fails closed.
+ */
+async function attemptAllowed(account: string): Promise<boolean> {
+  const { data, error } = await createAdminClient().rpc("staff_sign_in_allowed", {
+    p_ip: await currentRequestIp(),
+    p_account: account,
+  });
+  return !error && data === true;
+}
 
 export async function staffSignIn(_prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
   const parsed = credentials.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (!parsed.success) return { error: "Enter your email and password." };
 
+  if (!(await attemptAllowed(parsed.data.email))) return { error: TOO_MANY };
+
   const supabase = await createClient();
-  // Supabase Auth refuses passwords for member accounts (password-verification hook) and rate-limits
-  // attempts per IP. Either way the answer is the same.
+  // Supabase Auth refuses passwords for member accounts (password-verification hook). Either way
+  // the answer is the same.
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return { error: WRONG };
 
@@ -60,6 +77,7 @@ export async function verifyTotp(_prev: StaffFormState, formData: FormData): Pro
   if (!session?.role) redirect("/admin/login");
   const parsed = code.safeParse(String(formData.get("code") ?? "").replace(/\s/g, ""));
   if (!parsed.success) return { error: "Enter the 6-digit code from your authenticator app." };
+  if (!(await attemptAllowed(session.id))) return { error: TOO_MANY };
 
   const supabase = await createClient();
   const { data: factors } = await supabase.auth.mfa.listFactors();

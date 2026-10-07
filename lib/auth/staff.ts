@@ -28,11 +28,15 @@ export async function getStaffSession(): Promise<StaffSession | null> {
     supabase.rpc("current_staff_role"),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
   ]);
+  // A staff session must start with the password (email magic links and codes also exist once the
+  // email provider is on; they never count). aal2 also needs a TOTP code in the same session.
+  const methods = new Set((aal?.currentAuthenticationMethods ?? []).map((m) => (typeof m === "string" ? m : m.method)));
+  const viaPassword = methods.has("password");
   return {
     id: user.id,
     email: user.email ?? "",
-    role: role && role !== "USER" ? role : null,
-    aal: aal?.currentLevel === "aal2" ? "aal2" : aal?.currentLevel === "aal1" ? "aal1" : null,
+    role: viaPassword && role && role !== "USER" ? role : null,
+    aal: !viaPassword ? null : aal?.currentLevel === "aal2" && methods.has("totp") ? "aal2" : "aal1",
   };
 }
 

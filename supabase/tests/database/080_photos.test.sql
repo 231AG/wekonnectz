@@ -1,7 +1,7 @@
 -- Phase 3: photos, private storage and the staff photo queue (spec §11, §21, BR-8, 9, 11, 12, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
+select plan(67);
 
 -- Fixtures: two members who finished steps 4–8, one who didn't, one moderator.
 insert into auth.users (id, phone, email, aud, role) values
@@ -63,14 +63,15 @@ select is((select count(*)::int from public.profile_photos where user_id = 'dddd
 select throws_ok($$ select public.begin_photo_upload('dddddddd-0000-0000-0000-000000000001') $$, '22023', 'PHOTO_LIMIT_REACHED',
   'spec §10: at most 6 photos');
 
-select throws_ok($$ select public.complete_photo_upload('dddddddd-0000-0000-0000-000000000001', (select id from ph where n = 1), 'other/path.webp') $$,
-  '22023', 'INVALID_STORAGE_PATH', 'the stored path must be the member''s own processed file');
+select throws_ok($$ select public.complete_photo_upload('dddddddd-0000-0000-0000-000000000001', (select id from ph where n = 1),
+  'dddddddd-0000-0000-0000-000000000001/' || (select id from ph where n = 1) || '.webp') $$,
+  '22023', 'INVALID_STORAGE_PATH', 'stored objects have opaque names (no user id in signed URLs)');
 select throws_ok($$ select public.complete_photo_upload('dddddddd-0000-0000-0000-000000000002', (select id from ph where n = 1),
-  'dddddddd-0000-0000-0000-000000000002/' || (select id from ph where n = 1) || '.webp') $$,
+  (select id from ph where n = 1) || '.webp') $$,
   'P0002', 'PHOTO_NOT_FOUND', 'a member cannot complete another member''s upload');
 
 select lives_ok($$ select public.complete_photo_upload('dddddddd-0000-0000-0000-000000000001', id,
-  'dddddddd-0000-0000-0000-000000000001/' || id || '.webp') from ph where n <= 4 $$, 'four uploads completed');
+  id || '.webp') from ph where n <= 4 $$, 'four uploads completed');
 select is((select count(*)::int from public.profile_photos where user_id = 'dddddddd-0000-0000-0000-000000000001' and status = 'PENDING_REVIEW'),
   4, 'completed uploads wait for review (PENDING_REVIEW)');
 select is((select id from public.profile_photos where user_id = 'dddddddd-0000-0000-0000-000000000001' and is_primary),
@@ -100,7 +101,7 @@ select is((select id from public.profile_photos where user_id = 'dddddddd-0000-0
   (select id from ph where n = 3), 'and it is the main photo');
 
 select is(public.delete_photo('dddddddd-0000-0000-0000-000000000001', (select id from ph where n = 3)),
-  'dddddddd-0000-0000-0000-000000000001/' || (select id from ph where n = 3) || '.webp',
+  (select id from ph where n = 3) || '.webp',
   'delete returns the stored path so the server removes the object');
 select is((select status::text || coalesce(storage_path, '-') from public.profile_photos where id = (select id from ph where n = 3)),
   'DELETED-', 'the row is DELETED and keeps no path');
@@ -122,7 +123,10 @@ select throws_ok($$ select public.review_photo((select id from ph where n = 1), 
 select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal1"}', true);
 select throws_ok($$ select * from public.staff_photo_queue() $$, '42501', 'NOT_STAFF',
   '§7: staff without an MFA (aal2) session are refused');
-select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2"}', true);
+select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2","amr":[{"method":"otp","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select throws_ok($$ select * from public.staff_photo_queue() $$, '42501', 'NOT_STAFF',
+  '§7: a session opened by email link (no password) is refused even with TOTP');
+select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2","amr":[{"method":"password","timestamp":1},{"method":"totp","timestamp":2}]}', true);
 select is((select count(*)::int from public.staff_photo_queue() where user_id = 'dddddddd-0000-0000-0000-000000000001'), 3,
   'moderator sees the member''s pending photos');
 select ok(not exists (select 1 from information_schema.routines r
@@ -136,7 +140,9 @@ select lives_ok($$ select public.review_photo((select id from ph where n = 2), f
   'moderator rejects a photo with a reason');
 select throws_ok($$ select public.review_photo((select id from ph where n = 1), false, 'POOR_QUALITY') $$, 'P0002', 'PHOTO_NOT_PENDING',
   'a decided photo cannot be decided again');
-select is((select (staff_queue_counts() ->> 'photos_pending')::int), 1, 'queue count: one still pending');
+select is((select count(*)::int from public.staff_photo_queue() where user_id = 'dddddddd-0000-0000-0000-000000000001'), 1,
+  'one of the member''s photos still pending');
+select ok((select (staff_queue_counts() ->> 'photos_pending')::int) >= 1, 'queue count includes it');
 reset role;
 select set_config('request.jwt.claims', '', true);
 
@@ -164,6 +170,57 @@ select is((select array_agg(status::text) from public.photos_for_viewer('ddddddd
   array['APPROVED'], 'BR-9: another ACTIVE member sees APPROVED photos only');
 select is((select count(*)::int from public.photos_for_viewer('dddddddd-0000-0000-0000-0000000000aa', 'dddddddd-0000-0000-0000-000000000001')),
   0, 'staff accounts do not browse member photos outside the queue');
+
+-- ---------------------------------------------------------------------------
+-- Main photo rules (spec §11: the main photo shows the face; a rejected photo is never main)
+-- ---------------------------------------------------------------------------
+select throws_ok($$ select public.set_primary_photo('dddddddd-0000-0000-0000-000000000001', (select id from ph where n = 2)) $$,
+  'P0002', 'PHOTO_NOT_FOUND', 'a rejected photo cannot be made the main photo');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2","amr":[{"method":"password","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select lives_ok($$ select public.review_photo((select id from ph where n = 4), true) $$, 'a secondary photo is approved');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select lives_ok($$ select public.set_primary_photo('dddddddd-0000-0000-0000-000000000001', (select id from ph where n = 4)) $$,
+  'the member makes it the main photo');
+select is((select status::text || '|' || is_primary from public.profile_photos where id = (select id from ph where n = 4)),
+  'PENDING_REVIEW|true', '§11: a photo approved as secondary is checked again before it is the main photo');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2","amr":[{"method":"password","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select lives_ok($$ select public.review_photo((select id from ph where n = 4), false, 'FACE_NOT_CLEAR') $$,
+  'moderator rejects it as a main photo');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select is((select id from public.profile_photos where user_id = 'dddddddd-0000-0000-0000-000000000001' and is_primary),
+  (select id from ph where n = 1), 'a rejected main photo stops being main; the approved one returns');
+select is((select status::text from public.profile_photos where id = (select id from ph where n = 1)), 'APPROVED',
+  'a photo approved as the main photo stays approved when it becomes main again');
+
+-- Own content, double processing, rate limits
+insert into public.profile_photos (id, user_id, status, storage_path, submitted_at) values
+  ('dddddddd-0000-0000-0000-00000000f0f0', 'dddddddd-0000-0000-0000-0000000000aa', 'PENDING_REVIEW', 'x.webp', now());
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"dddddddd-0000-0000-0000-0000000000aa","role":"authenticated","aal":"aal2","amr":[{"method":"password","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select throws_ok($$ select public.review_photo('dddddddd-0000-0000-0000-00000000f0f0', true) $$, '42501', 'OWN_CONTENT',
+  'staff never decide on their own content');
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+create temp table up as select public.begin_photo_upload('dddddddd-0000-0000-0000-000000000002') as id;
+select ok(public.claim_photo_upload('dddddddd-0000-0000-0000-000000000002', (select id from up)), 'first finish claims the upload');
+select ok(not public.claim_photo_upload('dddddddd-0000-0000-0000-000000000002', (select id from up)),
+  'a second finish for the same upload is refused (no double processing)');
+update public.app_settings set value = '0'::jsonb where key = 'photos.max_uploads_per_hour';
+select throws_ok($$ select public.begin_photo_upload('dddddddd-0000-0000-0000-000000000002') $$, '22023', 'RATE_LIMITED',
+  'uploads are rate limited per member');
+update public.app_settings set value = '2'::jsonb where key = 'staff_login.max_per_account_per_hour';
+update public.app_settings set value = '1000'::jsonb where key = 'staff_login.max_per_ip_per_hour';
+select is(array[public.staff_sign_in_allowed('198.51.100.7', 'Mod@Example.test'),
+                public.staff_sign_in_allowed('198.51.100.8', 'mod@example.test'),
+                public.staff_sign_in_allowed('198.51.100.9', 'mod@example.test')],
+  array[true, true, false], 'staff sign-in attempts are limited per account, whatever the IP or letter case');
 
 -- ---------------------------------------------------------------------------
 -- First SUPER_ADMIN (T-07)

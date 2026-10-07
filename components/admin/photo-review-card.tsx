@@ -1,12 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { FormError } from "@/components/layout/mobile-screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ReviewState } from "@/lib/admin/photo-actions";
 import { REJECTION_REASON_KEYS, REJECTION_REASONS } from "@/lib/photos/reasons";
+
+/** Signed URLs last 120 s: when queue images expire, reload the page data (at most every 30 s). */
+let lastQueueRefresh = 0;
 
 export type QueueItem = {
   photoId: string;
@@ -28,6 +32,12 @@ function PhotoReviewCard({
 }) {
   const [state, dispatch, pending] = useActionState(action, {});
   const [reason, setReason] = useState("");
+  const router = useRouter();
+  const onImageError = () => {
+    if (Date.now() - lastQueueRefresh < 30_000) return;
+    lastQueueRefresh = Date.now();
+    router.refresh();
+  };
   const headingId = `photo-${item.photoId}`;
 
   return (
@@ -41,6 +51,7 @@ function PhotoReviewCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.url}
+            onError={onImageError}
             alt={`Photo ${item.position} from ${item.memberLabel}`}
             className="size-full object-cover"
           />

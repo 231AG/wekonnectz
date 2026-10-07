@@ -105,10 +105,14 @@ Settings: `detection.terms` (contact / price / money_request lists; owner review
 | `set_primary_photo(user, photo)` / `delete_photo`                 | service_role                | Main photo moves to the front; delete returns the path to remove                |
 | `can_view_profile(viewer, owner)` / `photos_for_viewer`           | service_role                | Who sees whose photos (owner; both ACTIVE → APPROVED only). Phase 5 adds blocks |
 | `staff_photo_queue(limit)` / `staff_queue_counts()`               | authenticated, `is_staff()` | Pending photos oldest first, no paths                                           |
+| `claim_photo_upload(user, photo)`                                 | service_role                | Only one "finish" processes a slot                                              |
+| `staff_sign_in_allowed(ip, account)`                              | service_role                | Staff password/code attempt limit per IP and per account                        |
 | `review_photo_paths(ids)`                                         | service_role                | Paths of photos still PENDING_REVIEW, for signing after the staff check         |
 | `review_photo(photo, approve, reason)`                            | authenticated, `is_staff()` | Decide once; reason required to reject; audited                                 |
 | `current_staff_role()`                                            | authenticated (own)         | Caller's staff role                                                             |
 | `bootstrap_super_admin(user)`                                     | service_role                | First SUPER_ADMIN only; audited                                                 |
+
+Triggers on `auth.users`: `guard_auth_user_insert` (+231, blocklist, geo pass, no member email — for every user Auth creates) and `guard_member_email`. `is_staff()` now also requires `amr` to contain `password` and `totp`.
 
 `onboarding_progress()` gains `photos_done` (3+ photos PENDING_REVIEW or APPROVED). Settings: `photos.min_required` 3, `photos.max_per_user` 6 (spec), `photos.max_uploads_per_hour` (T-19).
 

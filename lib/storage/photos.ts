@@ -57,6 +57,8 @@ export async function reservePhotoUpload(
 ): Promise<{ photoId: string; uploadUrl: string } | { error: PhotoError }> {
   const admin = createAdminClient();
   const { data: photoId, error } = await admin.rpc("begin_photo_upload", { p_user_id: userId });
+  // begin_photo_upload has just cleared this member's abandoned slots; clear their files too.
+  await sweepQuarantine(userId);
   if (error || !photoId) return { error: dbError(error?.message ?? "") };
 
   const { data, error: signError } = await admin.storage.from(QUARANTINE).createSignedUploadUrl(`${userId}/${photoId}`);
@@ -68,6 +70,27 @@ export async function reservePhotoUpload(
 }
 
 /**
+ * Removes this member's quarantine files that no open upload slot is waiting for: abandoned uploads,
+ * and files re-sent with an old upload token after their slot was finished. A project-wide sweep for
+ * members who never come back is a scheduled job (Phase 12).
+ */
+async function sweepQuarantine(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const [{ data: files }, { data: open }] = await Promise.all([
+    admin.storage.from(QUARANTINE).list(userId, { limit: 100 }),
+    admin
+      .from("profile_photos")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "UPLOADING")
+      .is("processing_started_at", null),
+  ]);
+  const keep = new Set((open ?? []).map((r) => r.id));
+  const stale = (files ?? []).filter((f) => !keep.has(f.name)).map((f) => `${userId}/${f.name}`);
+  if (stale.length) await admin.storage.from(QUARANTINE).remove(stale);
+}
+
+/**
  * Processes an uploaded file (spec §11 step 3): reads it from quarantine, validates and re-encodes it
  * (magic bytes, size cap, resize, WebP, no EXIF), stores it in photos/ and marks it PENDING_REVIEW.
  * The quarantine copy is always removed.
@@ -75,8 +98,17 @@ export async function reservePhotoUpload(
 export async function finishPhotoUpload(userId: string, photoId: string): Promise<PhotoError | null> {
   const admin = createAdminClient();
   const quarantinePath = `${userId}/${photoId}`;
-  const storedPath = `${userId}/${photoId}.webp`;
+  // Opaque object name: a signed URL never reveals whose photo it is.
+  const storedPath = `${photoId}.webp`;
   const abort = () => admin.rpc("abort_photo_upload", { p_user_id: userId, p_photo_id: photoId });
+
+  // Only one "finish" may process a slot (a double click or a retry gets PHOTO_NOT_FOUND and
+  // leaves the first one alone).
+  const { data: claimed, error: claimError } = await admin.rpc("claim_photo_upload", {
+    p_user_id: userId,
+    p_photo_id: photoId,
+  });
+  if (claimError || !claimed) return { kind: "db", code: "PHOTO_NOT_FOUND" };
 
   try {
     const { data: file, error } = await admin.storage.from(QUARANTINE).download(quarantinePath);
@@ -91,7 +123,7 @@ export async function finishPhotoUpload(userId: string, photoId: string): Promis
     } catch (e) {
       await abort();
       if (e instanceof PhotoRejectedError) return { kind: "rejected", reason: e.reason };
-      throw e;
+      return { kind: "rejected", reason: "NOT_AN_IMAGE" };
     }
 
     const { error: putError } = await admin.storage

@@ -225,6 +225,8 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `photos.max_per_user`                                             | Max photos                          | 6 (spec) — set in the migration  | Phase 3   |
 | `photos.max_uploads_per_hour`                                     | Upload attempts per member per hour | 10 (DEV-ONLY 50 in seed)         | Phase 3   |
 | Upload size cap (code + bucket limit, not a setting)              | Largest file accepted               | 10 MB (built)                    | Phase 3   |
+| `staff_login.max_per_ip_per_hour`                                 | Staff password/code tries per IP    | 30 (DEV-ONLY 200 in seed)        | Phase 3   |
+| `staff_login.max_per_account_per_hour`                            | Staff password/code tries per staff | 10 (DEV-ONLY 20 in seed)         | Phase 3   |
 | Signed URL lifetime (code, not a setting)                         | How long a photo link works         | 120 s (spec, built)              | Phase 3   |
 | `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                                | Phase 4   |
 | `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4   | Phase 4   |

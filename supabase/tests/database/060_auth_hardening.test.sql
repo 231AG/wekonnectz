@@ -2,7 +2,7 @@
 -- no phone changes, staff check needs MFA, hook replays refused, DOB plausibility.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(24);
 
 insert into auth.users (id, phone, aud, role) values
   ('bbbbbbbb-0000-0000-0000-000000000001', '231770000501', 'authenticated', 'authenticated'),
@@ -38,8 +38,11 @@ update public.users set role = 'ADMIN' where id = 'bbbbbbbb-0000-0000-0000-00000
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated","aal":"aal1"}', true);
 select ok(not public.is_staff('MODERATOR'), 'staff without MFA (aal1) is not treated as staff');
-select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated","aal":"aal2"}', true);
-select ok(public.is_staff('MODERATOR'), 'ADMIN with MFA passes a MODERATOR check');
+-- Phase 3: aal2 must come from password + TOTP; an email magic link / OTP session never counts.
+select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated","aal":"aal2","amr":[{"method":"otp","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select ok(not public.is_staff('MODERATOR'), 'staff signed in by email link + TOTP (no password) is not treated as staff');
+select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated","aal":"aal2","amr":[{"method":"password","timestamp":1},{"method":"totp","timestamp":2}]}', true);
+select ok(public.is_staff('MODERATOR'), 'ADMIN with password + MFA passes a MODERATOR check');
 select ok(public.is_staff('ADMIN'), 'ADMIN with MFA passes an ADMIN check');
 select ok(not public.is_staff('SUPER_ADMIN'), 'ADMIN does not pass a SUPER_ADMIN check');
 reset role;

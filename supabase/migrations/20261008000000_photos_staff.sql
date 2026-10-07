@@ -28,7 +28,9 @@ on conflict (id) do update
 insert into public.app_settings (key, value, description) values
   ('photos.min_required', '3'::jsonb, 'Approved photos needed to appear anywhere (BR-8); also the onboarding minimum.'),
   ('photos.max_per_user', '6'::jsonb, 'Photo slots per member (spec §10: up to 6).'),
-  ('photos.max_uploads_per_hour', null, 'Photo upload attempts per member per hour. Owner sets (T-19).')
+  ('photos.max_uploads_per_hour', null, 'Photo upload attempts per member per hour. Owner sets (T-19).'),
+  ('staff_login.max_per_ip_per_hour', null, 'Staff password and code attempts per client IP per hour. Owner sets (T-19).'),
+  ('staff_login.max_per_account_per_hour', null, 'Staff password and code attempts per account per hour. Owner sets (T-19).')
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -57,6 +59,11 @@ create table public.profile_photos (
   reviewed_by      uuid references public.users (id) on delete set null,
   reviewed_at      timestamptz,
   submitted_at     timestamptz,
+  -- The main photo must show the face (§11). A photo approved while it wasn't the main photo goes
+  -- back to review if it becomes the main photo.
+  reviewed_as_primary boolean not null default false,
+  -- Set when the server starts processing an upload, so a repeated "finish" can't process it twice.
+  processing_started_at timestamptz,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
   constraint profile_photos_path_when_stored
@@ -100,6 +107,8 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_primary uuid;
 begin
   with ordered as (
     select id, row_number() over (order by sort_order, created_at) - 1 as n
@@ -110,16 +119,23 @@ begin
   from ordered o
   where p.id = o.id and p.sort_order is distinct from o.n;
 
-  update public.profile_photos set is_primary = false
-  where user_id = p_user_id and is_primary;
+  -- The main photo is the first photo that is approved or waiting for review: a rejected or hidden
+  -- photo is never the main photo.
+  select id into v_primary from public.profile_photos
+  where user_id = p_user_id and status in ('PENDING_REVIEW', 'APPROVED')
+  order by sort_order, created_at
+  limit 1;
 
-  update public.profile_photos set is_primary = true
-  where id = (
-    select id from public.profile_photos
-    where user_id = p_user_id and status not in ('DELETED', 'UPLOADING')
-    order by sort_order, created_at
-    limit 1
-  );
+  update public.profile_photos set is_primary = false
+  where user_id = p_user_id and is_primary and id is distinct from v_primary;
+
+  -- §11: a photo approved as a secondary photo is checked again before it becomes the main photo.
+  update public.profile_photos
+     set is_primary = true,
+         status = case when status = 'APPROVED' and not reviewed_as_primary
+                       then 'PENDING_REVIEW'::public.photo_status else status end,
+         submitted_at = case when status = 'APPROVED' and not reviewed_as_primary then now() else submitted_at end
+   where id = v_primary and not is_primary;
 end;
 $$;
 
@@ -148,7 +164,7 @@ $$;
 -- ---------------------------------------------------------------------------
 
 -- Reserves a slot and returns the new photo id. The server then signs an upload URL for
--- photos-quarantine/<user_id>/<photo_id>.
+-- photos-quarantine/<user_id>/<photo_id> (only the uploader ever sees that path).
 create or replace function public.begin_photo_upload(p_user_id uuid)
 returns uuid
 language plpgsql
@@ -188,7 +204,22 @@ begin
 end;
 $$;
 
--- Called after the server has processed the file and stored it at photos/<user_id>/<photo_id>.webp.
+-- The server claims an upload before processing it; a second "finish" for the same photo gets false.
+create or replace function public.claim_photo_upload(p_user_id uuid, p_photo_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.profile_photos set processing_started_at = now()
+  where id = p_photo_id and user_id = p_user_id and status = 'UPLOADING' and processing_started_at is null;
+  return found;
+end;
+$$;
+
+-- Called after the server has processed the file and stored it at photos/<photo_id>.webp. The object
+-- name is opaque: signed URLs never reveal whose photo it is.
 create or replace function public.complete_photo_upload(p_user_id uuid, p_photo_id uuid, p_storage_path text)
 returns void
 language plpgsql
@@ -197,9 +228,10 @@ set search_path = ''
 as $$
 begin
   perform public.assert_member_can_manage_photos(p_user_id);
-  if p_storage_path is distinct from p_user_id::text || '/' || p_photo_id::text || '.webp' then
+  if p_storage_path is distinct from p_photo_id::text || '.webp' then
     raise exception 'INVALID_STORAGE_PATH' using errcode = '22023';
   end if;
+  perform 1 from public.users where id = p_user_id for update;
 
   update public.profile_photos
      set status = 'PENDING_REVIEW', storage_path = p_storage_path, submitted_at = now()
@@ -473,8 +505,13 @@ begin
      set status = case when p_approve then 'APPROVED'::public.photo_status else 'REJECTED'::public.photo_status end,
          rejection_reason = case when p_approve then null else p_reason end,
          reviewed_by = auth.uid(),
-         reviewed_at = now()
+         reviewed_at = now(),
+         reviewed_as_primary = p_approve and is_primary
    where id = p_photo_id;
+
+  -- A rejected main photo stops being the main photo; the next one takes its place (and is checked
+  -- again as a main photo if it was approved as a secondary one).
+  perform public.renumber_photos(v_owner);
 
   perform public.audit(
     case when p_approve then 'PHOTO_APPROVED'::public.audit_action else 'PHOTO_REJECTED'::public.audit_action end,
@@ -500,6 +537,135 @@ as $$
     and u.role <> 'USER'
     and public.effective_account_status(u.status, u.suspended_until) not in ('BANNED', 'DELETED', 'SUSPENDED');
 $$;
+
+-- Staff sign-in attempts (password and TOTP code), limited per client IP and per account. Supabase
+-- Auth's own per-IP limits only see our server's address, so this is the real brute-force limit.
+create or replace function public.staff_sign_in_allowed(p_ip text, p_account text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_ip_ok      boolean;
+  v_account_ok boolean;
+begin
+  v_ip_ok := public.rate_limit_hit('staff_login.ip', coalesce(p_ip, 'unknown'), 3600,
+                                   (public.get_setting('staff_login.max_per_ip_per_hour'))::int);
+  v_account_ok := public.rate_limit_hit('staff_login.account', lower(coalesce(p_account, '')), 3600,
+                                        (public.get_setting('staff_login.max_per_account_per_hour'))::int);
+  return v_ip_ok and v_account_ok;
+end;
+$$;
+
+-- is_staff() (Phase 1) now also requires the session to have been opened with the password AND a
+-- TOTP code. Enabling the email provider for staff also enables email magic links / OTP; those give
+-- an aal1 session with amr = otp, which must never count as a staff sign-in (Phase 3 audit).
+create or replace function public.is_staff(p_min_role public.user_role default 'MODERATOR')
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select case u.role
+             when 'SUPER_ADMIN' then 4 when 'ADMIN' then 3 when 'MODERATOR' then 2 else 1
+           end
+           >= case p_min_role
+             when 'SUPER_ADMIN' then 4 when 'ADMIN' then 3 when 'MODERATOR' then 2 else 1
+           end
+       and u.role <> 'USER'
+       and public.effective_account_status(u.status, u.suspended_until) not in ('BANNED', 'DELETED', 'SUSPENDED')
+       and coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+       and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "password"}]'::jsonb
+       and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "totp"}]'::jsonb
+    from public.users u
+    where u.id = auth.uid()
+  ), false);
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Account guards on auth.users (Phase 3 audit). Supabase Auth does not run the before-user-created
+-- hook for admin-API creates, which is how our server creates members, so the same rules are
+-- enforced by a trigger on every user Auth creates (session user supabase_auth_admin). Direct SQL by
+-- the database owner (migrations, tests) is not affected.
+-- ---------------------------------------------------------------------------
+create or replace function public.guard_auth_user_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_phone text := nullif(new.phone, '');
+  v_hash  text;
+  v_pass  text;
+begin
+  if session_user <> 'supabase_auth_admin' then
+    return new;
+  end if;
+
+  if v_phone is null then
+    -- Email-only accounts are staff, created by the first-admin script or a SUPER_ADMIN.
+    if nullif(new.email, '') is null then
+      raise exception 'SIGNUP_NEEDS_LIBERIAN_PHONE' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  -- Members sign in with their phone only; an email would open a second sign-in path.
+  if nullif(new.email, '') is not null then
+    raise exception 'MEMBER_EMAIL_NOT_ALLOWED' using errcode = '42501';
+  end if;
+  if not public.is_liberian_phone(v_phone) then
+    raise exception 'ONLY_LIBERIAN_PHONES' using errcode = '42501';
+  end if;
+  v_hash := public.phone_hash(v_phone);
+  if exists (select 1 from public.phone_blocklist b where b.phone_hash = v_hash) then
+    raise exception 'PHONE_BLOCKED' using errcode = '42501';
+  end if;
+  -- The geo pass from begin_signup: unused, or used moments ago by the before-user-created hook
+  -- (where that hook runs) for this same creation.
+  update public.geo_passes
+     set used_at = coalesce(used_at, now())
+   where phone_hash = v_hash and expires_at > now()
+     and (used_at is null or used_at > now() - interval '2 minutes')
+  returning phone_hash into v_pass;
+  if v_pass is null then
+    raise exception 'NO_GEO_PASS' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_auth_user_insert
+  before insert on auth.users
+  for each row execute function public.guard_auth_user_insert();
+
+-- Members can't add or change an email (updateUser({email}) would let them sign in by email,
+-- skipping the phone OTP). A receipt email, if ever needed (spec §4), is stored separately.
+create or replace function public.guard_member_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (coalesce(new.email, '') <> coalesce(old.email, '') and coalesce(new.email, '') <> '')
+     or (coalesce(new.email_change, '') <> coalesce(old.email_change, '') and coalesce(new.email_change, '') <> '') then
+    if coalesce((select u.role from public.users u where u.id = new.id), 'USER') = 'USER'
+       and nullif(new.phone, '') is not null then
+      raise exception 'MEMBER_EMAIL_NOT_ALLOWED' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_member_email
+  before update of email, email_change on auth.users
+  for each row execute function public.guard_member_email();
 
 -- ---------------------------------------------------------------------------
 -- First SUPER_ADMIN (spec §7, T-07). Run once by scripts/create-first-admin.mjs with the service role.
@@ -540,6 +706,7 @@ $$;
 revoke all on function public.renumber_photos(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.assert_member_can_manage_photos(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.begin_photo_upload(uuid) from public, anon, authenticated;
+revoke all on function public.claim_photo_upload(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.complete_photo_upload(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.abort_photo_upload(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.member_photos(uuid) from public, anon, authenticated;
@@ -553,8 +720,12 @@ revoke all on function public.staff_photo_queue(integer) from public, anon;
 revoke all on function public.staff_queue_counts() from public, anon;
 revoke all on function public.review_photo(uuid, boolean, public.photo_rejection_reason) from public, anon;
 revoke all on function public.current_staff_role() from public, anon;
+revoke all on function public.staff_sign_in_allowed(text, text) from public, anon, authenticated;
+revoke all on function public.guard_auth_user_insert() from public, anon, authenticated, service_role;
+revoke all on function public.guard_member_email() from public, anon, authenticated, service_role;
 
 grant execute on function public.begin_photo_upload(uuid) to service_role;
+grant execute on function public.claim_photo_upload(uuid, uuid) to service_role;
 grant execute on function public.complete_photo_upload(uuid, uuid, text) to service_role;
 grant execute on function public.abort_photo_upload(uuid, uuid) to service_role;
 grant execute on function public.member_photos(uuid) to service_role;
@@ -564,6 +735,7 @@ grant execute on function public.can_view_profile(uuid, uuid) to service_role;
 grant execute on function public.photos_for_viewer(uuid, uuid) to service_role;
 grant execute on function public.review_photo_paths(uuid[]) to service_role;
 grant execute on function public.bootstrap_super_admin(uuid) to service_role;
+grant execute on function public.staff_sign_in_allowed(text, text) to service_role;
 
 -- Staff functions check is_staff() (role + aal2) themselves and return no storage paths.
 grant execute on function public.staff_photo_queue(integer) to authenticated;

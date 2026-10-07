@@ -66,7 +66,7 @@ export async function staffClientAal1(staff: TestStaff) {
 
 /**
  * Puts photos in the review queue for a member through the same database functions and storage the
- * server uses, and dates them two hours back so they lead the queue (oldest first).
+ * server uses, and dates them a week back so they lead the queue (oldest first).
  */
 export async function seedPendingPhotos(userId: string, files: string[]): Promise<string[]> {
   const admin = adminClient();
@@ -74,7 +74,7 @@ export async function seedPendingPhotos(userId: string, files: string[]): Promis
   for (const file of files) {
     const { data: id, error } = await admin.rpc("begin_photo_upload", { p_user_id: userId });
     expect(error).toBeNull();
-    const path = `${userId}/${id}.webp`;
+    const path = `${id}.webp`;
     const webp = await sharp(file).webp().toBuffer();
     expect((await admin.storage.from("photos").upload(path, webp, { contentType: "image/webp" })).error).toBeNull();
     expect(
@@ -82,8 +82,8 @@ export async function seedPendingPhotos(userId: string, files: string[]): Promis
     ).toBeNull();
     ids.push(id as string);
   }
-  // Older than anything else a test run creates, one second apart so the page order is stable.
-  const start = Date.now() - 2 * 60 * 60 * 1000;
+  // A week old: ahead of anything a test run leaves pending, one second apart so the order is stable.
+  const start = Date.now() - 7 * 24 * 60 * 60 * 1000;
   for (const [n, id] of ids.entries()) {
     const submitted = new Date(start + n * 1000).toISOString();
     expect((await admin.from("profile_photos").update({ submitted_at: submitted }).eq("id", id)).error).toBeNull();

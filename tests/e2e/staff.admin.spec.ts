@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-import { adminClient, createMember, randomLiberianPhone } from "./auth-helpers";
+import { createClient } from "@supabase/supabase-js";
+
+import { adminClient, createMember, randomLiberianPhone, signInMemberViaApi } from "./auth-helpers";
 import { SHOTS_P3, trackPageErrors } from "./helpers";
 import { memberAtPhotos, PHOTO_FIXTURES } from "./member-helpers";
 import { createStaff, seedPendingPhotos, staffClientAal1, staffSignInViaUi, totp } from "./staff-helpers";
@@ -59,6 +61,46 @@ test("§7: without an MFA (aal2) session, staff functions refuse — even when c
   expect(queue.error?.message).toContain("NOT_STAFF");
   const counts = await client.rpc("staff_queue_counts");
   expect(counts.error?.message).toContain("NOT_STAFF");
+});
+
+test("§7: an email sign-in link never counts as a staff sign-in (password + TOTP only)", async () => {
+  const staff = await createStaff();
+  const admin = adminClient();
+  const { data: link, error } = await admin.auth.admin.generateLink({ type: "magiclink", email: staff.email });
+  expect(error).toBeNull();
+  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error: verifyError } = await client.auth.verifyOtp({
+    token_hash: link.properties!.hashed_token,
+    type: "magiclink",
+  });
+  expect(verifyError).toBeNull();
+  // Someone with only the staff inbox enrols their own authenticator through the API and reaches aal2…
+  const { data: factor, error: enrolError } = await client.auth.mfa.enroll({ factorType: "totp" });
+  expect(enrolError).toBeNull();
+  const { error: mfaError } = await client.auth.mfa.challengeAndVerify({
+    factorId: factor!.id,
+    code: totp(factor!.totp.secret),
+  });
+  expect(mfaError).toBeNull();
+  expect((await client.auth.mfa.getAuthenticatorAssuranceLevel()).data?.currentLevel).toBe("aal2");
+  // …and is still refused: the session was never opened with the password.
+  expect((await client.rpc("staff_photo_queue", { p_limit: 5 })).error?.message).toContain("NOT_STAFF");
+  expect((await client.rpc("staff_queue_counts")).error?.message).toContain("NOT_STAFF");
+});
+
+test("account guards: Auth can't create a member without the Liberia check, or give a member an email", async () => {
+  const admin = adminClient();
+  const noPass = randomLiberianPhone();
+  expect((await admin.auth.admin.createUser({ phone: noPass.e164, phone_confirm: true })).error).not.toBeNull();
+  expect((await admin.auth.admin.createUser({ phone: "+14155550123", phone_confirm: true })).error).not.toBeNull();
+
+  const phone = randomLiberianPhone();
+  const memberId = await createMember(phone.e164);
+  expect((await admin.auth.admin.updateUserById(memberId, { email: "member@example.test" })).error).not.toBeNull();
+  const member = await signInMemberViaApi(phone.e164);
+  expect((await member.auth.updateUser({ email: "member2@example.test" })).error).not.toBeNull();
 });
 
 test("a member can't sign in to the console with a password or open it with their session", async ({ page }) => {

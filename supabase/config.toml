@@ -175,8 +175,9 @@ enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
 # WeKonnectz: OFF. No public signup of any kind; only our server creates member accounts through the
-# admin API, after the Liberia pre-filter (plan §1.5, Phase 1 audit). Admin-created users still pass
-# the before-user-created hook.
+# admin API, after the Liberia pre-filter (plan §1.5, Phase 1 audit). Auth does not run the
+# before-user-created hook for admin-API creates, so a trigger on auth.users enforces the same rules
+# (+231, blocklist, geo pass, no member email) for every user Auth creates (Phase 3 audit).
 enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
