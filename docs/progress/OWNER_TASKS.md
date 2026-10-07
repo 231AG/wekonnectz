@@ -102,7 +102,10 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
      - Phone provider on with the Send-SMS hook;
      - phone confirmations on;
      - before-user-created and password-verification hooks;
-     - anonymous sign-ins off.
+     - anonymous sign-ins off;
+     - Email provider on with "Allow new users to sign up" off (staff only, Phase 3);
+     - MFA → TOTP enabled (Phase 3);
+     - minimum password length 12, lower + upper case + digits (Phase 3).
 - **Blocks:** Phase 1 hosted verification only.
 - **Requested in:** Plan.
 
@@ -110,8 +113,13 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 
 - **What:** Tell me who the first staff are and their roles; answer Q5 (staff login method).
 - **Why:** Staff accounts are separate from member accounts and need MFA (§7). The first SUPER_ADMIN is created by a one-off script.
-- **Steps:** Reply with role per person (names only; no phone numbers or emails in chat — I'll give you a script you run yourself to create the accounts). Each staff member needs an authenticator app (Google Authenticator, 1Password, Authy).
-- **Blocks:** **Phase 3** (for real staff; tests use fictional staff).
+- **Steps:**
+  1. Install an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password or Authy).
+  2. On your computer, in the project folder, put the hosted project's `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in a file named `.env.production.local` (never commit it; it is gitignored). Don't paste the key into chat.
+  3. Run `pnpm admin:create-first --email you@yourdomain --env-file .env.production.local`. Type a password when asked: 12+ characters, upper and lower case and a digit. Nothing is shown while you type.
+  4. Open `/admin/login`, sign in and scan the QR code with your authenticator app.
+  5. Tell me the roles of the other staff (names only). SUPER_ADMIN creates their accounts in the console (Staff screen, Phase 10). Until then I can add a small "create staff" command if you need moderators sooner — say so.
+- **Blocks:** Real staff on the hosted app (tests use fictional staff). The script refuses to run a second time.
 - **Requested in:** Plan.
 
 ### T-08 — Supabase production project
@@ -213,10 +221,11 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | Supabase Auth `sms_sent` (per hour, whole project)                | Hard cap on all OTP SMS per hour    | Size to launch traffic, e.g. 500 | Launch    |
 | Supabase Auth `sign_in_sign_ups` (per 5 min per IP)               | Our server calls Auth from one IP   | e.g. 300                         | Launch    |
 | `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION         | SIGNUP_ONLY (spec)               | Phase 1   |
-| `photos.max_per_user`                                             | Max photos                          | 6 (spec "recommended")           | Phase 3   |
-| `photos.max_upload_bytes`                                         | Upload size cap                     | 10 MB                            | Phase 3   |
-| `photos.uploads_per_day`                                          | Upload rate limit                   | 30                               | Phase 3   |
-| `storage.signed_url_ttl_seconds`                                  | Signed URL lifetime                 | 120 (spec)                       | Phase 3   |
+| `photos.min_required`                                             | Photos needed (BR-8)                | 3 (spec) — set in the migration  | Phase 3   |
+| `photos.max_per_user`                                             | Max photos                          | 6 (spec) — set in the migration  | Phase 3   |
+| `photos.max_uploads_per_hour`                                     | Upload attempts per member per hour | 10 (DEV-ONLY 50 in seed)         | Phase 3   |
+| Upload size cap (code + bucket limit, not a setting)              | Largest file accepted               | 10 MB (built)                    | Phase 3   |
+| Signed URL lifetime (code, not a setting)                         | How long a photo link works         | 120 s (spec, built)              | Phase 3   |
 | `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                                | Phase 4   |
 | `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4   | Phase 4   |
 | `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h           | 3 (spec)                         | Phase 5   |

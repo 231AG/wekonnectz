@@ -9,8 +9,8 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | ------------------- | ------- | -------------- | -------------- | ---------- |
 | Foundation          | 10      | 2              | 0              | 0          |
 | Auth and geo        | 12      | 1              | 1              | 1          |
-| Onboarding          | 5       | 2              | 1              | 0          |
-| Photos              | 0       | 0              | 8              | 0          |
+| Onboarding          | 6       | 2              | 1              | 0          |
+| Photos              | 6       | 1              | 1              | 0          |
 | Verification        | 0       | 0              | 6              | 2          |
 | Safety              | 0       | 0              | 11             | 0          |
 | Relationship mode   | 0       | 0              | 6              | 1          |
@@ -19,14 +19,14 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Card subscriptions  | 0       | 0              | 4              | 1          |
 | Availability        | 0       | 0              | 6              | 1          |
 | Casual discovery    | 0       | 0              | 6              | 1          |
-| Admin console       | 0       | 0              | 11             | 0          |
+| Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 0       | 0              | 5              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **27**  | **5**          | **90**         | **11**     |
+| **Total**           | **35**  | **7**          | **81**         | **11**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending.
 
 ## Planning
 
@@ -74,18 +74,19 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 - ✅ Resume at first incomplete step — P2
 - 🔄 `areas`, `interests` lists — P2 built with DEV-ONLY data (⛔ real lists T-09, T-10); admin UI P10
 - 🔄 Detection engine + DB term list — P2 — BR-31 (built; term list ⛔ T-11 review)
+- ✅ Photos step (3 required, up to 6) — P3
 - ⬜ Under review screen with live progress — P4
 
 ## Photos
 
-- ⬜ Private buckets (photos-quarantine, photos, verification, payment-evidence) — P3
-- ⬜ Signed-upload flow with count and rate limit — P3
-- ⬜ Processing: magic bytes, size cap, resize, WebP, EXIF strip — P3 — BR-12
-- ⬜ Photo states, primary photo, reorder, delete — P3 — BR-8, BR-9
-- ⬜ Signed read URLs (120 s) after access check — P3 — BR-11
-- ⬜ Photo queue (approve / reject with reason, audited) — P3 — BR-34
+- ✅ Private buckets (photos-quarantine, photos, verification, payment-evidence) — P3
+- 🔄 Signed-upload flow with count and rate limit — P3 (built; upload limit value ⛔ T-19)
+- ✅ Processing: magic bytes, size cap, resize, WebP, EXIF strip — P3 — BR-12
+- ✅ Photo states, main photo, delete — P3 — BR-8, BR-9 (order changes by "Make main photo"; drag-to-reorder not built)
+- ✅ Signed read URLs (120 s) after access check — P3 — BR-11
+- ✅ Photo queue (approve / reject with reason, audited) — P3 — BR-34
 - ⬜ Dropping below 3 approved → leave discovery, availability UNAVAILABLE — P4/P8 — BR-8
-- ⬜ Visibility per OD-3 = A (Relationship members see approved photos) — P3
+- ✅ Visibility per OD-3 = A (Relationship members see approved photos) — P3 (`can_view_profile`; blocks added P5)
 
 ## Verification
 
@@ -177,8 +178,8 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Admin console
 
-- ⬜ Staff accounts, MFA (aal2 in DB), admin shell — P3
-- ⬜ Photo queue — P3; Verification queue — P4; Reports & Flags — P5; Claims queue — P7
+- ✅ Staff accounts (email + password + TOTP), aal2 in DB and pages, admin shell, first-admin script — P3
+- 🔄 Queues: Photo ✅ P3; Verification P4; Reports & Flags P5; Claims P7
 - ⬜ Dashboard with real figures — P10
 - ⬜ Users (search incl. hashed phone, suspend, ban, restore, DOB correction) — P10 — BR-4, BR-34
 - ⬜ Subscriptions (manual extension of existing only, reason, audited, capped — OD-30) — P10

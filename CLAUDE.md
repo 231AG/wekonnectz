@@ -4,7 +4,7 @@
 
 Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/WeKonnectz_MVP_Build_Spec_v3.pdf` (**source of truth**). Plan: `docs/plan/MASTER_PLAN.md`. Owner workflow: `PROMPT.md`.
 
-**Current phase:** Phase 2 — Profile & onboarding (see `docs/sprints/SPRINT-02.md`). Next: Phase 3 — Photos & private storage.
+**Current phase:** Phase 3 — Photos & private storage (see `docs/sprints/SPRINT-03.md`). Next: Phase 4 — Verification.
 
 ## Stack (pinned exactly; record changes here)
 
@@ -25,9 +25,9 @@ Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/We
 | eslint / eslint-config-next           | 9.39.5 / 16.3.8   | ESLint 10 not used: React plugins don't support it yet                                                                                                 |
 | prettier                              | 3.9.9             | printWidth 120                                                                                                                                         |
 
-Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation).
+Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation), sharp 0.35.5 (Phase 3, image processing).
 
-Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion, sharp.
+Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion.
 
 ## Commands
 
@@ -37,6 +37,7 @@ pnpm db:start            # writes gitignored supabase/.env + .env.local (random 
 pnpm env:setup           # re-create/refresh .env.local and supabase/.env without printing secrets
 pnpm db:reset            # re-apply migrations + supabase/seed.sql
 pnpm db:types            # regenerate lib/supabase/database.types.ts — run after EVERY migration
+pnpm admin:create-first --email you@x [--env-file F]   # first SUPER_ADMIN (hidden password prompt; once only)
 pnpm dev                 # http://localhost:3000 ; ENABLE_UI_KIT=1 pnpm dev for /ui-kit
 pnpm lint | pnpm typecheck | pnpm format:check
 pnpm test                # Vitest unit tests (tests/unit)

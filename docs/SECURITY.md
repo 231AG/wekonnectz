@@ -90,6 +90,21 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 
   The function re-checks the account state (PENDING/ACTIVE only) and every rule SQL can enforce (lengths, ≥3 active interests, area from the list, current document versions, step order).
 
+## Photos and private storage (Phase 3)
+
+- **Buckets.** `photos-quarantine`, `photos`, `verification`, `payment-evidence` — all private (a pgTAP guard fails if any bucket is public). No storage policy exists for `anon` or `authenticated`, so members can't list, read or write any object directly, their own included. Only the server (service role, `server-only` modules) touches storage.
+- **Upload pipeline (§11).** `begin_photo_upload()` reserves a slot (max 6, rate limit `photos.max_uploads_per_hour`, members only, steps 4–8 done) → the server signs an upload URL for `photos-quarantine/<user>/<photo>` (bucket limit 10 MB, JPEG/PNG/WebP) → the browser uploads → the server reads the file back and `processPhoto()` checks magic bytes and size, decodes it (pixel limit against decompression bombs, first frame only), applies the orientation, resizes to 1600 px and re-encodes to WebP **with no metadata** (EXIF, GPS, XMP, ICC — BR-12) → stored at `photos/<user>/<photo>.webp`, `PENDING_REVIEW`. The quarantine copy is deleted in every outcome. Paths are built from the session's user id, never from client input.
+- **Reads (BR-11, rule 5).** Paths never leave `lib/storage/photos.ts`. Members get 120-second signed URLs for their own photos; staff get signed URLs only for photos still `PENDING_REVIEW`, after `requireStaff()`. `photos_for_viewer()` / `can_view_profile()` decide who sees whose photos (owner; otherwise both ACTIVE and APPROVED photos only — OD-3 = A). Phase 5 adds blocks.
+- **Known gaps.** A signed upload URL stays valid for 2 hours (Supabase default); after its slot is finished or aborted, a re-upload with the same token can only recreate a quarantine object nobody reads. A clean-up job for abandoned quarantine objects is planned with the other scheduled jobs (Phase 12).
+
+## Staff accounts and the admin console (Phase 3)
+
+- **Separate accounts (§7).** Staff accounts are email + password + TOTP (OD-27). Members have no password (the password-verification hook and a database trigger refuse one) and are sent away from `/admin`; staff are sent away from the member app.
+- **MFA everywhere.** `requireStaff()` checks the role from the database and the session's assurance level (`aal2`) on every console page and action; every staff database function checks `is_staff()` (role + `aal2` claim in the JWT) again, so a page that forgot the check still can't read or change anything. A password-only (aal1) session gets `NOT_STAFF` from every staff function.
+- **First admin.** `pnpm admin:create-first` creates the first SUPER_ADMIN from a hidden password prompt; `bootstrap_super_admin()` refuses if one exists and only accepts a fresh email-only account (never a member). It writes `ADMIN_CREATED` to the audit log.
+- **Audit (BR-34).** `review_photo()` writes `PHOTO_APPROVED` / `PHOTO_REJECTED` with the reason in the same transaction; metadata holds ids and the reason code only, never paths.
+- **Hosted settings to match `supabase/config.toml`:** Email provider on, sign-ups off; TOTP MFA on; minimum password length 12 with upper, lower and digits. Supabase's own per-IP rate limits apply to password and MFA attempts.
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,

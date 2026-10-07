@@ -90,6 +90,28 @@ Settings added: `geo.enforcement_mode` = "SIGNUP_ONLY" (owner decision), `otp.ma
 
 Settings: `detection.terms` (contact / price / money_request lists; owner review T-11).
 
+### Phase 3 ✅ (`20261008000000_photos_staff.sql`)
+
+| Table / object   | Key columns                                                                                                                                                                     | Client access | Notes                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `profile_photos` | id, user_id, storage_path, status (UPLOADING · PENDING_REVIEW · APPROVED · REJECTED · HIDDEN · DELETED), sort_order, is_primary, rejection_reason, reviewed_by/at, submitted_at | none          | One main photo per member (unique index). Paths never reach clients. Written only by the functions below |
+| storage buckets  | photos-quarantine (10 MB, JPEG/PNG/WebP), photos (5 MB, WebP), verification, payment-evidence                                                                                   | none          | All private; no storage policies for anon/authenticated                                                  |
+
+| Function                                                          | Callable by                 | Purpose                                                                         |
+| ----------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `begin_photo_upload(user)`                                        | service_role                | Reserve a slot: members only, steps 4–8 done, max 6, rate limit                 |
+| `complete_photo_upload(user, photo, path)` / `abort_photo_upload` | service_role                | Store as PENDING_REVIEW / free the slot                                         |
+| `member_photos(user)`                                             | service_role                | Own photos in order, with paths for signing                                     |
+| `set_primary_photo(user, photo)` / `delete_photo`                 | service_role                | Main photo moves to the front; delete returns the path to remove                |
+| `can_view_profile(viewer, owner)` / `photos_for_viewer`           | service_role                | Who sees whose photos (owner; both ACTIVE → APPROVED only). Phase 5 adds blocks |
+| `staff_photo_queue(limit)` / `staff_queue_counts()`               | authenticated, `is_staff()` | Pending photos oldest first, no paths                                           |
+| `review_photo_paths(ids)`                                         | service_role                | Paths of photos still PENDING_REVIEW, for signing after the staff check         |
+| `review_photo(photo, approve, reason)`                            | authenticated, `is_staff()` | Decide once; reason required to reject; audited                                 |
+| `current_staff_role()`                                            | authenticated (own)         | Caller's staff role                                                             |
+| `bootstrap_super_admin(user)`                                     | service_role                | First SUPER_ADMIN only; audited                                                 |
+
+`onboarding_progress()` gains `photos_done` (3+ photos PENDING_REVIEW or APPROVED). Settings: `photos.min_required` 3, `photos.max_per_user` 6 (spec), `photos.max_uploads_per_hour` (T-19).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                              | Phase |
@@ -99,10 +121,10 @@ Settings: `detection.terms` (contact / price / money_request lists; owner review
 | geo_checks ✅                      | 1     |     | payment_claims                                     | 7     |
 | phone_blocklist ✅                 | 1     |     | merchant_accounts                                  | 7     |
 | consents ✅                        | 1–2   |     | card_customers                                     | 7     |
-| areas                              | 2     |     | likes                                              | 6     |
-| interests / user_interests         | 2     |     | passes                                             | 6     |
-| user_settings                      | 2     |     | matches                                            | 6     |
-| profile_photos                     | 3     |     | message_requests                                   | 9     |
+| areas ✅                           | 2     |     | likes                                              | 6     |
+| interests / user_interests ✅      | 2     |     | passes                                             | 6     |
+| user_settings ✅                   | 2     |     | matches                                            | 6     |
+| profile_photos ✅                  | 3     |     | message_requests                                   | 9     |
 | verifications                      | 4     |     | conversations / conversation_members / messages    | 6     |
 | notifications                      | 4     |     | saved_profiles                                     | 9     |
 | availability                       | 8     |     | blocks / reports / report_notes / moderation_flags | 5     |
