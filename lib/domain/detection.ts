@@ -117,9 +117,12 @@ function collapseSpacedLetters(text: string): string {
   );
 }
 
-/** Punctuation inside a word dropped: "what's-app" → "whatsapp", "short-time" → "shorttime". */
+/**
+ * Punctuation inside a word dropped: "what's-app" → "whatsapp", "short-time" → "shorttime". Punctuation
+ * between two digits is kept, so scores and decimals ("10/10", "175.10") stay what they are.
+ */
 function joinWords(text: string): string {
-  return text.replace(/(?<=[a-z0-9])['_.*|~/-]+(?=[a-z0-9])/g, "");
+  return text.replace(/(?<=[a-z])['_.*|~/-]+(?=[a-z0-9])|(?<=[0-9])['_.*|~/-]+(?=[a-z])/g, "");
 }
 
 /** Leetspeak and symbol letters undone, for contact names only (never for prices). */
@@ -162,20 +165,25 @@ function digitView(text: string): string {
       // Filler words between digit groups: "077 dash 012 and 3456" (separators around them folded too).
       .replace(/(?<=\d)[^a-z0-9]{0,3}(?:dash|and|then|hyphen|space|plus|comma|dot)[^a-z0-9]{0,3}(?=\d)/g, "-");
   }
-  // Dates and years are not phone numbers: "12 05 1998", "2019 2020 2021".
-  return t
-    .replace(/(?<!\d)(?:0?[1-9]|[12]\d|3[01])[\s./-](?:0?[1-9]|1[0-2])[\s./-](?:19|20)\d\d(?!\d)/g, " ")
-    .replace(/(?<!\d)(?:19|20)\d\d(?:[\s,./-]+(?:19|20)\d\d)+(?!\d)/g, " ");
+  return t;
 }
 
 // ---------------------------------------------------------------------------
 // Built-in patterns
 // ---------------------------------------------------------------------------
 
-/** 7+ digits with up to 3 non-alphanumeric characters between each (any separator, newlines too). */
-const PHONE = /\+?\d(?:[^a-z0-9]{0,3}\d){6,}/g;
+/**
+ * Phone numbers are found by shape, not by separators: digits that sit close together (anything up to
+ * 12 characters apart, words included) form a cluster, and a cluster is a phone number when its digits
+ * contain a Liberian mobile number (optionally with 231 or a leading 0) or an international number
+ * written with "+". Dates, years, Bible verses, room numbers and ages don't have that shape.
+ */
+const LIBERIAN_MOBILE = /(?:231|0)?(?:77|88|55|33|22)\d{7}/;
+const MAX_DIGIT_GAP = 12;
 
-const TLD = "(?:com|net|org|lr|io|co|ly|app|link|info|biz|xyz|gg|tv|online|site|me)";
+// Common look-alike spellings of the TLD are included ("c0m") because LINK checks don't undo leetspeak:
+// doing so turns ordinary numbers into fake domains ("175.10" → "its.io").
+const TLD = "(?:c[o0]m|n[e3]t|[o0]rg|lr|i[o0]|c[o0]|ly|app|link|inf[o0]|biz|xyz|gg|tv|[o0]nline|site|me)";
 const LINK = [
   /(?<![a-z])https?:\/\//,
   /(?<![a-z])www\s*\./,
@@ -183,10 +191,10 @@ const LINK = [
   /(?<![a-z])(?:bit\.ly|tinyurl|linktr\.ee)(?![a-z])/,
   // name.tld, name . tld, name[.]tld, name (dot) tld, name dot tld, name dotcom
   new RegExp(
-    `(?<![a-z0-9])[a-z0-9-]{3,63}\\s*(?:\\.|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\]|\\sdot\\s|\\sdot)\\s*${TLD}(?![a-z])`,
+    `(?<![a-z0-9])[a-z0-9-]{3,63}\\s*(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\]|\\sdot\\s|\\sdot)\\s*${TLD}(?![a-z])`,
   ),
   // email-like: kofi@gmail, kofi at gmail
-  /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|live|aol|ymail)(?![a-z])/,
+  /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|ymail)(?![a-z])/,
 ];
 
 const PLATFORM = "(?:instagram|insta|ig|snapchat|snap|sc|facebook|fb|tiktok|tt|twitter|telegram|whatsapp|wa)";
@@ -194,8 +202,10 @@ const HANDLE = [
   /(?:^|[\s(:,])@[a-z0-9_.]{2,}/,
   // "IG: kofi.lib", "snap: kofi_23", "fb: kofi", "insta @kofi"
   new RegExp(`(?<![a-z])${PLATFORM}\\s*[:@=]\\s*@?[a-z0-9_.]{2,}`),
-  // "ig kofi23", "snap kofi_23" — a handle-shaped word (digit, _ or .) after the platform
-  new RegExp(`(?<![a-z])${PLATFORM}(?![a-z])\\s+@?[a-z0-9_.]*[0-9_.][a-z0-9_.]*`),
+  // "ig kofi23", "snap kofi_23" — a handle-shaped word (starts with a letter or _, has a digit, _ or .)
+  new RegExp(`(?<![a-z])${PLATFORM}(?![a-z])\\s+@?[a-z_](?=[a-z0-9_.]*[0-9_.])[a-z0-9_.]{2,}`),
+  // "IG is kofi", "insta name kofi", "snap handle: kofi"
+  new RegExp(`(?<![a-z])${PLATFORM}\\s+(?:is|name is|name|handle|id)\\s*:?\\s*@?[a-z][a-z0-9_.]{2,}`),
   // "my insta", "add me on snap", "find me on fb"
   new RegExp(
     `(?<![a-z])(?:my|add me on|find me on|follow me on|dm me on|inbox me on|reach me on)\\s+${PLATFORM}(?![a-z])`,
@@ -212,23 +222,28 @@ const PRICE = [
   /(?:\$|€|£|(?<![a-z])(?:usd|lrd|ld|us\$|l\$))\s*\d/,
   // amount then currency: 20$, 50 usd, 500lrd, 500 LD, 20 dollars, 20 bucks
   /\d\s*(?:\$|€|£|(?:usd|lrd|ld|l\$|us\$|dollars?|bucks)(?![a-z]))/,
-  // 5000L (needs 2+ digits so "2 l" isn't a price)
-  /\d{2,}\s*l(?![a-z$])/,
+  // 5000L (needs 3+ digits so "25 l" isn't a price)
+  /(?<!\d)\d{3,}\s*l(?![a-z$])/,
+  // 20/hr, 500 for the night, 50 a night
+  /\d\s*\/\s*(?:hr|hour|night)(?![a-z])/,
+  /\d\s*(?:for the|a|per|for a)\s+(?:night|hour)(?![a-z])/,
   // ten dollars, twenty bucks
-  new RegExp(`(?<![a-z])${NUM_WORD}\\s+(?:us\\s+)?(?:dollars?|bucks)(?![a-z])`),
-  // charge 50, rate: 100, price $20, fee 500
-  /(?<![a-z])(?:charge|rate|price|fee)s?\s*[:=-]?\s*(?:\$|usd|lrd|ld|l\$)?\s*\d/,
-  // momo only in a money context — it is also a common name
-  /(?<![a-z])momo(?![a-z]).{0,20}\d|\d.{0,20}(?<![a-z])momo(?![a-z])/,
+  new RegExp(`(?<![a-z])${NUM_WORD}\\s+(?:us\\s+)?(?:dollars?|dollas?|bucks|ld|lrd|usd)(?![a-z])`),
+  /\d\s*dollas?(?![a-z])/,
+  // charge 50, rate: 100, price $20, fee 500 — not "rate 10/10" or "charge 4 christ"
+  /(?<![a-z])(?:charge|rate|price|fee)s?\s*[:=-]?\s*(?:(?:\$|usd|lrd|ld|l\$)\s*\d|\d{2,}(?![\d\s]*\/))/,
+  // momo only in a money context — it is also a common name ("I'm Momo, 25")
+  /(?<![a-z])momo(?![a-z]).{0,20}\d{3}|(?<!\d)\d{3,}.{0,20}(?<![a-z])momo(?![a-z])/,
   /(?<![a-z])(?:send|pay|via|by|on|accept|accepted|accepting|my|use)\s+(?:me\s+)?(?:on\s+)?momo(?![a-z])/,
   /(?<![a-z])momo\s+(?:accepted|only|number|no|account|me)(?![a-z])/,
   // transport only as money: "transport money", "for transport", "give me transport"
   /(?<![a-z])transport(?:ation)?\s+(?:fare|money|fee|fees|cash)(?![a-z])/,
-  /(?<![a-z])(?:for|my|give me|send|need|want)\s+(?:small\s+)?transport(?![a-z])/,
+  /(?<![a-z])(?:give me|send me|send|my)\s+(?:small\s+)?transport(?![a-z])(?!\s+(?:company|ministry|business|job|work))/,
 ];
 
 const MONEY_REQUEST = [
-  /(?<![a-z])(?:send|give|lend|loan|borrow|need|want)\s+(?:me\s+)?(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
+  // "I don't need money" / "not money" are not requests.
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend|loan|borrow|need|want)\s+(?:me\s+)?(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
   /(?<![a-z])pay\s+(?:for\s+)?my\s+(?:bills?|rent|fees?|phone|school|transport|light|current|data)(?![a-z])/,
 ];
 
@@ -271,11 +286,27 @@ function isCountingRun(digits: string): boolean {
 }
 
 function hasPhone(base: string): boolean {
-  for (const m of digitView(base).matchAll(PHONE)) {
-    // "1 2 3 4 5 6 7 go" is counting, not a number.
-    if (!isCountingRun(m[0].replace(/\D/g, ""))) return true;
+  const view = digitView(base);
+  const clusters: { digits: string; plus: boolean }[] = [];
+  let current: { digits: string; plus: boolean; last: number } | null = null;
+  for (let i = 0; i < view.length; i += 1) {
+    if (!/\d/.test(view[i])) continue;
+    if (!current || i - current.last > MAX_DIGIT_GAP) {
+      if (current) clusters.push(current);
+      current = { digits: "", plus: view.slice(Math.max(0, i - 2), i).includes("+"), last: i };
+    }
+    current.digits += view[i];
+    current.last = i;
   }
-  return false;
+  if (current) clusters.push(current);
+
+  return clusters.some(({ digits, plus }) => {
+    // "1 2 3 4 5 6 7 go" is counting, not a number.
+    if (isCountingRun(digits)) return false;
+    if (LIBERIAN_MOBILE.test(digits)) return true;
+    // International numbers written with a plus: "+44 7700 900123".
+    return plus && digits.length >= 10;
+  });
 }
 
 export function detect(text: string, mode: DetectionMode, terms: DetectionTerms): DetectionResult {
@@ -283,12 +314,13 @@ export function detect(text: string, mode: DetectionMode, terms: DetectionTerms)
   const spaced = collapseSpacedLetters(base);
   const joined = joinWords(spaced);
   const views = [base, spaced, joined];
-  // Leetspeak undone on both the spaced and the joined view ("kofi.c0m", "wh4tsapp").
+  // Leetspeak undone for contact names and handles only ("wh4tsapp", "telegr@m") — never for links,
+  // prices or phone numbers, where it would turn ordinary numbers into words.
   const contactViews = [...views, unLeet(spaced), unLeet(joined)];
   const categories = new Set<DetectionCategory>();
 
   if (hasPhone(base)) categories.add("PHONE");
-  if (contactViews.some((v) => LINK.some((re) => re.test(v)))) categories.add("LINK");
+  if (views.some((v) => LINK.some((re) => re.test(v)))) categories.add("LINK");
   if (contactViews.some((v) => HANDLE.some((re) => re.test(v)))) categories.add("HANDLE");
   if (contactViews.some((v) => WHATSAPP_FUZZY.test(v) || terms.contact.some((t) => containsTerm(v, t)))) {
     categories.add("CONTACT_TERM");
@@ -318,5 +350,5 @@ export function containsLink(text: string): boolean {
   const base = normalizeForDetection(text);
   const spaced = collapseSpacedLetters(base);
   const joined = joinWords(spaced);
-  return [base, spaced, joined, unLeet(spaced), unLeet(joined)].some((v) => LINK.some((re) => re.test(v)));
+  return [base, spaced, joined].some((v) => LINK.some((re) => re.test(v)));
 }
