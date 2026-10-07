@@ -201,7 +201,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Security and launch
 
 - ⬜ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
-- ⬜ Account deletion + purge job (incl. never-verified accounts) — P10 ⛔ until OD-7 — BR-7
+- ⬜ Account deletion + purge job (incl. never-verified accounts) — P10 ⛔ until OD-7 — BR-7 (use Auth hard delete: soft delete rewrites phone/email and the Phase 1/3 auth.users guards refuse it)
 - ⬜ Data export — P10
 - ⬜ Full RLS / pgTAP pass — P12
 - ⬜ CSP, HSTS, X-Frame-Options DENY, Referrer-Policy — P12

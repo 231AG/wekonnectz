@@ -78,12 +78,8 @@ async function sweepQuarantine(userId: string): Promise<void> {
   const admin = createAdminClient();
   const [{ data: files }, { data: open }] = await Promise.all([
     admin.storage.from(QUARANTINE).list(userId, { limit: 100 }),
-    admin
-      .from("profile_photos")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("status", "UPLOADING")
-      .is("processing_started_at", null),
+    // Every open slot keeps its file, including one another tab is processing right now.
+    admin.from("profile_photos").select("id").eq("user_id", userId).eq("status", "UPLOADING"),
   ]);
   const keep = new Set((open ?? []).map((r) => r.id));
   const stale = (files ?? []).filter((f) => !keep.has(f.name)).map((f) => `${userId}/${f.name}`);

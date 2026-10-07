@@ -400,14 +400,20 @@ isOneToOne: true
               "id": string,"is_primary": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
                            },
+"rate_limit_count":
+{ Args: { "p_bucket": string,"p_subject": string,"p_window_seconds": number }; Returns: number
+                           },
 "rate_limit_hit":
 { Args: { "p_bucket": string,"p_max": number,"p_subject": string,"p_window_seconds": number }; Returns: boolean
+                           },
+"record_staff_sign_in_failure":
+{ Args: { "p_account": string,"p_ip": string }; Returns: undefined
                            },
 "release_hook_receipt":
 { Args: { "p_message_id": string }; Returns: undefined
                            },
 "renumber_photos":
-{ Args: { "p_user_id": string }; Returns: undefined
+{ Args: { "p_user_id": string }; Returns: string
                            },
 "review_photo":
 { Args: { "p_approve": boolean,"p_photo_id": string,"p_reason"?: Database["public"]['Enums']["photo_rejection_reason"] }; Returns: undefined

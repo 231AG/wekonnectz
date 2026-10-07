@@ -1,7 +1,7 @@
 -- Phase 3: photos, private storage and the staff photo queue (spec §11, §21, BR-8, 9, 11, 12, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(67);
+select plan(71);
 
 -- Fixtures: two members who finished steps 4–8, one who didn't, one moderator.
 insert into auth.users (id, phone, email, aud, role) values
@@ -216,11 +216,19 @@ update public.app_settings set value = '0'::jsonb where key = 'photos.max_upload
 select throws_ok($$ select public.begin_photo_upload('dddddddd-0000-0000-0000-000000000002') $$, '22023', 'RATE_LIMITED',
   'uploads are rate limited per member');
 update public.app_settings set value = '2'::jsonb where key = 'staff_login.max_per_account_per_hour';
+update public.app_settings set value = '3'::jsonb where key = 'staff_login.max_per_account_all_ips_per_hour';
 update public.app_settings set value = '1000'::jsonb where key = 'staff_login.max_per_ip_per_hour';
-select is(array[public.staff_sign_in_allowed('198.51.100.7', 'Mod@Example.test'),
-                public.staff_sign_in_allowed('198.51.100.8', 'mod@example.test'),
-                public.staff_sign_in_allowed('198.51.100.9', 'mod@example.test')],
-  array[true, true, false], 'staff sign-in attempts are limited per account, whatever the IP or letter case');
+select ok(public.staff_sign_in_allowed('198.51.100.7', 'mod@example.test'), 'checking does not use up attempts');
+select ok(public.staff_sign_in_allowed('198.51.100.7', 'mod@example.test'), 'still allowed: nothing failed yet');
+select public.record_staff_sign_in_failure('198.51.100.7', 'Mod@Example.test');
+select public.record_staff_sign_in_failure('198.51.100.7', 'mod@example.test');
+select ok(not public.staff_sign_in_allowed('198.51.100.7', 'mod@example.test'),
+  'failed attempts are limited per account from one IP (any letter case)');
+select ok(public.staff_sign_in_allowed('203.0.113.50', 'mod@example.test'),
+  'the real staff member on another connection is not locked out');
+select public.record_staff_sign_in_failure('198.51.100.8', 'mod@example.test');
+select ok(not public.staff_sign_in_allowed('203.0.113.50', 'mod@example.test'),
+  'an account-wide backstop stops guessing spread over many IPs');
 
 -- ---------------------------------------------------------------------------
 -- First SUPER_ADMIN (T-07)

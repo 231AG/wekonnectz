@@ -14,6 +14,7 @@ update public.app_settings set value = '200'::jsonb where key = 'otp.max_per_ip_
 update public.app_settings set value = '50'::jsonb where key = 'photos.max_uploads_per_hour'; -- DEV-ONLY
 update public.app_settings set value = '200'::jsonb where key = 'staff_login.max_per_ip_per_hour';      -- DEV-ONLY
 update public.app_settings set value = '20'::jsonb where key = 'staff_login.max_per_account_per_hour';  -- DEV-ONLY
+update public.app_settings set value = '100'::jsonb where key = 'staff_login.max_per_account_all_ips_per_hour'; -- DEV-ONLY
 
 -- DEV-ONLY area list until the owner provides the real one (T-09). The 15 counties of Liberia, with a few
 -- Monrovia communities taken from the mock-ups; every other county has a single placeholder entry.

@@ -22,8 +22,9 @@ const code = z.string().regex(/^\d{6}$/);
 const TOO_MANY = "Too many attempts. Try again later.";
 
 /**
- * Per client IP and per account (email or user id). Supabase Auth's own per-IP limits see only our
- * server's address, so this is the brute-force limit for staff sign-in. Fails closed.
+ * Failed attempts are limited per client IP, per account from that IP, and per account overall
+ * (a looser backstop). Supabase Auth's own per-IP limits see only our server's address. Only failures
+ * count, so a stranger who knows a staff email can't lock that person out. Fails closed.
  */
 async function attemptAllowed(account: string): Promise<boolean> {
   const { data, error } = await createAdminClient().rpc("staff_sign_in_allowed", {
@@ -31,6 +32,13 @@ async function attemptAllowed(account: string): Promise<boolean> {
     p_account: account,
   });
   return !error && data === true;
+}
+
+async function recordFailure(account: string): Promise<void> {
+  await createAdminClient().rpc("record_staff_sign_in_failure", {
+    p_ip: await currentRequestIp(),
+    p_account: account,
+  });
 }
 
 export async function staffSignIn(_prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
@@ -43,7 +51,10 @@ export async function staffSignIn(_prev: StaffFormState, formData: FormData): Pr
   // Supabase Auth refuses passwords for member accounts (password-verification hook). Either way
   // the answer is the same.
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: WRONG };
+  if (error) {
+    await recordFailure(parsed.data.email);
+    return { error: WRONG };
+  }
 
   const session = await getStaffSession();
   if (!session?.role) {
@@ -90,7 +101,10 @@ export async function verifyTotp(_prev: StaffFormState, formData: FormData): Pro
   if (!factorId) return { error: "Set up your authenticator app first." };
 
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: parsed.data });
-  if (error) return { error: "That code didn’t work. Check the time on your phone and try again." };
+  if (error) {
+    await recordFailure(session.id);
+    return { error: "That code didn’t work. Check the time on your phone and try again." };
+  }
   redirect("/admin");
 }
 

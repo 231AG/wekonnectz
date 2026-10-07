@@ -29,8 +29,9 @@ insert into public.app_settings (key, value, description) values
   ('photos.min_required', '3'::jsonb, 'Approved photos needed to appear anywhere (BR-8); also the onboarding minimum.'),
   ('photos.max_per_user', '6'::jsonb, 'Photo slots per member (spec §10: up to 6).'),
   ('photos.max_uploads_per_hour', null, 'Photo upload attempts per member per hour. Owner sets (T-19).'),
-  ('staff_login.max_per_ip_per_hour', null, 'Staff password and code attempts per client IP per hour. Owner sets (T-19).'),
-  ('staff_login.max_per_account_per_hour', null, 'Staff password and code attempts per account per hour. Owner sets (T-19).')
+  ('staff_login.max_per_ip_per_hour', null, 'Failed staff sign-in attempts per client IP per hour. Owner sets (T-19).'),
+  ('staff_login.max_per_account_per_hour', null, 'Failed staff sign-in attempts per account from one IP per hour. Owner sets (T-19).'),
+  ('staff_login.max_per_account_all_ips_per_hour', null, 'Failed staff sign-in attempts per account from all IPs per hour (backstop). Owner sets (T-19).')
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -102,13 +103,14 @@ create trigger profile_photos_set_updated_at
 
 -- Visible photo slots in display order: 0, 1, 2 … The first usable photo is the main photo.
 create or replace function public.renumber_photos(p_user_id uuid)
-returns void
+returns uuid
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_primary uuid;
+  v_primary  uuid;
+  v_requeued uuid;
 begin
   with ordered as (
     select id, row_number() over (order by sort_order, created_at) - 1 as n
@@ -135,7 +137,10 @@ begin
          status = case when status = 'APPROVED' and not reviewed_as_primary
                        then 'PENDING_REVIEW'::public.photo_status else status end,
          submitted_at = case when status = 'APPROVED' and not reviewed_as_primary then now() else submitted_at end
-   where id = v_primary and not is_primary;
+   where id = v_primary and not is_primary
+  returning case when status = 'PENDING_REVIEW' and reviewed_at is not null then id end into v_requeued;
+  -- The id of a photo sent back to review as the new main photo (audited by review_photo), else null.
+  return v_requeued;
 end;
 $$;
 
@@ -181,8 +186,11 @@ begin
   perform 1 from public.users where id = p_user_id for update;
 
   -- Abandoned uploads (closed tab, lost connection) free their slot after an hour.
+  -- Abandoned uploads (closed tab, lost connection) free their slot after an hour; a slot whose
+  -- processing started but never finished (server restart) after ten minutes.
   delete from public.profile_photos
-  where user_id = p_user_id and status = 'UPLOADING' and created_at < now() - interval '1 hour';
+  where user_id = p_user_id and status = 'UPLOADING'
+    and (created_at < now() - interval '1 hour' or processing_started_at < now() - interval '10 minutes');
 
   if (select count(*) from public.profile_photos where user_id = p_user_id and status <> 'DELETED')
      >= (public.get_setting('photos.max_per_user'))::int then
@@ -479,7 +487,8 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_owner uuid;
+  v_owner    uuid;
+  v_requeued uuid;
 begin
   if not public.is_staff('MODERATOR') then
     raise exception 'NOT_STAFF' using errcode = '42501';
@@ -491,10 +500,11 @@ begin
     raise exception 'REASON_REQUIRED' using errcode = '22023';
   end if;
 
-  select user_id into v_owner from public.profile_photos
-  where id = p_photo_id and status = 'PENDING_REVIEW'
-  for update;
-  if v_owner is null then
+  -- Lock order matches the member's own photo actions (member row, then photos): no deadlocks.
+  select user_id into v_owner from public.profile_photos where id = p_photo_id;
+  perform 1 from public.users where id = v_owner for update;
+  perform 1 from public.profile_photos where id = p_photo_id and status = 'PENDING_REVIEW' for update;
+  if v_owner is null or not found then
     raise exception 'PHOTO_NOT_PENDING' using errcode = 'P0002';
   end if;
   if v_owner = auth.uid() then
@@ -511,13 +521,13 @@ begin
 
   -- A rejected main photo stops being the main photo; the next one takes its place (and is checked
   -- again as a main photo if it was approved as a secondary one).
-  perform public.renumber_photos(v_owner);
+  v_requeued := public.renumber_photos(v_owner);
 
   perform public.audit(
     case when p_approve then 'PHOTO_APPROVED'::public.audit_action else 'PHOTO_REJECTED'::public.audit_action end,
     'profile_photo',
     p_photo_id::text,
-    jsonb_strip_nulls(jsonb_build_object('user_id', v_owner, 'reason', p_reason))
+    jsonb_strip_nulls(jsonb_build_object('user_id', v_owner, 'reason', p_reason, 'requeued_photo_id', v_requeued))
   );
 end;
 $$;
@@ -538,23 +548,51 @@ as $$
     and public.effective_account_status(u.status, u.suspended_until) not in ('BANNED', 'DELETED', 'SUSPENDED');
 $$;
 
--- Staff sign-in attempts (password and TOTP code), limited per client IP and per account. Supabase
--- Auth's own per-IP limits only see our server's address, so this is the real brute-force limit.
+-- Staff sign-in attempts (password and TOTP code). Supabase Auth's own per-IP limits only see our
+-- server's address, so these are the real brute-force limits. Only FAILED attempts are counted, and
+-- the tight per-account limit is per (account, IP): someone who knows a staff email can't lock that
+-- person out from other addresses. A looser account-wide limit is the backstop against many IPs.
+create or replace function public.rate_limit_count(p_bucket text, p_subject text, p_window_seconds integer)
+returns integer
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select c.count from public.rate_limit_counters c
+    where c.bucket = p_bucket
+      and c.subject_hash = public.hmac_with_pepper('rl:' || p_bucket || ':' || coalesce(p_subject, ''))
+      and c.window_start = to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds)
+  ), 0);
+$$;
+
 create or replace function public.staff_sign_in_allowed(p_ip text, p_account text)
 returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select public.rate_limit_count('staff_login.ip', coalesce(p_ip, 'unknown'), 3600)
+           < (public.get_setting('staff_login.max_per_ip_per_hour'))::int
+     and public.rate_limit_count('staff_login.account_ip', lower(coalesce(p_account, '')) || '|' || coalesce(p_ip, 'unknown'), 3600)
+           < (public.get_setting('staff_login.max_per_account_per_hour'))::int
+     and public.rate_limit_count('staff_login.account', lower(coalesce(p_account, '')), 3600)
+           < (public.get_setting('staff_login.max_per_account_all_ips_per_hour'))::int;
+$$;
+
+-- Called after a wrong password or code.
+create or replace function public.record_staff_sign_in_failure(p_ip text, p_account text)
+returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
-declare
-  v_ip_ok      boolean;
-  v_account_ok boolean;
 begin
-  v_ip_ok := public.rate_limit_hit('staff_login.ip', coalesce(p_ip, 'unknown'), 3600,
-                                   (public.get_setting('staff_login.max_per_ip_per_hour'))::int);
-  v_account_ok := public.rate_limit_hit('staff_login.account', lower(coalesce(p_account, '')), 3600,
-                                        (public.get_setting('staff_login.max_per_account_per_hour'))::int);
-  return v_ip_ok and v_account_ok;
+  perform public.rate_limit_hit('staff_login.ip', coalesce(p_ip, 'unknown'), 3600, 2147483647);
+  perform public.rate_limit_hit('staff_login.account_ip', lower(coalesce(p_account, '')) || '|' || coalesce(p_ip, 'unknown'), 3600, 2147483647);
+  perform public.rate_limit_hit('staff_login.account', lower(coalesce(p_account, '')), 3600, 2147483647);
 end;
 $$;
 
@@ -721,6 +759,8 @@ revoke all on function public.staff_queue_counts() from public, anon;
 revoke all on function public.review_photo(uuid, boolean, public.photo_rejection_reason) from public, anon;
 revoke all on function public.current_staff_role() from public, anon;
 revoke all on function public.staff_sign_in_allowed(text, text) from public, anon, authenticated;
+revoke all on function public.record_staff_sign_in_failure(text, text) from public, anon, authenticated;
+revoke all on function public.rate_limit_count(text, text, integer) from public, anon, authenticated, service_role;
 revoke all on function public.guard_auth_user_insert() from public, anon, authenticated, service_role;
 revoke all on function public.guard_member_email() from public, anon, authenticated, service_role;
 
@@ -736,6 +776,7 @@ grant execute on function public.photos_for_viewer(uuid, uuid) to service_role;
 grant execute on function public.review_photo_paths(uuid[]) to service_role;
 grant execute on function public.bootstrap_super_admin(uuid) to service_role;
 grant execute on function public.staff_sign_in_allowed(text, text) to service_role;
+grant execute on function public.record_staff_sign_in_failure(text, text) to service_role;
 
 -- Staff functions check is_staff() (role + aal2) themselves and return no storage paths.
 grant execute on function public.staff_photo_queue(integer) to authenticated;
