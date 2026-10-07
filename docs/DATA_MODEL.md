@@ -71,15 +71,15 @@ Settings added: `geo.enforcement_mode` = "SIGNUP_ONLY" (owner decision), `otp.ma
 
 ### Phase 2 ✅ (`20261007000000_profile_onboarding.sql`)
 
-| Table / change    | Key columns                                                                                                      | Client access               | Notes                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------- |
-| `areas`           | id, county, name, active; unique(county, name)                                                                   | authenticated SELECT active | BR-20 controlled list. Content: T-09 (DEV-ONLY sample in seed) |
-| `interests`       | id, name, slug, active                                                                                           | authenticated SELECT active | Content: T-10                                                  |
-| `user_interests`  | user_id, interest_id (PK both)                                                                                   | SELECT own                  | Replaced as a set by `save_interests_and_bio()`                |
-| `user_settings`   | user_id PK, casual_message_permission (ANYONE/NOBODY), notification_prefs                                        | SELECT own                  | Created by trigger with each users row                         |
-| `legal_documents` | document, version (PK), title, is_current, published_at                                                          | anon + authenticated SELECT | One current version per document. Content: T-12                |
-| `consents`        | + FK (document, version) → legal_documents                                                                       | SELECT own                  | Written only by `accept_current_documents()`                   |
-| `profiles`        | + display_name, gender, seeking_genders[], bio, area_id, intent_relationship, intent_casual, is_profile_complete | SELECT own                  | Written only by the functions below                            |
+| Table / change    | Key columns                                                                                                      | Client access               | Notes                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------- |
+| `areas`           | id, county, name, active; unique(county, name)                                                                   | authenticated SELECT active | BR-20 controlled list. Content: T-09 (DEV-ONLY sample in seed)                      |
+| `interests`       | id, name, slug, active                                                                                           | authenticated SELECT active | Content: T-10                                                                       |
+| `user_interests`  | user_id, interest_id (PK both)                                                                                   | SELECT own                  | Replaced as a set by `save_interests_and_bio()`                                     |
+| `user_settings`   | user_id PK, casual_message_permission (ANYONE/NOBODY), notification_prefs                                        | SELECT own                  | Created by trigger with each users row                                              |
+| `legal_documents` | document, version (PK), title, body, content_sha256 (generated), is_current, published_at                        | anon + authenticated SELECT | One current version per document. Published text immutable (trigger). Content: T-12 |
+| `consents`        | + FK (document, version) → legal_documents                                                                       | SELECT own                  | Written only by `accept_current_documents()`                                        |
+| `profiles`        | + display_name, gender, seeking_genders[], bio, area_id, intent_relationship, intent_casual, is_profile_complete | SELECT own                  | Written only by the functions below                                                 |
 
 | Function                                                          | Callable by         | Purpose                                                    |
 | ----------------------------------------------------------------- | ------------------- | ---------------------------------------------------------- |
