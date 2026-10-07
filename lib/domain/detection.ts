@@ -160,6 +160,20 @@ const NUMBER_WORD: Record<string, string> = {
   eight: "8",
   nine: "9",
 };
+const TEENS: Record<string, string> = {
+  ten: "10",
+  eleven: "11",
+  twelve: "12",
+  thirteen: "13",
+  fourteen: "14",
+  fifteen: "15",
+  sixteen: "16",
+  seventeen: "17",
+  eighteen: "18",
+  nineteen: "19",
+};
+const TEENS_RUN =
+  /(?<![a-z])(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)(?![a-z])/g;
 const TENS: Record<string, string> = {
   twenty: "2",
   thirty: "3",
@@ -176,6 +190,8 @@ const NUMBER_WORD_RUN = /(?<![a-z])(?:zero|oh|one|two|three|four|five|six|seven|
 
 /** Everything turned towards digits, for phone checks. */
 function digitView(text: string): string {
+  // Teens: "twelve" → "12".
+  text = text.replace(TEENS_RUN, (w) => TEENS[w]);
   // Tens: "seventy-seven" → "77", "fifty six" → "56", "seventy" → "70".
   text = text.replace(TENS_RUN, (_m, tens: string, unit?: string) => `${TENS[tens]}${unit ? NUMBER_WORD[unit] : "0"}`);
   // Whole runs of number words: "zerosevenseven" → "077" ("someone" is untouched).
@@ -228,8 +244,9 @@ const LINK = [
   /(?<![a-z])www\s*\./,
   /(?<![a-z])(?:wa|t)\s*\.\s*me\s*\//,
   /(?<![a-z])(?:bit\.ly|tinyurl|linktr\.ee)(?![a-z])/,
-  // name.tld, name,tld, name[.]tld, name(dot)tld — any TLD when nothing but the dot separates them
-  new RegExp(`(?<![a-z0-9])[a-z0-9-]{3,63}(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\])${TLD}(?![a-z])`),
+  // name.tld, name[.]tld, name(dot)tld — any TLD when nothing but the dot separates them. Not word lists
+  // written without spaces: "Gym.Music.TV", "Love.Me.Love" (a commas-only list is caught below only for com/net/org).
+  new RegExp(`(?<![a-z0-9.])[a-z0-9-]{3,63}(?:\\.|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\])${TLD}(?![a-z])(?!\\.[a-z])`),
   // name . com, name dot com, name dotcom, name [dot] org — spaced out, only com/net/org: "Football, tv",
   // "Born in Monrovia, LR", "Family. Me time" and "polka dot me" are ordinary sentences
   new RegExp(
@@ -276,7 +293,7 @@ const PRICE = [
   new RegExp(`(?<![a-z])${NUM_WORD}\\s+(?:us\\s+)?(?:dollars?|dollas?|bucks|ld|lrd|usd)(?![a-z])`),
   /\d\s*dollas?(?![a-z])/,
   // charge 50, rate: 100, price $20, fee 500 — not "rate 10/10" or "charge 4 christ"
-  /(?<![a-z])(?:charge|rate|price|fee)s?\s*[:=-]?\s*(?:(?:\$|usd|lrd|ld|l\$)\s*\d|\d{2,}(?![\d\s]*\/))/,
+  /(?<![a-z])(?:charge|rate|price|fee)s?\s*[:=-]?\s*(?:(?:\$|usd|lrd|ld|l\$)\s*\d|\d{2,}(?!\d)(?![\d\s]*\/))/,
   // momo only in a money context — it is also a common name ("I'm Momo, 25")
   // and an amount, not a birth year or a height: "Momo, 28, 180cm", "I'm Momo, born 1999"
   new RegExp(`(?<![a-z])momo(?![a-z]).{0,20}${AMOUNT}|${AMOUNT}.{0,20}(?<![a-z])momo(?![a-z])`),
@@ -291,7 +308,8 @@ const PRICE = [
 const MONEY_REQUEST = [
   // "I don't need money" / "not money" are not requests.
   /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend|loan)\s+me\s+(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
-  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:need|want|borrow)\s+(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
+  // "I need money" — not "if you need money", "men who want money"
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?<!(?:you|who|that|which|men|guys|people|they|he|she)\s+(?:[a-z']+\s+)?)(?:need|want|borrow)\s+(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
   // "send small money", "give some money pls" — but not "I send money home"
   /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend)\s+(?:some|sum|small|little)\s+money(?![a-z])/,
   /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend)\s+money\s+(?:to\s+me|pls|please|plz)(?![a-z])/,
@@ -340,6 +358,25 @@ interface DigitGroup {
   digits: string;
   start: number;
   end: number;
+  /** Built only from single digits (set while merging). */
+  singles?: boolean;
+}
+
+/** Separators a written-out number uses: "77 012 3456", "77-012-3456", "77.012.3456", "(77) 012…". */
+const PHONE_SEPARATOR = /^(?:\s|[-.]|\s-\s|\)\s?)$/;
+
+/** Neighbouring single digits are one group ("seven seven 0123456" → 77 + 0123456). */
+function mergeSingleDigits(view: string, groups: DigitGroup[]): DigitGroup[] {
+  const merged: DigitGroup[] = [];
+  for (const g of groups) {
+    const last = merged.at(-1);
+    if (last?.singles && g.digits.length === 1 && !/[a-z]/.test(view.slice(last.end, g.start))) {
+      merged[merged.length - 1] = { ...last, digits: last.digits + g.digits, end: g.end };
+    } else {
+      merged.push({ ...g, singles: g.digits.length === 1 });
+    }
+  }
+  return merged;
 }
 
 function isPhoneRun(view: string, groups: DigitGroup[]): boolean {
@@ -348,9 +385,18 @@ function isPhoneRun(view: string, groups: DigitGroup[]): boolean {
   if (/^(?:0|231)/.test(digits) || view.slice(Math.max(0, groups[0].start - 2), groups[0].start).includes("+")) {
     return true;
   }
-  if (groups.every((g) => g.digits.length === 1)) return true;
-  const wordsBetween = groups.slice(1).some((g, i) => /[a-z]/.test(view.slice(groups[i].end, g.start)));
-  return groups.slice(1).every((g) => g.digits.length >= 3 && !(wordsBetween && YEAR.test(g.digits)));
+  const merged = mergeSingleDigits(view, groups);
+  if (merged.length === 1) return true;
+  if (!merged.slice(1).every((g) => g.digits.length >= 3)) return false;
+  // Between groups: phone-style separators, or words ("77 x 012 x 3456"). Not lists such as
+  // "Scores 77, 100, 1000" or "22. 180. 2000.".
+  // After spelled-out digits a comma is fine too: "seven seven, 012 3456".
+  const gaps = merged.slice(1).map((g, i) => view.slice(merged[i].end, g.start));
+  const separatorOk = (gap: string, i: number) =>
+    PHONE_SEPARATOR.test(gap) || /[a-z]/.test(gap) || (merged[i].singles === true && /^,\s?$/.test(gap));
+  if (!gaps.every(separatorOk)) return false;
+  const wordsBetween = gaps.some((gap) => /[a-z]/.test(gap));
+  return !(wordsBetween && merged.slice(1).some((g) => YEAR.test(g.digits)));
 }
 
 function hasPhone(base: string): boolean {
@@ -371,15 +417,17 @@ function hasPhone(base: string): boolean {
       length += groups[j].digits.length;
       if (isPhoneRun(view, groups.slice(i, j + 1))) return true;
     }
-    // A prefixed start and the rest further away: "0770 … 123456".
-    const next = groups[i + 1];
-    if (
-      next &&
-      next.start - first.end <= MAX_PREFIXED_GAP &&
-      /^(?:0|231)(?:77|88|55|33|22)/.test(first.digits) &&
-      LIBERIAN_MOBILE_EXACT.test(first.digits + next.digits)
-    ) {
-      return true;
+    // The start and the rest further apart: "0770 (that's my orange line) 123456", "770 is my line, 123456".
+    // The rest may itself be split by phone separators: "770 (orange) and the rest: 123 456".
+    if (first.digits.length >= 3 && /^(?:0|231)?(?:77|88|55|33|22)/.test(first.digits)) {
+      let rest = "";
+      for (let k = i + 1; k < groups.length && rest.length < 8; k += 1) {
+        const gap = view.slice(groups[k - 1].end, groups[k].start);
+        if (k === i + 1 ? gap.length > MAX_PREFIXED_GAP : !PHONE_SEPARATOR.test(gap)) break;
+        if (groups[k].digits.length < 3 || YEAR.test(groups[k].digits)) break;
+        rest += groups[k].digits;
+        if (LIBERIAN_MOBILE_EXACT.test(first.digits + rest)) return true;
+      }
     }
   }
 

@@ -49,6 +49,17 @@ const MUST_BLOCK: Record<string, string[]> = {
     "0 7 7 0\n1 2 3\n4 5 6",
   ],
   "phone numbers, disguised": [
+    "770 is my orange line, 123456",
+    "770 (orange) and the rest: 123 456",
+    "seven seven 0123456",
+    "seven seven, 012 3456",
+    "seven seven zero 123 456",
+    "7 seven 0 123456",
+    "zero seven seven, zero twelve, three four five six",
+    "077 0 twelve 3456",
+    "zero seven seven zero, twelve, thirty four, fifty six",
+    "(77) 012 3456",
+    "77-012-3456",
     "0 double 7 0123456",
     "zero double seven 012 3456",
     "O double 7, 012 3456",
@@ -203,6 +214,25 @@ const MUST_BLOCK: Record<string, string[]> = {
 };
 
 const MUST_PASS = [
+  "Cooking,music,tv",
+  "Hiking,online games",
+  "Born in Monrovia,LR",
+  "Swimming,me time",
+  "God first,family,me",
+  "Food,info sessions",
+  "Movies,series,tv shows",
+  "Gym.Music.TV",
+  "Love.Me.Love",
+  "If you only want money, swipe left",
+  "Don't message me if you need money",
+  "Men who need money, pass",
+  "Not for guys who want money",
+  "I don't do men that need money",
+  "You want money? Get a job",
+  "22 / 175 / 2001",
+  "Age, height, born: 22, 175, 2001",
+  "22. 180. 2000.",
+  "Scores 77, 100, 1000",
   "Psalm 22:1, Proverbs 3:5-6, John 3:16",
   "Matthew 22:37-39, 1 Cor 13:4-7",
   "33, born 1991, 5ft 11",
@@ -379,6 +409,7 @@ describe("OD-31 conversation mode", () => {
     "My mom always said: never borrow money",
     "Raised by Momo, my grandma",
     "Momo, 28, 180cm",
+    "Don't message me if you need money",
   ])("does not flag ordinary chat %j", (text) => {
     expect(chat(text).flagged).toBe(false);
   });
@@ -410,6 +441,8 @@ describe("performance (no catastrophic backtracking)", () => {
     "double 7 ".repeat(600),
     "seventy seven ".repeat(400),
     "❼ ".repeat(2500),
+    "rate " + "1".repeat(4994) + "/",
+    "fee " + "1".repeat(4995) + "/",
   ];
   it.each(adversarial.map((s, i) => [i, s] as const))("input #%i (%#) stays fast", (_i, text) => {
     const start = performance.now();
