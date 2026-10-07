@@ -15,6 +15,8 @@ function ChoiceChip({
   children,
   className,
   tone = "default",
+  invalid,
+  describedBy,
 }: {
   type: "radio" | "checkbox";
   name: string;
@@ -23,10 +25,21 @@ function ChoiceChip({
   children: React.ReactNode;
   className?: string;
   tone?: "default" | "card";
+  /** Set when the group has an error, so screen readers announce it on each option. */
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   return (
     <label className={cn("relative inline-flex cursor-pointer", tone === "card" && "flex-1", className)}>
-      <input type={type} name={name} value={value} defaultChecked={defaultChecked} className="peer sr-only" />
+      <input
+        type={type}
+        name={name}
+        value={value}
+        defaultChecked={defaultChecked}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        className="peer sr-only"
+      />
       <span
         className={cn(
           "inline-flex min-h-11 w-full items-center justify-center gap-2 border-[1.5px] font-bold transition-colors",

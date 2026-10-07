@@ -56,6 +56,13 @@ function RulesForm({
           </li>
         ))}
       </ul>
+      <Link
+        href="/rules"
+        target="_blank"
+        className="inline-flex min-h-11 items-center text-[15px] font-semibold text-pending underline"
+      >
+        Read the full Community rules
+      </Link>
       <label className="flex min-h-11 cursor-pointer items-start gap-3.5 pt-1">
         <input
           type="checkbox"

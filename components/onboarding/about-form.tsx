@@ -11,8 +11,8 @@ import type { StepAction, StepState } from "@/lib/onboarding/types";
 
 import { useFieldErrors } from "./use-field-errors";
 
-export type AreaOption = { id: string; county: string; name: string };
-export type AboutDefaults = {
+type AreaOption = { id: string; county: string; name: string };
+type AboutDefaults = {
   displayName: string;
   gender: string;
   seeking: string[];
@@ -57,26 +57,54 @@ function AboutForm({ action, areas, defaults }: { action: StepAction; areas: Are
         <FormError id="displayName-error">{e.displayName}</FormError>
       </div>
 
-      <fieldset className="flex flex-col gap-2" aria-describedby="gender-error">
+      <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">I am</legend>
         <div className="flex gap-2">
-          <ChoiceChip type="radio" name="gender" value="WOMAN" defaultChecked={v.gender === "WOMAN"}>
+          <ChoiceChip
+            type="radio"
+            name="gender"
+            value="WOMAN"
+            defaultChecked={v.gender === "WOMAN"}
+            invalid={Boolean(e.gender)}
+            describedBy="gender-error"
+          >
             Woman
           </ChoiceChip>
-          <ChoiceChip type="radio" name="gender" value="MAN" defaultChecked={v.gender === "MAN"}>
+          <ChoiceChip
+            type="radio"
+            name="gender"
+            value="MAN"
+            defaultChecked={v.gender === "MAN"}
+            invalid={Boolean(e.gender)}
+            describedBy="gender-error"
+          >
             Man
           </ChoiceChip>
         </div>
         <FormError id="gender-error">{e.gender}</FormError>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-2" aria-describedby="seeking-error">
+      <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Interested in</legend>
         <div className="flex gap-2">
-          <ChoiceChip type="checkbox" name="seeking" value="WOMAN" defaultChecked={v.seeking.includes("WOMAN")}>
+          <ChoiceChip
+            type="checkbox"
+            name="seeking"
+            value="WOMAN"
+            defaultChecked={v.seeking.includes("WOMAN")}
+            invalid={Boolean(e.seeking)}
+            describedBy="seeking-error"
+          >
             Women
           </ChoiceChip>
-          <ChoiceChip type="checkbox" name="seeking" value="MAN" defaultChecked={v.seeking.includes("MAN")}>
+          <ChoiceChip
+            type="checkbox"
+            name="seeking"
+            value="MAN"
+            defaultChecked={v.seeking.includes("MAN")}
+            invalid={Boolean(e.seeking)}
+            describedBy="seeking-error"
+          >
             Men
           </ChoiceChip>
         </div>
@@ -89,6 +117,7 @@ function AboutForm({ action, areas, defaults }: { action: StepAction; areas: Are
           <select
             id="county"
             className={selectClass}
+            aria-describedby="areaId-error"
             value={county}
             onChange={(event) => setCounty(event.target.value)}
           >
@@ -107,23 +136,36 @@ function AboutForm({ action, areas, defaults }: { action: StepAction; areas: Are
             id="areaId"
             name="areaId"
             className={selectClass}
-            defaultValue={communities.some((a) => a.id === v.areaId) ? v.areaId : ""}
-            disabled={!county}
+            defaultValue={areas.some((a) => a.id === v.areaId) ? v.areaId : ""}
             aria-invalid={e.areaId ? true : undefined}
             aria-describedby="areaId-error"
           >
             <option value="">Choose…</option>
-            {communities.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
+            {county
+              ? communities.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))
+              : // No county chosen (or JavaScript off): every community, grouped by county.
+                counties.map((c) => (
+                  <optgroup key={c} label={c}>
+                    {areas
+                      .filter((a) => a.county === c)
+                      .sort((x, y) => x.name.localeCompare(y.name))
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
           </select>
         </div>
       </div>
       <FormError id="areaId-error">{e.areaId}</FormError>
 
-      <fieldset className="flex flex-col gap-2" aria-describedby="intent-help intent-error">
+      <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Looking for</legend>
         <div className="flex gap-2.5">
           <ChoiceChip
@@ -132,15 +174,33 @@ function AboutForm({ action, areas, defaults }: { action: StepAction; areas: Are
             name="intent"
             value="RELATIONSHIP"
             defaultChecked={v.intent === "RELATIONSHIP"}
+            invalid={Boolean(e.intent)}
+            describedBy="intent-help intent-error"
           >
             <Heart className="size-6 text-relationship" strokeWidth={1.8} aria-hidden />
             Relationship
           </ChoiceChip>
-          <ChoiceChip tone="card" type="radio" name="intent" value="CASUAL" defaultChecked={v.intent === "CASUAL"}>
+          <ChoiceChip
+            tone="card"
+            type="radio"
+            name="intent"
+            value="CASUAL"
+            defaultChecked={v.intent === "CASUAL"}
+            invalid={Boolean(e.intent)}
+            describedBy="intent-help intent-error"
+          >
             <Flame className="size-6 text-casual" strokeWidth={1.8} aria-hidden />
             Casual
           </ChoiceChip>
-          <ChoiceChip tone="card" type="radio" name="intent" value="BOTH" defaultChecked={v.intent === "BOTH"}>
+          <ChoiceChip
+            tone="card"
+            type="radio"
+            name="intent"
+            value="BOTH"
+            defaultChecked={v.intent === "BOTH"}
+            invalid={Boolean(e.intent)}
+            describedBy="intent-help intent-error"
+          >
             <span className="flex gap-1">
               <Heart className="size-6 text-relationship" strokeWidth={1.8} aria-hidden />
               <Flame className="size-6 text-casual" strokeWidth={1.8} aria-hidden />

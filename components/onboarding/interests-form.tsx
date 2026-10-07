@@ -11,7 +11,7 @@ import type { StepAction, StepState } from "@/lib/onboarding/types";
 
 import { useFieldErrors } from "./use-field-errors";
 
-export type InterestOption = { id: string; name: string };
+type InterestOption = { id: string; name: string };
 
 const BIO_MAX = 500;
 
@@ -33,7 +33,7 @@ function InterestsForm({
 
   return (
     <form action={dispatch} onChange={onEdit} className="flex flex-1 flex-col gap-5" noValidate>
-      <fieldset className="flex flex-col gap-2" aria-describedby="interests-help interestIds-error">
+      <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-[13px] font-semibold text-muted-foreground">Interests</legend>
         <p id="interests-help" className="mb-1 text-[13px] text-muted-foreground">
           Choose at least 3.
@@ -46,6 +46,8 @@ function InterestsForm({
               name="interestIds"
               value={i.id}
               defaultChecked={values.interestIds.includes(i.id)}
+              invalid={Boolean(e.interestIds)}
+              describedBy="interests-help interestIds-error"
               className="[&>span]:rounded-full"
             >
               {i.name}
@@ -58,8 +60,12 @@ function InterestsForm({
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <Label htmlFor="bio">Bio</Label>
-          <span className="text-xs text-muted-foreground" aria-live="polite">
+          <span className="text-xs text-muted-foreground" aria-hidden>
             {bioLength}/{BIO_MAX}
+          </span>
+          {/* Announced only near the limit, not on every keystroke. */}
+          <span className="sr-only" aria-live="polite">
+            {BIO_MAX - bioLength <= 50 ? `${BIO_MAX - bioLength} characters left` : ""}
           </span>
         </div>
         <Textarea

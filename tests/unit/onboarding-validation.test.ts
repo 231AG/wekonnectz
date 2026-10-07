@@ -4,7 +4,7 @@ import { basicsSchema, fieldErrors, interestsBioSchema } from "@/lib/validation/
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-describe("basics form (§10 steps 5–6)", () => {
+describe("§10 steps 5–6 basics form", () => {
   const valid = { displayName: "Musu", gender: "WOMAN", seeking: ["MAN"], areaId: uuid(1), intent: "BOTH" };
 
   it("accepts a valid form and trims the name", () => {
@@ -19,6 +19,11 @@ describe("basics form (§10 steps 5–6)", () => {
     expect(basicsSchema.safeParse({ ...valid, displayName }).success).toBe(true);
   });
 
+  it("BR-20: the area must be an id from the controlled list, never free text", () => {
+    expect(basicsSchema.safeParse({ ...valid, areaId: "Sinkor" }).success).toBe(false);
+    expect(basicsSchema.safeParse({ ...valid, areaId: "6.3005,-10.7969" }).success).toBe(false);
+  });
+
   it("requires at least one 'interested in' and an intent", () => {
     const r = basicsSchema.safeParse({ ...valid, seeking: [], intent: "" });
     expect(r.success).toBe(false);
@@ -26,14 +31,14 @@ describe("basics form (§10 steps 5–6)", () => {
   });
 });
 
-describe("interests and bio (§10 steps 7–8)", () => {
+describe("§10 steps 7–8 interests and bio", () => {
   it("needs at least 3 distinct interests", () => {
     expect(interestsBioSchema.safeParse({ interestIds: [uuid(1), uuid(2)], bio: "" }).success).toBe(false);
     expect(interestsBioSchema.safeParse({ interestIds: [uuid(1), uuid(1), uuid(2)], bio: "" }).success).toBe(false);
     expect(interestsBioSchema.safeParse({ interestIds: [uuid(1), uuid(2), uuid(3)], bio: "" }).success).toBe(true);
   });
 
-  it("caps the bio at 500 characters", () => {
+  it("§10 step 8: caps the bio at 500 characters", () => {
     const ids = [uuid(1), uuid(2), uuid(3)];
     expect(interestsBioSchema.safeParse({ interestIds: ids, bio: "a".repeat(500) }).success).toBe(true);
     expect(interestsBioSchema.safeParse({ interestIds: ids, bio: "a".repeat(501) }).success).toBe(false);
