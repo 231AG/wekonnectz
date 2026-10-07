@@ -27,3 +27,11 @@ ID document (OD-5 — before Casual, Phase 8 if adopted); notification inbox, pr
 - [x] Retention deletes only expired images; decision kept (pgTAP + e2e)
 - [ ] Owner approves the pose list and escalation threshold (T-19), retention (OD-6), OD-5
 - [ ] `CRON_SECRET` set on Vercel (T-27)
+
+## Self-audit
+
+Three rounds; the last clean.
+
+- **Round 1** (1 HIGH, 5 MEDIUM, 6 LOW): a rejected main photo whose successor went back to review could make an account ACTIVE with 2 approved photos (account state now judged at commit; regression test); back/forward could re-show a selfie without an audit row (selfie now loads per mount through a logging action, stored uncached); ACTIVE member stuck on Under review; suspended members routed to review/verify errors; doubt about age only escalates on resubmission (Q23); unlimited stray selfie uploads; plus camera cleanup, messages, Sentry, test gaps. All fixed except Q23 (owner question; Phase 5 flag proposed).
+- **Round 2** (2 MEDIUM, 4 LOW): the previous submission's selfie and checklist could carry over to the next (panel keyed per submission, form locked until the selfie loads, and the database now refuses a decision without the reviewer's own logged view); expired suspensions read as ACTIVE (pre-existing, recorded for Phase 5); suspended routing, error messages, single camera stream. Fixed.
+- **Round 3**: clean (one message added).

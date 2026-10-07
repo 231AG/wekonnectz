@@ -20,6 +20,7 @@ const DB_MESSAGES: Record<string, string> = {
   VERIFICATION_NOT_PENDING: "Already decided by someone else.",
   ADMIN_REQUIRED: "This one is escalated: an admin must decide it.",
   OWN_CONTENT: "You can’t review your own account.",
+  SELFIE_NOT_VIEWED: "Open the selfie before deciding.",
 };
 
 /**
