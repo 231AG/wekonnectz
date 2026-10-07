@@ -53,3 +53,18 @@ No fake profiles, impersonation, other people’s photos, nudity or sexually exp
   ('PRIVACY', 'draft-2026-10', 'Privacy policy', true, $privacy$The Privacy policy will be published here after Liberian legal review. Until then this page is a placeholder.
 
 What we already do: we never collect your precise location, your verification selfie is seen only by reviewers, and phone numbers are stored only in protected form.$privacy$); -- DEV-ONLY
+
+-- DEV-ONLY verification settings until the owner approves T-19 / OD-6. Proposed pose list (no left/right:
+-- front cameras mirror the picture).
+update public.app_settings set value = '[
+  "Hold up two fingers next to your face",
+  "Give a thumbs up next to your face",
+  "Hold up three fingers next to your face",
+  "Put one hand flat on top of your head",
+  "Touch your chin with one finger",
+  "Cover one eye with your hand",
+  "Make an OK sign next to your face",
+  "Hold up an open hand, palm facing the camera"
+]'::jsonb where key = 'verification.pose_prompts'; -- DEV-ONLY
+update public.app_settings set value = '3'::jsonb where key = 'verification.rejections_before_escalation'; -- DEV-ONLY
+update public.app_settings set value = '90'::jsonb where key = 'verification.selfie_retention_days';   -- DEV-ONLY

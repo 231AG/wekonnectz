@@ -24,7 +24,7 @@ select is((select casual_message_permission::text from public.user_settings wher
 
 -- Progress before anything.
 select is(public.onboarding_progress_for('cccccccc-0000-0000-0000-000000000001'),
-  '{"has_dob": true, "rules_accepted": false, "basics_done": false, "interests_bio_done": false, "photos_done": false}'::jsonb,
+  '{"has_dob": true, "rules_accepted": false, "basics_done": false, "interests_bio_done": false, "photos_done": false, "verification": "NOT_STARTED"}'::jsonb,
   'fresh member: only the DOB step is done');
 
 -- §10 step 4: rules at the exact current versions.
@@ -79,7 +79,7 @@ select lives_ok($$ select public.save_interests_and_bio('cccccccc-0000-0000-0000
 select is((select count(*)::int from public.user_interests where user_id = 'cccccccc-0000-0000-0000-000000000001'), 3,
   'interests are replaced, not appended');
 select is(public.onboarding_progress_for('cccccccc-0000-0000-0000-000000000001'),
-  '{"has_dob": true, "rules_accepted": true, "basics_done": true, "interests_bio_done": true, "photos_done": false}'::jsonb,
+  '{"has_dob": true, "rules_accepted": true, "basics_done": true, "interests_bio_done": true, "photos_done": false, "verification": "NOT_STARTED"}'::jsonb,
   'all Phase 2 steps done');
 
 -- A new document version means the rules must be accepted again.

@@ -74,7 +74,12 @@ select is_empty(
           'staff_photo_queue',        -- Phase 3: raises unless is_staff() (role + aal2); no storage paths
           'staff_queue_counts',       -- Phase 3: raises unless is_staff(); counts only
           'review_photo',             -- Phase 3: raises unless is_staff(); audited (BR-34)
-          'current_staff_role'        -- Phase 3: caller's own staff role only
+          'current_staff_role',       -- Phase 3: caller's own staff role only
+          'mark_notifications_read',  -- Phase 4: caller's own notifications only
+          'staff_verification_queue', -- Phase 4: raises unless is_staff(); no storage paths
+          'staff_verification_detail',-- Phase 4: raises unless is_staff(); no storage paths
+          'log_selfie_view',          -- Phase 4: raises unless is_staff(); writes SELFIE_VIEWED (BR-34)
+          'review_verification'       -- Phase 4: raises unless is_staff() (ADMIN if escalated); audited
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
