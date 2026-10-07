@@ -23,8 +23,11 @@ export default async function VerifyStepPage() {
     v === "REJECTED" ? reviewStatus(member.id) : Promise.resolve(null),
   ]);
   if ("error" in started) {
-    if (["PHOTOS_REQUIRED", "PROFILE_INCOMPLETE"].includes(started.error.kind === "db" ? started.error.code : "")) {
-      redirect(nextStepFor(member));
+    const code = started.error.kind === "db" ? started.error.code : "";
+    // Another tab submitted, the account is restricted, or an earlier step is undone: go where the
+    // database says the member belongs.
+    if (["PHOTOS_REQUIRED", "PROFILE_INCOMPLETE", "ALREADY_SUBMITTED", "ACCOUNT_CANNOT_EDIT"].includes(code)) {
+      redirect(code === "ALREADY_SUBMITTED" ? "/onboarding/review" : nextStepFor(member));
     }
     throw new Error("verification unavailable");
   }

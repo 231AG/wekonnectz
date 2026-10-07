@@ -74,18 +74,17 @@ export async function reservePhotoUpload(
  * and files re-sent with an old upload token after their slot was finished. A project-wide sweep for
  * members who never come back is a scheduled job (Phase 12).
  */
-async function sweepQuarantine(userId: string): Promise<void> {
+export async function sweepQuarantine(userId: string): Promise<void> {
   const admin = createAdminClient();
-  const [{ data: files }, { data: open }] = await Promise.all([
+  const [{ data: files }, { data: open }, { data: capture }] = await Promise.all([
     admin.storage.from(QUARANTINE).list(userId, { limit: 100 }),
     // Every open slot keeps its file, including one another tab is processing right now.
     admin.from("profile_photos").select("id").eq("user_id", userId).eq("status", "UPLOADING"),
+    // …and the member's open selfie capture ("v-<verification id>").
+    admin.from("verifications").select("id").eq("user_id", userId).eq("status", "AWAITING_SELFIE"),
   ]);
-  const keep = new Set((open ?? []).map((r) => r.id));
-  // Selfie captures ("v-…") are managed by lib/storage/verification.ts.
-  const stale = (files ?? [])
-    .filter((f) => !f.name.startsWith("v-") && !keep.has(f.name))
-    .map((f) => `${userId}/${f.name}`);
+  const keep = new Set([...(open ?? []).map((r) => r.id), ...(capture ?? []).map((r) => `v-${r.id}`)]);
+  const stale = (files ?? []).filter((f) => !keep.has(f.name)).map((f) => `${userId}/${f.name}`);
   if (stale.length) await admin.storage.from(QUARANTINE).remove(stale);
 }
 

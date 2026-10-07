@@ -292,8 +292,10 @@ test("§21 verification queue: each selfie view is audited; checklist, reject wi
     .poll(async () => (await admin.from("users").select("status").eq("id", userId).single()).data?.status)
     .toBe("ACTIVE");
 
-  await memberPage.goto("/onboarding");
+  // The Under review screen sends a member who just went live to Home.
+  await memberPage.goto("/onboarding/review");
   await expect(memberPage).toHaveURL(/\/home$/);
+  // BR-14: verification status is shown as a badge.
   await expect(memberPage.getByText("Verified", { exact: true })).toBeVisible();
   await memberPage.screenshot({ path: `${SHOTS_P4}/member-home-verified.png`, fullPage: true });
   expect(errors).toEqual([]);

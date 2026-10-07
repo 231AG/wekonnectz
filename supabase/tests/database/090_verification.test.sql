@@ -1,7 +1,7 @@
 -- Phase 4: verification, account state and notifications (spec §8, §9, §21; BR-10, 13, 14, 15, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(54);
+select plan(62);
 
 -- Fixtures: two members who finished steps 4–9 (3 photos in review), one who hasn't added photos,
 -- a moderator and an admin.
@@ -171,6 +171,9 @@ select public.review_photo(id, true) from pp
   where user_id = 'eeeeeeee-0000-0000-0000-000000000001' and sort_order < 2;
 reset role;
 select set_config('request.jwt.claims', '', true);
+-- Deferred account checks run at commit; fire them here as a commit would.
+set constraints all immediate;
+set constraints all deferred;
 select is((select status::text from public.users where id = 'eeeeeeee-0000-0000-0000-000000000001'), 'PENDING',
   'BR-8: verified with 2 approved photos → still PENDING');
 
@@ -180,6 +183,9 @@ select public.review_photo(id, true) from pp
   where user_id = 'eeeeeeee-0000-0000-0000-000000000001' and sort_order = 2;
 reset role;
 select set_config('request.jwt.claims', '', true);
+-- Deferred account checks run at commit; fire them here as a commit would.
+set constraints all immediate;
+set constraints all deferred;
 select is((select status::text from public.users where id = 'eeeeeeee-0000-0000-0000-000000000001'), 'ACTIVE',
   'BR-13: the third approved photo makes a verified member ACTIVE');
 select is((select count(*)::int from public.notifications where user_id = 'eeeeeeee-0000-0000-0000-000000000001' and type = 'ACCOUNT_ACTIVE'), 1,
@@ -192,8 +198,11 @@ select public.review_photo(id, true) from pp where user_id = 'eeeeeeee-0000-0000
 select public.review_photo(id, false, 'POOR_QUALITY') from pp where user_id = 'eeeeeeee-0000-0000-0000-000000000002' and sort_order = 2;
 reset role;
 select set_config('request.jwt.claims', '', true);
-select is((select type::text from public.notifications where user_id = 'eeeeeeee-0000-0000-0000-000000000002'), 'PHOTO_REJECTED',
-  'a rejected photo is notified to the member');
+-- Deferred account checks run at commit; fire them here as a commit would.
+set constraints all immediate;
+set constraints all deferred;
+select is((select count(*)::int from public.notifications where user_id = 'eeeeeeee-0000-0000-0000-000000000002'
+  and type = 'PHOTO_REJECTED'), 1, 'a rejected photo is notified to the member');
 select is(public.onboarding_progress_for('eeeeeeee-0000-0000-0000-000000000002') ->> 'photos_done', 'false',
   'with a photo rejected, the member must add another before verifying');
 select throws_ok($$ select * from public.start_verification('eeeeeeee-0000-0000-0000-000000000002') $$, '42501', 'PHOTOS_REQUIRED',
@@ -208,6 +217,79 @@ reset role;
 select set_config('request.jwt.claims', '', true);
 select is((select count(*)::int from public.notifications where user_id = 'eeeeeeee-0000-0000-0000-000000000001' and read_at is null), 0,
   'all marked read');
+
+-- ---------------------------------------------------------------------------
+-- Regressions from the Phase 4 audit
+-- ---------------------------------------------------------------------------
+-- BR-13: rejecting a pending main photo sends the next one (approved as secondary) back to review;
+-- the account is judged on the final state, so 2 approved photos never make it ACTIVE.
+insert into public.profile_photos (id, user_id, status, storage_path, sort_order, is_primary, submitted_at, reviewed_as_primary) values
+  ('eeeeeeee-0000-0000-0000-00000000f001', 'eeeeeeee-0000-0000-0000-000000000003', 'PENDING_REVIEW', 'f001.webp', 0, true, now(), false),
+  ('eeeeeeee-0000-0000-0000-00000000f002', 'eeeeeeee-0000-0000-0000-000000000003', 'APPROVED', 'f002.webp', 1, false, now(), false),
+  ('eeeeeeee-0000-0000-0000-00000000f003', 'eeeeeeee-0000-0000-0000-000000000003', 'APPROVED', 'f003.webp', 2, false, now(), false),
+  ('eeeeeeee-0000-0000-0000-00000000f004', 'eeeeeeee-0000-0000-0000-000000000003', 'APPROVED', 'f004.webp', 3, false, now(), false);
+insert into public.verifications (user_id, pose_prompt, status, selfie_storage_path, submitted_at, reviewed_at) values
+  ('eeeeeeee-0000-0000-0000-000000000003', 'Touch your chin with one finger', 'VERIFIED', 'v3.webp', now(), now());
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select lives_ok($$ select public.review_photo('eeeeeeee-0000-0000-0000-00000000f001', false, 'FACE_NOT_CLEAR') $$,
+  'moderator rejects the main photo');
+reset role;
+select set_config('request.jwt.claims', '', true);
+-- Deferred account checks run at commit; fire them here as a commit would.
+set constraints all immediate;
+set constraints all deferred;
+select is((select status::text from public.profile_photos where id = 'eeeeeeee-0000-0000-0000-00000000f002'), 'PENDING_REVIEW',
+  'the next photo becomes main and goes back to review');
+select is((select status::text from public.users where id = 'eeeeeeee-0000-0000-0000-000000000003'), 'PENDING',
+  'BR-13: verified with only 2 approved photos left → stays PENDING');
+select is((select metadata ->> 'requeued_photo_id' from public.audit_logs where action = 'PHOTO_REJECTED'
+  and entity_id = 'eeeeeeee-0000-0000-0000-00000000f001'), 'eeeeeeee-0000-0000-0000-00000000f002',
+  'BR-34: the photo sent back to review is recorded in the audit row');
+
+-- §8: a suspended member is never made ACTIVE by an approval.
+update public.users set status = 'SUSPENDED', suspended_until = now() + interval '7 days'
+where id = 'eeeeeeee-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select public.review_photo('eeeeeeee-0000-0000-0000-00000000f002', true);
+reset role;
+select set_config('request.jwt.claims', '', true);
+-- Deferred account checks run at commit; fire them here as a commit would.
+set constraints all immediate;
+set constraints all deferred;
+select is((select status::text from public.users where id = 'eeeeeeee-0000-0000-0000-000000000003'), 'SUSPENDED',
+  '§8: verified with 3 approved photos, a SUSPENDED account stays SUSPENDED');
+
+-- §9: escalation after N rejections (threshold set to 1 here).
+update public.app_settings set value = '1'::jsonb where key = 'verification.rejections_before_escalation';
+insert into public.profile_photos (user_id, status, storage_path, sort_order, is_primary, submitted_at)
+select 'eeeeeeee-0000-0000-0000-000000000002', 'PENDING_REVIEW', gen_random_uuid() || '.webp', 5, false, now();
+insert into vx select 'd', verification_id, pose_prompt from public.start_verification('eeeeeeee-0000-0000-0000-000000000002');
+select public.claim_verification_selfie('eeeeeeee-0000-0000-0000-000000000002', (select id from vx where n = 'd'));
+select public.submit_verification('eeeeeeee-0000-0000-0000-000000000002', (select id from vx where n = 'd'), (select id from vx where n = 'd') || '.webp');
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select public.review_verification((select id from vx where n = 'd'), false, 'UNCLEAR');
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into vx select 'e', verification_id, pose_prompt from public.start_verification('eeeeeeee-0000-0000-0000-000000000002');
+select public.claim_verification_selfie('eeeeeeee-0000-0000-0000-000000000002', (select id from vx where n = 'e'));
+select public.submit_verification('eeeeeeee-0000-0000-0000-000000000002', (select id from vx where n = 'e'), (select id from vx where n = 'e') || '.webp');
+select is((select escalated from public.verifications where id = (select id from vx where n = 'e')), true,
+  '§9: after the set number of rejections, the next selfie goes to an admin');
+
+-- Staff never review their own account.
+insert into public.verifications (id, user_id, pose_prompt, status, selfie_storage_path, submitted_at) values
+  ('eeeeeeee-0000-0000-0000-00000000f0aa', 'eeeeeeee-0000-0000-0000-0000000000aa', 'Touch your chin with one finger', 'PENDING', 'own.webp', now());
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select throws_ok($$ select public.log_selfie_view('eeeeeeee-0000-0000-0000-00000000f0aa') $$, '42501', 'OWN_CONTENT',
+  'staff cannot open their own selfie');
+select throws_ok($$ select public.review_verification('eeeeeeee-0000-0000-0000-00000000f0aa', true) $$, '42501', 'OWN_CONTENT',
+  'staff cannot decide their own verification');
+reset role;
+select set_config('request.jwt.claims', '', true);
 
 -- ---------------------------------------------------------------------------
 -- Selfie retention (OD-6)

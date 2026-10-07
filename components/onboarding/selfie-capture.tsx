@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { putToSignedUrl } from "@/lib/images/prepare-upload";
 import type { SelfieState } from "@/lib/verification/actions";
 
-type Stage = "starting" | "live" | "captured" | "blocked";
+type Stage = "starting" | "live" | "captured" | "blocked" | "unsupported";
 
 /**
  * In-app camera capture (spec §9: camera, not gallery). There is deliberately no file input. The
@@ -30,15 +30,25 @@ function SelfieCapture({
   const [shot, setShot] = useState<{ blob: Blob; url: string } | null>(null);
   const [error, setError] = useState<string>();
   const [sending, startSending] = useTransition();
+  // Set on unmount: a camera stream that arrives afterwards (permission answered late) is stopped.
+  const unmounted = useRef(false);
 
   async function startCamera() {
     setError(undefined);
     setStage("starting");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStage("unsupported");
+      return;
+    }
     try {
       const media = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 1280 } },
         audio: false,
       });
+      if (unmounted.current) {
+        media.getTracks().forEach((t) => t.stop());
+        return;
+      }
       stream.current = media;
       if (video.current) {
         video.current.srcObject = media;
@@ -51,10 +61,15 @@ function SelfieCapture({
   }
 
   useEffect(() => {
+    unmounted.current = false;
     // Starting the camera on mount sets state once the browser answers the permission prompt.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void startCamera();
-    return () => stream.current?.getTracks().forEach((t) => t.stop());
+    return () => {
+      unmounted.current = true;
+      stream.current?.getTracks().forEach((t) => t.stop());
+      stream.current = null;
+    };
   }, []);
 
   function capture() {
@@ -133,6 +148,11 @@ function SelfieCapture({
           <p className="absolute flex flex-col items-center gap-2 text-sm text-muted-foreground">
             <Camera className="size-7" strokeWidth={1.6} aria-hidden />
             Starting camera…
+          </p>
+        ) : null}
+        {stage === "unsupported" ? (
+          <p role="alert" className="absolute max-w-[260px] text-center text-sm text-muted-foreground">
+            This browser can’t open the camera. Open WeKonnectz in Chrome, Safari or Firefox on your phone.
           </p>
         ) : null}
         {stage === "blocked" ? (

@@ -132,13 +132,14 @@ begin
   where user_id = p_user_id and is_primary and id is distinct from v_primary;
 
   -- §11: a photo approved as a secondary photo is checked again before it becomes the main photo.
+  select id into v_requeued from public.profile_photos
+  where id = v_primary and not is_primary and status = 'APPROVED' and not reviewed_as_primary;
+
   update public.profile_photos
      set is_primary = true,
-         status = case when status = 'APPROVED' and not reviewed_as_primary
-                       then 'PENDING_REVIEW'::public.photo_status else status end,
-         submitted_at = case when status = 'APPROVED' and not reviewed_as_primary then now() else submitted_at end
-   where id = v_primary and not is_primary
-  returning case when status = 'PENDING_REVIEW' and reviewed_at is not null then id end into v_requeued;
+         status = case when id = v_requeued then 'PENDING_REVIEW'::public.photo_status else status end,
+         submitted_at = case when id = v_requeued then now() else submitted_at end
+   where id = v_primary and not is_primary;
   -- The id of a photo sent back to review as the new main photo (audited by review_photo), else null.
   return v_requeued;
 end;

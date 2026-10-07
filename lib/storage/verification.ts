@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PhotoRejectedError, processPhoto, type PhotoRejection } from "@/lib/images/process-photo";
+import { sweepQuarantine } from "@/lib/storage/photos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -47,10 +48,24 @@ export async function startVerification(
   return { verificationId: row.verification_id, pose: row.pose_prompt };
 }
 
-/** A one-off upload URL for the captured selfie (re-taking overwrites the same quarantine file). */
+/**
+ * A one-off upload URL for the captured selfie (re-taking overwrites the same quarantine file). Only
+ * for the member's own open capture, and stray quarantine files are cleared first.
+ */
 export async function selfieUploadUrl(userId: string, verificationId: string): Promise<string | null> {
-  const { data } = await createAdminClient()
-    .storage.from(QUARANTINE)
+  const admin = createAdminClient();
+  const { data: open } = await admin
+    .from("verifications")
+    .select("id")
+    .eq("id", verificationId)
+    .eq("user_id", userId)
+    .eq("status", "AWAITING_SELFIE")
+    .is("processing_started_at", null)
+    .maybeSingle();
+  if (!open) return null;
+  await sweepQuarantine(userId);
+  const { data } = await admin.storage
+    .from(QUARANTINE)
     .createSignedUploadUrl(selfieQuarantinePath(userId, verificationId), { upsert: true });
   return data?.signedUrl ?? null;
 }
@@ -84,7 +99,8 @@ export async function submitSelfie(userId: string, verificationId: string): Prom
     }
     const { error: putError } = await admin.storage
       .from(VERIFICATION)
-      .upload(storedPath, processed, { contentType: "image/webp", upsert: true });
+      // No caching: a browser must never show a selfie again without a new (audited) signed URL.
+      .upload(storedPath, processed, { contentType: "image/webp", upsert: true, cacheControl: "0" });
     if (putError) {
       await release();
       return { kind: "storage" };

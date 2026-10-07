@@ -103,7 +103,8 @@ export function nextStepFor(
   if (!member.onboarding.basicsDone) return ONBOARDING_STEPS.about;
   if (!member.onboarding.interestsBioDone) return ONBOARDING_STEPS.interests;
   // ACTIVE = verified with 3 approved photos (spec §10). A rejected photo later doesn't send them back.
-  if (member.status === "ACTIVE") return MEMBER_HOME;
+  // Suspended members may sign in and view their own account (§8): the Home screen explains it.
+  if (member.status === "ACTIVE" || member.status === "SUSPENDED") return MEMBER_HOME;
   if (!member.onboarding.photosDone) return ONBOARDING_STEPS.photos;
   const v = member.onboarding.verification;
   if (v === "NOT_STARTED" || v === "REJECTED") return ONBOARDING_STEPS.verify;

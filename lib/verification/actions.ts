@@ -20,7 +20,7 @@ const MESSAGES: Record<string, string> = {
   TOO_SMALL: "That selfie was too small. Please take it again.",
   TOO_LARGE: "That selfie was too big. Please take it again.",
   ACCOUNT_CANNOT_EDIT: "Your account is restricted right now, so you can’t verify.",
-  VERIFICATION_NOT_FOUND: "This selfie was already sent. The page has been updated.",
+  VERIFICATION_NOT_FOUND: "Your selfie is still being processed. Reload the page in a few minutes.",
   storage: "The selfie didn’t upload. Check your connection and try again.",
 };
 const GENERIC = "Something went wrong. Try again.";
@@ -37,7 +37,7 @@ export async function prepareSelfieUpload(verificationId: string): Promise<{ upl
   const parsed = id.safeParse(verificationId);
   if (!parsed.success) return { error: GENERIC };
   const uploadUrl = await selfieUploadUrl(member.id, parsed.data);
-  return uploadUrl ? { uploadUrl } : { error: MESSAGES.storage };
+  return uploadUrl ? { uploadUrl } : { error: MESSAGES.VERIFICATION_NOT_FOUND };
 }
 
 /** The selfie is uploaded: process it and send it for review, then show the Under review screen. */
@@ -47,7 +47,10 @@ export async function sendSelfie(verificationId: string): Promise<SelfieState> {
   if (!parsed.success) return { error: GENERIC };
   const error = await submitSelfie(member.id, parsed.data);
   if (error) {
-    if (error.kind === "db" && ["PHOTOS_REQUIRED", "PROFILE_INCOMPLETE", "ALREADY_SUBMITTED"].includes(error.code)) {
+    if (
+      error.kind === "db" &&
+      ["PHOTOS_REQUIRED", "PROFILE_INCOMPLETE", "ALREADY_SUBMITTED", "ACCOUNT_CANNOT_EDIT"].includes(error.code)
+    ) {
       redirect(nextStepFor(await requireMember()));
     }
     return { error: messageFor(error) };

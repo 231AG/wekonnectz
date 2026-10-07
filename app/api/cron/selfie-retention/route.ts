@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { serverEnv } from "@/lib/env.server";
@@ -24,8 +25,9 @@ export async function GET(request: NextRequest) {
   try {
     const deleted = await purgeExpiredSelfies();
     return NextResponse.json({ deleted });
-  } catch {
-    // Never echo details (paths) back; Sentry captures the error server-side.
+  } catch (e) {
+    // Never echo details back; report to Sentry (the scrubber removes paths and personal data).
+    Sentry.captureException(e);
     return NextResponse.json({ error: "retention job failed" }, { status: 500 });
   }
 }

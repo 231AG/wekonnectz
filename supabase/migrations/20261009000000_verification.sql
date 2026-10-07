@@ -166,8 +166,12 @@ begin
 end;
 $$;
 
-create trigger profile_photos_after_status
+-- Deferred to the end of the transaction: review_photo() may still move another photo (a rejected main
+-- photo's successor goes back to review) after this row changes; the account must be judged on the
+-- final state, never on an intermediate one (Phase 4 audit).
+create constraint trigger profile_photos_after_status
   after update of status on public.profile_photos
+  deferrable initially deferred
   for each row
   when (old.status is distinct from new.status and new.status in ('APPROVED', 'REJECTED'))
   execute function public.profile_photos_after_status();

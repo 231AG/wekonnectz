@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireStaff } from "@/lib/auth/staff";
+import { signVerificationReview } from "@/lib/storage/verification";
 import { createClient } from "@/lib/supabase/server";
 import { VERIFICATION_REASON_KEYS } from "@/lib/verification/reasons";
 
@@ -52,4 +53,32 @@ export async function reviewVerificationAction(
   }
   revalidatePath("/admin");
   redirect("/admin/verification");
+}
+
+export type ReviewMedia = {
+  selfie: string | null;
+  photos: { id: string; url: string; isPrimary: boolean; status: string }[];
+  error?: string;
+};
+
+/**
+ * Opens the selfie of a verification under review: records SELFIE_VIEWED with the staff session
+ * (BR-34), then signs the selfie and photo URLs (120 s). Called each time the viewer mounts, so a
+ * back/forward restore of the page is a new, logged view rather than a cached one.
+ */
+export async function openVerificationMedia(verificationId: string): Promise<ReviewMedia> {
+  await requireStaff();
+  const parsed = z.uuid().safeParse(verificationId);
+  if (!parsed.success) return { selfie: null, photos: [], error: "Not found." };
+  const { error } = await (await createClient()).rpc("log_selfie_view", { p_verification_id: parsed.data });
+  if (error) {
+    return {
+      selfie: null,
+      photos: [],
+      error: error.message.includes("OWN_CONTENT")
+        ? "You can’t review your own account."
+        : "This submission was already decided or doesn’t exist.",
+    };
+  }
+  return signVerificationReview(parsed.data);
 }

@@ -13,7 +13,27 @@ export const metadata = { title: "Home" };
 /** Placeholder for ACTIVE members until Home and discovery arrive (Phase 6). */
 export default async function HomePage() {
   const member = await requireMember();
-  if (member.status !== "ACTIVE") redirect(nextStepFor(member));
+  if (member.status !== "ACTIVE" && member.status !== "SUSPENDED") redirect(nextStepFor(member));
+  const verified = member.onboarding.verification === "VERIFIED";
+  if (member.status === "SUSPENDED") {
+    return (
+      <MobileScreen
+        footer={
+          <form action={signOut}>
+            <Button type="submit" variant="outline">
+              Log out
+            </Button>
+          </form>
+        }
+      >
+        <ScreenTitle>Your account is restricted</ScreenTitle>
+        <ScreenLead>
+          Your account is temporarily restricted, so you can’t be seen or send messages right now. It will be lifted
+          automatically at the end of the restriction.
+        </ScreenLead>
+      </MobileScreen>
+    );
+  }
   return (
     <MobileScreen
       footer={
@@ -30,9 +50,11 @@ export default async function HomePage() {
         <BadgeCheck className="size-6 shrink-0 text-verified" strokeWidth={1.8} aria-hidden />
         <p className="flex-1 font-bold">Verification</p>
         {/* BR-14: verification status is shown as a badge. */}
-        <Badge tone="relationship" className="bg-verified">
-          Verified
-        </Badge>
+        {verified ? (
+          <Badge tone="relationship" className="bg-verified">
+            Verified
+          </Badge>
+        ) : null}
       </Card>
       <Card tone="dashed">
         <p className="text-[15px] text-muted-foreground">Discovery and messages open in the next release.</p>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Camera, CircleCheck, Clock, Image as ImageIcon } from "lucide-react";
 
 import { MobileScreen } from "@/components/layout/mobile-screen";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions/login";
-import { requireOnboardingStep } from "@/lib/auth/session";
+import { MEMBER_HOME, requireOnboardingStep } from "@/lib/auth/session";
 import { maskPhone } from "@/lib/domain/phone";
 import { reviewStatus } from "@/lib/storage/verification";
 import { createClient } from "@/lib/supabase/server";
@@ -53,6 +54,8 @@ function StatusRow({
 /** Spec §10 step 11 (mock-up 08): live progress of photos and verification while a person reviews. */
 export default async function UnderReviewPage() {
   const member = await requireOnboardingStep("review");
+  // The last approval can land while this screen is open (it refreshes itself): go live.
+  if (member.status === "ACTIVE" || member.status === "SUSPENDED") redirect(MEMBER_HOME);
   const [status, { data: auth }] = await Promise.all([reviewStatus(member.id), (await createClient()).auth.getUser()]);
   const phone = auth.user?.phone ? maskPhone(`+${auth.user.phone.replace(/^\+/, "")}`) : "";
 
@@ -64,6 +67,8 @@ export default async function UnderReviewPage() {
     .filter(Boolean)
     .join(" · ");
   const photosDone = status.photosApproved >= status.photosRequired;
+  // Enough photos approved or still in review: nothing for the member to do, even if one was rejected.
+  const photosEnough = status.photosApproved + status.photosInReview >= status.photosRequired;
 
   return (
     <MobileScreen
@@ -100,9 +105,9 @@ export default async function UnderReviewPage() {
           icon={<ImageIcon className="size-6 shrink-0 text-pending" strokeWidth={1.8} aria-hidden />}
           title="Photos"
           detail={photosDetail}
-          badge={photosDone ? "Done" : status.photosRejected ? "Action needed" : "In review"}
-          tone={photosDone ? "approved" : status.photosRejected ? "danger" : "pending"}
-          href={status.photosRejected ? "/onboarding/photos" : undefined}
+          badge={photosDone ? "Done" : photosEnough ? "In review" : "Action needed"}
+          tone={photosDone ? "approved" : photosEnough ? "pending" : "danger"}
+          href={photosEnough ? undefined : "/onboarding/photos"}
         />
         <StatusRow
           icon={<Camera className="size-6 shrink-0 text-pending" strokeWidth={1.8} aria-hidden />}
