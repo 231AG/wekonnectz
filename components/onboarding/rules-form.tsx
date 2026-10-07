@@ -7,11 +7,9 @@ import { Ban, Lock, Shield, X } from "lucide-react";
 import { FormError } from "@/components/layout/mobile-screen";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { StepState } from "@/lib/onboarding/actions";
+import type { StepAction, StepState } from "@/lib/onboarding/types";
 
 import { useFieldErrors } from "./use-field-errors";
-
-type Action = (prev: StepState, formData: FormData) => Promise<StepState>;
 
 const RULES = [
   {
@@ -29,7 +27,13 @@ const RULES = [
 ] as const;
 
 /** Community rules & terms (spec §10 step 4, mock-up: onboarding 04). */
-function RulesForm({ action, versions }: { action: Action; versions: Record<"RULES" | "TERMS" | "PRIVACY", string> }) {
+function RulesForm({
+  action,
+  versions,
+}: {
+  action: StepAction;
+  versions: Record<"RULES" | "TERMS" | "PRIVACY", string>;
+}) {
   const [state, dispatch, pending] = useActionState(action, {} as StepState);
   const { errorFor, onEdit } = useFieldErrors(state.errors);
   const error = errorFor("agree") ?? state.errors?.form;

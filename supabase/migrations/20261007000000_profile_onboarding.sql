@@ -128,14 +128,38 @@ insert into public.user_settings (user_id) select id from public.users on confli
 -- Final texts follow legal review (T-12); local dev seeds DEV-ONLY draft versions.
 -- ---------------------------------------------------------------------------
 create table public.legal_documents (
-  document     public.consent_document not null,
-  version      text not null check (length(version) between 1 and 40),
-  title        text not null,
-  is_current   boolean not null default false,
-  published_at timestamptz not null default now(),
-  created_at   timestamptz not null default now(),
+  document       public.consent_document not null,
+  version        text not null check (length(version) between 1 and 40),
+  title          text not null,
+  -- The full text members see and accept. Immutable once published, so a consent always points at
+  -- the exact wording; a change means a new version.
+  body           text not null check (length(body) between 1 and 100000),
+  content_sha256 text generated always as (encode(extensions.digest(body, 'sha256'), 'hex')) stored,
+  is_current     boolean not null default false,
+  published_at   timestamptz not null default now(),
+  created_at     timestamptz not null default now(),
   primary key (document, version)
 );
+
+create or replace function public.legal_documents_immutable()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'legal documents cannot be deleted' using errcode = '42501';
+  end if;
+  if new.document <> old.document or new.version <> old.version or new.body <> old.body or new.title <> old.title then
+    raise exception 'a published legal document cannot be edited; publish a new version' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger legal_documents_immutable
+  before update or delete on public.legal_documents
+  for each row execute function public.legal_documents_immutable();
 
 create unique index legal_documents_one_current on public.legal_documents (document) where is_current;
 
@@ -166,24 +190,25 @@ alter table public.profiles
 
 -- ---------------------------------------------------------------------------
 -- Detection terms (§17: "The term list lives in app_settings so moderators can update it").
--- Seeded with the spec's examples plus common variants for owner review (T-11). Patterns for
--- phone numbers, links and handles are built into lib/domain/detection.ts.
+-- PROPOSED v1, pending owner review (T-11). Spec §17 examples: "$", "USD", "LD", "momo", "per hour",
+-- "short time", "transport". "LD", "momo" and "transport" are matched by context-aware patterns built
+-- into lib/domain/detection.ts instead (they are also a currency abbreviation in names, a common name
+-- and an ordinary word), as are phone numbers, links, handles, currency amounts and money requests.
+-- Every term below is covered by false-positive tests in tests/unit/detection.test.ts.
 -- ---------------------------------------------------------------------------
 insert into public.app_settings (key, value, description) values
   ('detection.terms', jsonb_build_object(
      'contact', jsonb_build_array(
-       'whatsapp', 'whats app', 'watsapp', 'whatsap', 'wa.me', 'telegram', 'snapchat', 'snap me', 'instagram', 'insta',
-       'facebook', 'fb me', 'tiktok', 'imo', 'viber', 'call me on', 'text me on', 'my number', 'my num', 'add me on',
-       'dm me on', 'inbox me on'),
+       'whatsapp', 'whats app', 'w/app', 'wapp', 'telegram', 'tele gram', 'viber', 'wa.me', 'call me on',
+       'text me on', 'my number', 'my num', 'my phone number', 'add me on', 'dm me on', 'inbox me on', 'signal me'),
      'price', jsonb_build_array(
-       '$', 'usd', 'us$', 'lrd', 'l$', 'ld', 'liberian dollars', 'momo', 'mobile money', 'orange money',
-       'lonestar money', 'mtn money', 'per hour', 'an hour', 'per night', 'all night', 'short time', 'long time',
-       'transport', 'transportation', 'tp money', 'airtime', 'scratch card', 'negotiable', 'pay me'),
+       '$', 'us$', 'usd', 'lrd', 'l$', 'per hour', 'per night', 'short time', 'mobile money', 'orange money',
+       'lonestar money', 'lone star money', 'mtn money', 'cash app', 'airtime', 'scratch card', 'pay me',
+       'transport fare', 'tp money'),
      'money_request', jsonb_build_array(
-       'send me money', 'send money', 'lend me', 'loan me', 'borrow money', 'i need money', 'help me with money',
-       'pay my', 'pay for my', 'school fees', 'rent money', 'credit me')
+       'send me money', 'send money', 'i need money', 'lend me money', 'loan me', 'borrow money')
    ),
-   'Contact, price and money-request terms for content checks (§17, OD-31). Owner review: T-11.')
+   'Contact, price and money-request terms for content checks (§17, OD-31). PROPOSED v1 — owner review: T-11.')
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -198,8 +223,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select exists (select 1 from public.legal_documents where is_current)
-     and not exists (
+  select not exists (
        select 1
        from public.legal_documents d
        where d.is_current
@@ -380,6 +404,7 @@ $$;
 -- Privileges
 -- ---------------------------------------------------------------------------
 revoke all on function public.handle_new_user_settings() from public, anon, authenticated, service_role;
+revoke all on function public.legal_documents_immutable() from public, anon, authenticated, service_role;
 revoke all on function public.has_accepted_current_documents(uuid) from public, anon, authenticated;
 revoke all on function public.onboarding_progress_for(uuid) from public, anon, authenticated;
 revoke all on function public.onboarding_progress() from public, anon;

@@ -141,13 +141,13 @@ isOneToOne: false
                   ]
                 },"legal_documents": {
                   Row: {
-                    "created_at": string,"document": Database["public"]['Enums']["consent_document"],"is_current": boolean,"published_at": string,"title": string,"version": string
+                    "body": string,"content_sha256": string | null,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"is_current": boolean,"published_at": string,"title": string,"version": string
                   }
                   Insert: {
-                    "created_at"?: string,"document": Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title": string,"version": string
+                    "body": string,"content_sha256"?: never,"created_at"?: string,"document": Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title": string,"version": string
                   }
                   Update: {
-                    "created_at"?: string,"document"?: Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title"?: string,"version"?: string
+                    "body"?: string,"content_sha256"?: never,"created_at"?: string,"document"?: Database["public"]['Enums']["consent_document"],"is_current"?: boolean,"published_at"?: string,"title"?: string,"version"?: string
                   }
                   Relationships: [
                     

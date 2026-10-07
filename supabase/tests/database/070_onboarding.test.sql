@@ -1,7 +1,7 @@
 -- Phase 2: onboarding tables, RLS and functions (spec §10 steps 4–8, BR-20, BR-31 storage side).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(44);
 
 -- Fixtures: two members with DOB, one area and five interests from the seed.
 insert into auth.users (id, phone, aud, role) values
@@ -84,11 +84,45 @@ select is(public.onboarding_progress_for('cccccccc-0000-0000-0000-000000000001')
 
 -- A new document version means the rules must be accepted again.
 update public.legal_documents set is_current = false where document = 'RULES';
-insert into public.legal_documents (document, version, title, is_current) values ('RULES', 'test-v2', 'Rules v2', true);
+insert into public.legal_documents (document, version, title, is_current, body) values ('RULES', 'test-v2', 'Rules v2', true, 'New rules text');
 select ok(not public.has_accepted_current_documents('cccccccc-0000-0000-0000-000000000001'),
   'a new rules version requires acceptance again');
 
+-- Published text is fixed: a consent always points at the exact wording.
+select is((select content_sha256 from public.legal_documents where document = 'RULES' and version = 'test-v2'),
+  encode(extensions.digest('New rules text', 'sha256'), 'hex'), 'each version stores a SHA-256 of its text');
+select throws_ok($$ update public.legal_documents set body = 'changed' where document = 'RULES' and version = 'test-v2' $$,
+  '42501', null, 'published text cannot be edited (publish a new version instead)');
+select throws_ok($$ delete from public.legal_documents where document = 'RULES' and version = 'test-v2' $$,
+  '42501', null, 'published versions cannot be deleted');
+select lives_ok($$ update public.legal_documents set is_current = false where document = 'RULES' and version = 'test-v2' $$,
+  'switching which version is current is allowed');
+update public.legal_documents set is_current = true where document = 'RULES' and version = 'test-v2';
+
+-- Accept the new rules version so the next checks reach the rule they test.
+select public.accept_current_documents('cccccccc-0000-0000-0000-000000000001',
+  '{"RULES":"test-v2","TERMS":"draft-2026-10","PRIVACY":"draft-2026-10"}');
+
+-- Inactive list entries are refused (BR-20, §10 step 7).
+update public.areas set active = false where id = (select area_id from fx);
+select throws_ok($$ select public.save_profile_basics('cccccccc-0000-0000-0000-000000000001', 'Musu', 'WOMAN',
+  array['MAN']::public.gender[], (select area_id from fx), true, true) $$, '22023', 'INVALID_AREA',
+  'BR-20: an inactive area is refused');
+update public.areas set active = true where id = (select area_id from fx);
+update public.interests set active = false where id = (select interest_ids[1] from fx);
+select throws_ok($$ select public.save_interests_and_bio('cccccccc-0000-0000-0000-000000000001',
+  (select interest_ids[1:3] from fx), '') $$, '22023', 'INTERESTS_INVALID', 'an inactive interest is refused');
+update public.interests set active = true where id = (select interest_ids[1] from fx);
+
 -- Suspended / banned accounts cannot edit.
+update public.users set status = 'SUSPENDED', suspended_until = now() + interval '1 day'
+ where id = 'cccccccc-0000-0000-0000-000000000001';
+select throws_ok($$ select public.save_interests_and_bio('cccccccc-0000-0000-0000-000000000001',
+  (select interest_ids[1:3] from fx), '') $$, '42501', 'ACCOUNT_CANNOT_EDIT', 'BR-5: a suspended account cannot edit its profile');
+update public.users set suspended_until = now() - interval '1 minute'
+ where id = 'cccccccc-0000-0000-0000-000000000001';
+select lives_ok($$ select public.save_interests_and_bio('cccccccc-0000-0000-0000-000000000001',
+  (select interest_ids[1:3] from fx), '') $$, 'BR-5: once the suspension has ended, editing works again');
 update public.users set status = 'BANNED' where id = 'cccccccc-0000-0000-0000-000000000002';
 select throws_ok($$ select public.accept_current_documents('cccccccc-0000-0000-0000-000000000002', '{}') $$,
   '42501', 'ACCOUNT_CANNOT_EDIT', 'a banned account cannot edit its profile');
@@ -98,6 +132,9 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"cccccccc-0000-0000-0000-000000000001","role":"authenticated"}', true);
 select ok((select count(*) from public.areas) > 0 and (select count(*) from public.interests) > 0,
   'members can read the area and interest lists');
+select is((public.onboarding_progress() ->> 'basics_done')::boolean, true, 'onboarding_progress() returns the caller''s own progress');
+select throws_ok($$ select public.onboarding_progress_for('cccccccc-0000-0000-0000-000000000002') $$,
+  '42501', null, 'members cannot read another member''s progress');
 select is((select count(*)::int from public.user_interests), 3, 'members read only their own interests');
 select is((select count(*)::int from public.user_settings), 1, 'members read only their own settings');
 select throws_ok($$ select public.save_profile_basics('cccccccc-0000-0000-0000-000000000001', 'Hacker', 'MAN',
@@ -107,6 +144,11 @@ select throws_ok($$ update public.profiles set bio = 'call me 0770123456' $$, '4
   'BR-31: members cannot write their bio directly');
 set local role anon;
 select throws_ok($$ select id from public.areas $$, '42501', null, 'anon cannot read the area list');
+select ok((select count(*) from public.legal_documents where is_current) = 3, 'anon can read the published documents');
+select throws_ok($$ select public.save_interests_and_bio('cccccccc-0000-0000-0000-000000000001', '{}', '') $$,
+  '42501', null, 'anon cannot call the write functions');
+select throws_ok($$ select public.onboarding_progress_for('cccccccc-0000-0000-0000-000000000001') $$,
+  '42501', null, 'anon cannot read anyone''s onboarding progress');
 
 reset role;
 select * from finish();

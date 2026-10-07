@@ -7,11 +7,10 @@ import { FormError } from "@/components/layout/mobile-screen";
 import { Button } from "@/components/ui/button";
 import { ChoiceChip } from "@/components/ui/choice-chip";
 import { Input, Label } from "@/components/ui/input";
-import type { StepState } from "@/lib/onboarding/actions";
+import type { StepAction, StepState } from "@/lib/onboarding/types";
 
 import { useFieldErrors } from "./use-field-errors";
 
-type Action = (prev: StepState, formData: FormData) => Promise<StepState>;
 export type AreaOption = { id: string; county: string; name: string };
 export type AboutDefaults = {
   displayName: string;
@@ -25,7 +24,7 @@ const selectClass =
   "min-h-[52px] w-full rounded-control border-[1.5px] border-border bg-surface-1 px-4 text-base text-foreground focus-visible:border-pending focus-visible:outline-1 focus-visible:outline-pending aria-invalid:border-danger";
 
 /** Basic profile + intent (spec §10 steps 5–6, mock-up: onboarding 05). Area from a list only (BR-20). */
-function AboutForm({ action, areas, defaults }: { action: Action; areas: AreaOption[]; defaults: AboutDefaults }) {
+function AboutForm({ action, areas, defaults }: { action: StepAction; areas: AreaOption[]; defaults: AboutDefaults }) {
   const [state, dispatch, pending] = useActionState(action, {} as StepState);
   const v = { ...defaults, ...(state.values as Partial<AboutDefaults> | undefined) };
   const { errorFor, onEdit } = useFieldErrors(state.errors);

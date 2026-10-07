@@ -1,14 +1,22 @@
 import { InfoPage } from "@/components/public/info-page";
+import { LegalDocumentBody } from "@/components/public/legal-document";
+import { getCurrentDocument } from "@/lib/content/legal";
 
-export const metadata = { title: "Terms" };
+export const metadata = { title: "Terms of use" };
 
-export default function TermsPage() {
+/** Rendered from the current published version, so it matches what members accept (§10 step 4). */
+export default async function Page() {
+  const doc = await getCurrentDocument("TERMS");
+  if (!doc) {
+    return (
+      <InfoPage title="Terms of use">
+        <p>This page will be published soon.</p>
+      </InfoPage>
+    );
+  }
   return (
-    <InfoPage title="Terms of use" draft>
-      <p>
-        The Terms of use will be published here after Liberian legal review. Until then this page is a placeholder and
-        does not form an agreement.
-      </p>
+    <InfoPage title={doc.title} draft={doc.version.startsWith("draft")} version={doc.version}>
+      <LegalDocumentBody body={doc.body} />
     </InfoPage>
   );
 }

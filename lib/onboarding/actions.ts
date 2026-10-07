@@ -2,47 +2,63 @@
 
 import { redirect } from "next/navigation";
 
-import { getDetectionTerms } from "@/lib/content/terms";
-import { CONTACT_OR_PRICE_MESSAGE, detect } from "@/lib/domain/detection";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { StepState } from "@/lib/onboarding/types";
+import {
+  type ProfileWriteError,
+  writeAcceptedDocuments,
+  writeInterestsAndBio,
+  writeProfileBasics,
+} from "@/lib/profile/write";
 import { basicsSchema, fieldErrors, interestsBioSchema, rulesSchema } from "@/lib/validation/onboarding";
 
 /**
- * Onboarding steps 4–8 (spec §10). Each action: authenticate → validate (Zod) → content checks
- * (BR-31) → call a service-role database function with the member's own id. The database
- * re-checks the account and every rule it can. Members cannot call those functions directly.
+ * Onboarding steps 4–8 (spec §10). Each action: authenticate → validate (Zod) → write through
+ * lib/profile/write (content checks, BR-31) → a service-role database function with the member's
+ * own id from the session. The database re-checks the account and every rule it can.
  */
 
-export type StepState = { errors?: Record<string, string>; values?: Record<string, string | string[]> };
-
+const MESSAGES: Record<string, string> = {
+  ACCOUNT_CANNOT_EDIT: "Your account is restricted right now, so your profile can’t be changed.",
+  DOCUMENT_VERSION_MISMATCH: "The rules were just updated. Please read them again and agree.",
+  NO_CURRENT_DOCUMENTS: "The rules aren’t published yet. Please try again later.",
+  INVALID_AREA: "Choose your community.",
+  INTERESTS_INVALID: "Choose at least 3 interests from the list.",
+};
 const GENERIC = "Something went wrong. Try again.";
 
-async function goToNextStep(memberId: string) {
+async function goToNextStep(memberId: string): Promise<never> {
   // Re-read progress after the write so the redirect reflects the database.
   const member = await requireMember();
   if (member.id !== memberId) redirect("/login");
   redirect(nextStepFor(member));
 }
 
+/** Maps a write error to form errors; step-order errors send the member to the right step. */
+async function handleWriteError(error: ProfileWriteError, values?: StepState["values"]): Promise<StepState> {
+  if (error.kind === "content") return { errors: { [error.field]: error.message }, values };
+  if (error.kind === "unavailable") return { errors: { form: error.message }, values };
+  if (["RULES_NOT_ACCEPTED", "BASICS_REQUIRED", "AGE_GATE_REQUIRED"].includes(error.code)) {
+    redirect(nextStepFor(await requireMember()));
+  }
+  const field = error.code === "INVALID_AREA" ? "areaId" : error.code === "INTERESTS_INVALID" ? "interestIds" : "form";
+  return { errors: { [field]: MESSAGES[error.code] ?? GENERIC }, values };
+}
+
 export async function acceptRules(_prev: StepState, formData: FormData): Promise<StepState> {
   const member = await requireMember();
   const parsed = rulesSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { errors: fieldErrors(parsed.error) };
+  if (!parsed.success) {
+    const errors = fieldErrors(parsed.error);
+    // Missing or altered hidden version fields: reload the page with the current rules.
+    if (!errors.agree) return { errors: { form: MESSAGES.DOCUMENT_VERSION_MISMATCH } };
+    return { errors: { agree: errors.agree } };
+  }
 
   const { RULES, TERMS, PRIVACY } = parsed.data;
-  const { error } = await createAdminClient().rpc("accept_current_documents", {
-    p_user_id: member.id,
-    p_versions: { RULES, TERMS, PRIVACY },
-  });
-  if (error) {
-    if (error.message.includes("DOCUMENT_VERSION_MISMATCH")) {
-      return { errors: { form: "The rules were just updated. Please read them again and agree." } };
-    }
-    return { errors: { form: GENERIC } };
-  }
-  await goToNextStep(member.id);
-  return {};
+  const error = await writeAcceptedDocuments(member.id, { RULES, TERMS, PRIVACY });
+  if (error) return handleWriteError(error);
+  return goToNextStep(member.id);
 }
 
 export async function saveBasics(_prev: StepState, formData: FormData): Promise<StepState> {
@@ -57,28 +73,17 @@ export async function saveBasics(_prev: StepState, formData: FormData): Promise<
   const parsed = basicsSchema.safeParse(values);
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
-  // BR-31: no contact details or prices in the display name either.
-  if (detect(parsed.data.displayName, "profile", await getDetectionTerms()).blocked) {
-    return { errors: { displayName: CONTACT_OR_PRICE_MESSAGE }, values };
-  }
-
   const { intent } = parsed.data;
-  const { error } = await createAdminClient().rpc("save_profile_basics", {
-    p_user_id: member.id,
-    p_display_name: parsed.data.displayName,
-    p_gender: parsed.data.gender,
-    p_seeking_genders: parsed.data.seeking,
-    p_area_id: parsed.data.areaId,
-    p_intent_relationship: intent === "RELATIONSHIP" || intent === "BOTH",
-    p_intent_casual: intent === "CASUAL" || intent === "BOTH",
+  const error = await writeProfileBasics(member.id, {
+    displayName: parsed.data.displayName,
+    gender: parsed.data.gender,
+    seeking: parsed.data.seeking,
+    areaId: parsed.data.areaId,
+    intentRelationship: intent === "RELATIONSHIP" || intent === "BOTH",
+    intentCasual: intent === "CASUAL" || intent === "BOTH",
   });
-  if (error) {
-    if (error.message.includes("INVALID_AREA")) return { errors: { areaId: "Choose your community." }, values };
-    if (error.message.includes("RULES_NOT_ACCEPTED")) redirect(nextStepFor(member));
-    return { errors: { form: GENERIC }, values };
-  }
-  await goToNextStep(member.id);
-  return {};
+  if (error) return handleWriteError(error, values);
+  return goToNextStep(member.id);
 }
 
 export async function saveInterestsBio(_prev: StepState, formData: FormData): Promise<StepState> {
@@ -90,23 +95,7 @@ export async function saveInterestsBio(_prev: StepState, formData: FormData): Pr
   const parsed = interestsBioSchema.safeParse(values);
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
-  // BR-31: bios containing contact details or prices are rejected with a neutral message (§17).
-  if (detect(parsed.data.bio, "profile", await getDetectionTerms()).blocked) {
-    return { errors: { bio: CONTACT_OR_PRICE_MESSAGE }, values };
-  }
-
-  const { error } = await createAdminClient().rpc("save_interests_and_bio", {
-    p_user_id: member.id,
-    p_interest_ids: parsed.data.interestIds,
-    p_bio: parsed.data.bio,
-  });
-  if (error) {
-    if (error.message.includes("INTERESTS_INVALID")) {
-      return { errors: { interestIds: "Choose at least 3 interests from the list." }, values };
-    }
-    if (error.message.includes("BASICS_REQUIRED")) redirect(nextStepFor(member));
-    return { errors: { form: GENERIC }, values };
-  }
-  await goToNextStep(member.id);
-  return {};
+  const error = await writeInterestsAndBio(member.id, parsed.data);
+  if (error) return handleWriteError(error, values);
+  return goToNextStep(member.id);
 }

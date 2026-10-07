@@ -29,8 +29,23 @@ insert into public.interests (name, slug) values
   ('Reading', 'reading'), ('Business', 'business'), ('Fashion', 'fashion'), ('Cooking', 'cooking'),
   ('Beach', 'beach'), ('Art', 'art'), ('Tech', 'tech'), ('Afrobeats', 'afrobeats'); -- DEV-ONLY
 
--- DEV-ONLY draft document versions until legal review (T-12).
-insert into public.legal_documents (document, version, title, is_current) values
-  ('RULES', 'draft-2026-10', 'Community rules (draft)', true),
-  ('TERMS', 'draft-2026-10', 'Terms of use (draft)', true),
-  ('PRIVACY', 'draft-2026-10', 'Privacy policy (draft)', true); -- DEV-ONLY
+-- DEV-ONLY draft document versions until legal review (T-12). Text is a placeholder, not for use.
+insert into public.legal_documents (document, version, title, is_current, body) values
+  ('RULES', 'draft-2026-10', 'Community rules', true, $rules$## No selling or buying sex
+Offering or asking for sex in exchange for money, airtime, mobile money, gifts, transport fare or anything else gets you removed.
+
+## Adults only
+Everyone here is 18 or older. Report anyone who looks younger. No content showing anyone under 18.
+
+## No contact details or prices
+Keep phone numbers, WhatsApp or social handles, links and prices out of your bio and first messages.
+
+## Never ask for money
+Don’t request or send money to members, for any reason.
+
+## Be yourself
+No fake profiles, impersonation, other people’s photos, nudity or sexually explicit photos.$rules$),
+  ('TERMS', 'draft-2026-10', 'Terms of use', true, $terms$The Terms of use will be published here after Liberian legal review. Until then this page is a placeholder and does not form an agreement.$terms$),
+  ('PRIVACY', 'draft-2026-10', 'Privacy policy', true, $privacy$The Privacy policy will be published here after Liberian legal review. Until then this page is a placeholder.
+
+What we already do: we never collect your precise location, your verification selfie is seen only by reviewers, and phone numbers are stored only in protected form.$privacy$); -- DEV-ONLY

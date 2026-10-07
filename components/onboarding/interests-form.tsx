@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ChoiceChip } from "@/components/ui/choice-chip";
 import { Label } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { StepState } from "@/lib/onboarding/actions";
+import type { StepAction, StepState } from "@/lib/onboarding/types";
 
 import { useFieldErrors } from "./use-field-errors";
 
-type Action = (prev: StepState, formData: FormData) => Promise<StepState>;
 export type InterestOption = { id: string; name: string };
 
 const BIO_MAX = 500;
@@ -22,7 +21,7 @@ function InterestsForm({
   interests,
   defaults,
 }: {
-  action: Action;
+  action: StepAction;
   interests: InterestOption[];
   defaults: { interestIds: string[]; bio: string };
 }) {

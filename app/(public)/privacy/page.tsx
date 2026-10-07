@@ -1,17 +1,22 @@
 import { InfoPage } from "@/components/public/info-page";
+import { LegalDocumentBody } from "@/components/public/legal-document";
+import { getCurrentDocument } from "@/lib/content/legal";
 
-export const metadata = { title: "Privacy" };
+export const metadata = { title: "Privacy policy" };
 
-export default function PrivacyPage() {
+/** Rendered from the current published version, so it matches what members accept (§10 step 4). */
+export default async function Page() {
+  const doc = await getCurrentDocument("PRIVACY");
+  if (!doc) {
+    return (
+      <InfoPage title="Privacy policy">
+        <p>This page will be published soon.</p>
+      </InfoPage>
+    );
+  }
   return (
-    <InfoPage title="Privacy policy" draft>
-      <p>
-        The Privacy policy will be published here after Liberian legal review. Until then this page is a placeholder.
-      </p>
-      <p>
-        What we already do: we never collect your precise location, your verification selfie is seen only by reviewers,
-        and phone numbers are stored only in protected form.
-      </p>
+    <InfoPage title={doc.title} draft={doc.version.startsWith("draft")} version={doc.version}>
+      <LegalDocumentBody body={doc.body} />
     </InfoPage>
   );
 }

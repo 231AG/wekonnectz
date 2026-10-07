@@ -154,10 +154,10 @@ test("steps cannot be skipped by typing a later URL", async ({ page }) => {
   }
 });
 
-test("BR-31: a display name with a handle or number is refused", async ({ page }) => {
+test("BR-31: a display name advertising a contact app is refused", async ({ page }) => {
   await memberAtRules(page);
   await acceptRules(page);
-  await fillAbout(page, "Insta musu");
+  await fillAbout(page, "Whatsapp Musu");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Contact details and prices aren’t allowed." })).toBeVisible();
   await expect(page).toHaveURL(/\/onboarding\/about$/);
