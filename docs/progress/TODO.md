@@ -9,9 +9,9 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | ------------------- | ------- | -------------- | -------------- | ---------- |
 | Foundation          | 10      | 2              | 0              | 0          |
 | Auth and geo        | 12      | 1              | 1              | 1          |
-| Onboarding          | 6       | 2              | 1              | 0          |
+| Onboarding          | 7       | 2              | 0              | 0          |
 | Photos              | 6       | 1              | 1              | 0          |
-| Verification        | 0       | 0              | 6              | 2          |
+| Verification        | 3       | 4              | 0              | 1          |
 | Safety              | 0       | 0              | 11             | 0          |
 | Relationship mode   | 0       | 0              | 6              | 1          |
 | Messaging           | 0       | 0              | 7              | 0          |
@@ -20,13 +20,13 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Availability        | 0       | 0              | 6              | 1          |
 | Casual discovery    | 0       | 0              | 6              | 1          |
 | Admin console       | 1       | 1              | 9              | 0          |
-| Notifications       | 0       | 0              | 5              | 0          |
+| Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **35**  | **7**          | **81**         | **11**     |
+| **Total**           | **40**  | **12**         | **72**         | **10**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending.
 
 ## Planning
 
@@ -75,7 +75,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 - 🔄 `areas`, `interests` lists — P2 built with DEV-ONLY data (⛔ real lists T-09, T-10); admin UI P10
 - 🔄 Detection engine + DB term list — P2 — BR-31 (built; term list ⛔ T-11 review)
 - ✅ Photos step (3 required, up to 6) — P3
-- ⬜ Under review screen with live progress — P4
+- ✅ Verification selfie step and Under review screen with live progress — P4
 
 ## Photos
 
@@ -90,14 +90,14 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Verification
 
-- ⬜ `verifications`, pose prompts, in-camera capture — P4 — BR-10
-- ⬜ Verification queue with checklist, oldest first — P4 — BR-34
-- ⬜ SELFIE_VIEWED audit per view — P4 — BR-34
-- ⬜ Resubmission + escalation after N rejections — P4 — BR-15
-- ⬜ ACTIVE when VERIFIED ∧ ≥3 approved photos — P4 — BR-13
-- ⬜ Verified badge — P4 — BR-14
-- ⬜ Selfie retention job — P4 ⛔ until OD-6
-- ⬜ ID document check — P4 ⛔ until OD-5 (only if yes)
+- 🔄 `verifications`, pose prompts, in-camera capture — P4 — BR-10 (built; pose list ⛔ T-19)
+- ✅ Verification queue with checklist, oldest first — P4 — BR-34
+- ✅ SELFIE_VIEWED audit per view — P4 — BR-34
+- 🔄 Resubmission + escalation after N rejections / doubt about age — P4 — BR-15 (built; N ⛔ T-19)
+- ✅ ACTIVE when VERIFIED ∧ ≥3 approved photos — P4 — BR-13
+- 🔄 Verified badge — P4 — BR-14 (Home placeholder; on profiles and cards with discovery, P6/P9)
+- 🔄 Selfie retention job — P4 (built: daily cron route; retention days ⛔ OD-6)
+- ⬜ ID document check — before Casual (P8) ⛔ until OD-5 (only if yes)
 
 ## Safety
 
@@ -179,7 +179,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Admin console
 
 - ✅ Staff accounts (email + password + TOTP), aal2 in DB and pages, admin shell, first-admin script — P3
-- 🔄 Queues: Photo ✅ P3; Verification P4; Reports & Flags P5; Claims P7
+- 🔄 Queues: Photo ✅ P3; Verification ✅ P4; Reports & Flags P5; Claims P7
 - ⬜ Dashboard with real figures — P10
 - ⬜ Users (search incl. hashed phone, suspend, ban, restore, DOB correction) — P10 — BR-4, BR-34
 - ⬜ Subscriptions (manual extension of existing only, reason, audited, capped — OD-30) — P10
@@ -192,8 +192,8 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Notifications
 
-- ⬜ `notifications` table + `notify()` — P4
-- ⬜ Claim decision, review outcome notifications — P4/P7
+- ✅ `notifications` table + `notify()` — P4
+- 🔄 Review outcome notifications ✅ P4 (photo rejected, selfie decided, profile live); claim decisions P7
 - ⬜ Notifications screen + preferences — P11
 - ⬜ Requests, matches, messages, expiry and renewal reminders — P11
 - ⬜ Delivery: in-app + web push (OD-25) — P11

@@ -116,6 +116,28 @@ Triggers on `auth.users`: `guard_auth_user_insert` (+231, blocklist, geo pass, n
 
 `onboarding_progress()` gains `photos_done` (3+ photos PENDING_REVIEW or APPROVED). Settings: `photos.min_required` 3, `photos.max_per_user` 6 (spec), `photos.max_uploads_per_hour` (T-19).
 
+### Phase 4 ✅ (`20261009000000_verification.sql`)
+
+| Table           | Key columns                                                                                                                                                                       | Client access | Notes                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------------------- |
+| `verifications` | id, user_id, pose_prompt, status (AWAITING_SELFIE · PENDING · VERIFIED · REJECTED), selfie_storage_path, escalated, rejection_reason, submitted/reviewed at/by, selfie_deleted_at | none          | One open (awaiting or pending) per member. No row = NOT_STARTED |
+| `notifications` | id, user_id, type (VERIFICATION_APPROVED · VERIFICATION_REJECTED · PHOTO_REJECTED · ACCOUNT_ACTIVE), payload, read_at                                                             | SELECT own    | Written only by `notify()`                                      |
+
+| Function                                                                            | Callable by                    | Purpose                                                |
+| ----------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
+| `start_verification(user)`                                                          | service_role                   | Pick (or resume) the pose                              |
+| `claim_verification_selfie` / `release_verification_selfie` / `submit_verification` | service_role                   | One processing per capture; submit computes escalation |
+| `member_review_status(user)`                                                        | service_role                   | Under review screen data (no paths)                    |
+| `staff_verification_queue` / `staff_verification_detail`                            | authenticated, `is_staff()`    | Queue and detail (pose, DOB, area; no paths)           |
+| `log_selfie_view(id)`                                                               | authenticated, `is_staff()`    | `SELFIE_VIEWED` audit before any signed URL            |
+| `verification_review_paths(id)`                                                     | service_role                   | Selfie + photo paths for signing, pending only         |
+| `review_verification(id, approve, reason)`                                          | authenticated, `is_staff()`    | Decide (ADMIN if escalated); audit, notify, recompute  |
+| `recompute_account_state(user)`                                                     | internal (triggers, functions) | PENDING → ACTIVE when VERIFIED ∧ 3 APPROVED            |
+| `selfies_due_for_deletion` / `mark_selfies_deleted`                                 | service_role                   | OD-6 retention                                         |
+| `mark_notifications_read()`                                                         | authenticated (own)            |                                                        |
+
+Settings: `verification.pose_prompts`, `verification.rejections_before_escalation` (T-19), `verification.selfie_retention_days` (OD-6) — no values in the migration.
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                              | Phase |
@@ -129,7 +151,7 @@ Triggers on `auth.users`: `guard_auth_user_insert` (+231, blocklist, geo pass, n
 | interests / user_interests ✅      | 2     |     | passes                                             | 6     |
 | user_settings ✅                   | 2     |     | matches                                            | 6     |
 | profile_photos ✅                  | 3     |     | message_requests                                   | 9     |
-| verifications                      | 4     |     | conversations / conversation_members / messages    | 6     |
-| notifications                      | 4     |     | saved_profiles                                     | 9     |
+| verifications ✅                   | 4     |     | conversations / conversation_members / messages    | 6     |
+| notifications ✅                   | 4     |     | saved_profiles                                     | 9     |
 | availability                       | 8     |     | blocks / reports / report_notes / moderation_flags | 5     |
 | subscription_plans / subscriptions | 7     |     | geo pass (single-use, see plan §1.5)               | 1     |

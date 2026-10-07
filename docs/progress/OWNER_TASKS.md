@@ -34,6 +34,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-24 | Create the phone-hashing secret in each hosted Supabase project (Vault)                                                                                | Phase 1 hosted verification (T-06); launch               | OPEN                                                                                |
 | T-25 | Decide on CAPTCHA (Cloudflare Turnstile) for sign-in and create the keys                                                                               | Recommended before launch (Phase 12)                     | OPEN                                                                                |
 | T-26 | Decide whether members may ever change their phone number (Q13)                                                                                        | Nothing now; a future phase if yes                       | OPEN                                                                                |
+| T-27 | Set `CRON_SECRET` in Vercel (Project → Settings → Environment Variables)                                                                               | Scheduled jobs on Vercel (selfie retention, Phase 4)     | OPEN                                                                                |
 | T-23 | Approve design tokens v1 (or tell me what to change)                                                                                                   | Phase 0 sign-off only (Phase 1 can start)                | OPEN                                                                                |
 
 ---
@@ -214,37 +215,38 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **What:** Approve or change each value below. Recommendations are mine unless marked "spec".
 - **Why:** Spec rule 9: no invented numbers in business logic. Keys exist in `app_settings` with no default; DEV-ONLY values in `seed.sql` until you approve.
 
-| Setting key                                                       | Meaning                             | Recommendation                   | Needed by |
-| ----------------------------------------------------------------- | ----------------------------------- | -------------------------------- | --------- |
-| `otp.max_per_phone_per_hour`                                      | OTP sends per phone                 | 5                                | Phase 1   |
-| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                    | 20                               | Phase 1   |
-| Supabase Auth `sms_sent` (per hour, whole project)                | Hard cap on all OTP SMS per hour    | Size to launch traffic, e.g. 500 | Launch    |
-| Supabase Auth `sign_in_sign_ups` (per 5 min per IP)               | Our server calls Auth from one IP   | e.g. 300                         | Launch    |
-| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION         | SIGNUP_ONLY (spec)               | Phase 1   |
-| `photos.min_required`                                             | Photos needed (BR-8)                | 3 (spec) — set in the migration  | Phase 3   |
-| `photos.max_per_user`                                             | Max photos                          | 6 (spec) — set in the migration  | Phase 3   |
-| `photos.max_uploads_per_hour`                                     | Upload attempts per member per hour | 10 (DEV-ONLY 50 in seed)         | Phase 3   |
-| Upload size cap (code + bucket limit, not a setting)              | Largest file accepted               | 10 MB (built)                    | Phase 3   |
-| `staff_login.max_per_ip_per_hour`                                 | Failed staff sign-ins per IP        | 30 (DEV-ONLY 200 in seed)        | Phase 3   |
-| `staff_login.max_per_account_per_hour`                            | Failed sign-ins, one staff, one IP  | 10 (DEV-ONLY 20 in seed)         | Phase 3   |
-| `staff_login.max_per_account_all_ips_per_hour`                    | Failed sign-ins, one staff, any IP  | 50 (DEV-ONLY 100 in seed)        | Phase 3   |
-| Signed URL lifetime (code, not a setting)                         | How long a photo link works         | 120 s (spec, built)              | Phase 3   |
-| `verification.rejections_before_escalation`                       | Repeated rejections → admin         | 3                                | Phase 4   |
-| `verification.pose_prompts`                                       | Pose list                           | I propose 8 prompts in Phase 4   | Phase 4   |
-| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h           | 3 (spec)                         | Phase 5   |
-| `reports.per_user_per_day`                                        | Report rate limit                   | 10                               | Phase 5   |
-| `relationship.pass_cooldown_days`                                 | Passed profile returns after        | 30                               | Phase 6   |
-| `relationship.daily_like_cap`                                     | OD-10                               | — your call                      | Phase 6   |
-| `claims.rejections_before_flag`                                   | Rejected claims → member flagged    | 3                                | Phase 7   |
-| `claims.evidence_max_bytes`                                       | Screenshot size cap                 | 10 MB                            | Phase 7   |
-| `availability.max_window_hours`                                   | OD-8                                | 12 (spec)                        | Phase 8   |
-| `availability.max_lead_days`                                      | OD-8                                | 7 (spec)                         | Phase 8   |
-| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag       | 30 min / 5 per week              | Phase 8   |
-| `requests.daily_cap`                                              | OD-9                                | — your call                      | Phase 9   |
-| `requests.decline_cooldown_days`                                  | OD-9                                | — your call                      | Phase 9   |
-| `subscriptions.manual_extension_max_days`                         | OD-30 cap on admin manual extension | 7 days                           | Phase 10  |
-| `signals.requests_burst`                                          | "Many requests in a short time"     | 10 in 10 min                     | Phase 9   |
-| `signals.duplicate_text_recipients`                               | "Same text to many members"         | 5 in 24 h                        | Phase 9   |
+| Setting key                                                       | Meaning                               | Recommendation                                                             | Needed by |
+| ----------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------- | --------- |
+| `otp.max_per_phone_per_hour`                                      | OTP sends per phone                   | 5                                                                          | Phase 1   |
+| `otp.max_per_ip_per_hour`                                         | OTP sends per IP                      | 20                                                                         | Phase 1   |
+| Supabase Auth `sms_sent` (per hour, whole project)                | Hard cap on all OTP SMS per hour      | Size to launch traffic, e.g. 500                                           | Launch    |
+| Supabase Auth `sign_in_sign_ups` (per 5 min per IP)               | Our server calls Auth from one IP     | e.g. 300                                                                   | Launch    |
+| `geo.enforcement_mode`                                            | SIGNUP_ONLY / EVERY_SESSION           | SIGNUP_ONLY (spec)                                                         | Phase 1   |
+| `photos.min_required`                                             | Photos needed (BR-8)                  | 3 (spec) — set in the migration                                            | Phase 3   |
+| `photos.max_per_user`                                             | Max photos                            | 6 (spec) — set in the migration                                            | Phase 3   |
+| `photos.max_uploads_per_hour`                                     | Upload attempts per member per hour   | 10 (DEV-ONLY 50 in seed)                                                   | Phase 3   |
+| Upload size cap (code + bucket limit, not a setting)              | Largest file accepted                 | 10 MB (built)                                                              | Phase 3   |
+| `staff_login.max_per_ip_per_hour`                                 | Failed staff sign-ins per IP          | 30 (DEV-ONLY 200 in seed)                                                  | Phase 3   |
+| `staff_login.max_per_account_per_hour`                            | Failed sign-ins, one staff, one IP    | 10 (DEV-ONLY 20 in seed)                                                   | Phase 3   |
+| `staff_login.max_per_account_all_ips_per_hour`                    | Failed sign-ins, one staff, any IP    | 50 (DEV-ONLY 100 in seed)                                                  | Phase 3   |
+| Signed URL lifetime (code, not a setting)                         | How long a photo link works           | 120 s (spec, built)                                                        | Phase 3   |
+| `verification.rejections_before_escalation`                       | Rejected selfies → next goes to admin | 3 (DEV-ONLY 3 in seed)                                                     | Phase 4   |
+| `verification.pose_prompts`                                       | Pose list (one picked at random)      | 8 proposed — see `supabase/seed.sql` (no left/right: front cameras mirror) | Phase 4   |
+| `verification.selfie_retention_days`                              | OD-6: days after a decision           | 90 (DEV-ONLY 90 in seed)                                                   | Phase 4   |
+| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h             | 3 (spec)                                                                   | Phase 5   |
+| `reports.per_user_per_day`                                        | Report rate limit                     | 10                                                                         | Phase 5   |
+| `relationship.pass_cooldown_days`                                 | Passed profile returns after          | 30                                                                         | Phase 6   |
+| `relationship.daily_like_cap`                                     | OD-10                                 | — your call                                                                | Phase 6   |
+| `claims.rejections_before_flag`                                   | Rejected claims → member flagged      | 3                                                                          | Phase 7   |
+| `claims.evidence_max_bytes`                                       | Screenshot size cap                   | 10 MB                                                                      | Phase 7   |
+| `availability.max_window_hours`                                   | OD-8                                  | 12 (spec)                                                                  | Phase 8   |
+| `availability.max_lead_days`                                      | OD-8                                  | 7 (spec)                                                                   | Phase 8   |
+| `signals.short_window_minutes` / `signals.short_windows_per_week` | "Frequent short windows" flag         | 30 min / 5 per week                                                        | Phase 8   |
+| `requests.daily_cap`                                              | OD-9                                  | — your call                                                                | Phase 9   |
+| `requests.decline_cooldown_days`                                  | OD-9                                  | — your call                                                                | Phase 9   |
+| `subscriptions.manual_extension_max_days`                         | OD-30 cap on admin manual extension   | 7 days                                                                     | Phase 10  |
+| `signals.requests_burst`                                          | "Many requests in a short time"       | 10 in 10 min                                                               | Phase 9   |
+| `signals.duplicate_text_recipients`                               | "Same text to many members"           | 5 in 24 h                                                                  | Phase 9   |
 
 - **Steps:** Reply "approve T-19" or list changes.
 - **Blocks:** Each phase in the last column (I can build with DEV-ONLY values but can't call the phase complete without approved values).
@@ -324,3 +326,10 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **Steps:** Reply "no changes in MVP" (my recommendation; members contact support), or "allow" and I'll plan a reviewed flow.
 - **Blocks:** nothing now.
 - **Requested in:** Phase 1.
+
+### T-27 — Cron secret
+
+- **What:** In Vercel, add an environment variable named `CRON_SECRET` with a long random value (for example from a password manager's generator, 32+ characters). Don't paste it in chat.
+- **Why:** Vercel Cron calls `/api/cron/selfie-retention` daily (`vercel.json`) and sends this secret; without it the job refuses to run, so selfies are never deleted (OD-6).
+- **Blocks:** Selfie retention on the hosted app.
+- **Requested in:** Phase 4.

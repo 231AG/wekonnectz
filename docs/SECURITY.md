@@ -109,6 +109,16 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Account guards on `auth.users` (Phase 3 audit).** Supabase Auth does not run the before-user-created hook for admin-API creates — the path our server uses for members. A trigger now enforces the same rules on every user Auth creates: +231 only, not blocklisted, a valid geo pass, and no email on member accounts. A second trigger stops a member adding an email later (`updateUser({email})` would otherwise open an email sign-in path). Email-only accounts are staff.
 - **Hosted settings to match `supabase/config.toml`:** Email provider on, sign-ups off; TOTP MFA on; minimum password length 12 with upper, lower and digits. Supabase's own per-IP rate limits apply to password and MFA attempts.
 
+## Verification (Phase 4)
+
+- **Pose chosen by the server (§9).** `start_verification()` picks a pose from `verification.pose_prompts` and stores it on an `AWAITING_SELFIE` row; reloading shows the same pose, so a member can't re-roll for an easy one. The capture screen uses the live camera only (no file input). A determined member could still feed a picture to the camera — the human check (pose, same face as the photos, liveness signs) is the control.
+- **Selfie pipeline.** Same as photos: signed upload into quarantine → server validation and re-encoding (no metadata) → private `verification` bucket as `<verification_id>.webp`. Paths never leave `lib/storage/verification.ts`; members never get a selfie URL (BR-10).
+- **Every view audited (BR-34).** The queue page calls `log_selfie_view()` with the staff session — which writes `SELFIE_VIEWED` — before the server signs the selfie URL (120 s). Items open only from explicit links with prefetching off, so listing or hovering never counts as a view (and never shows a selfie).
+- **Escalation.** After `verification.rejections_before_escalation` rejections, or any rejection for doubt about age, the next selfie is escalated: moderators can see it but only ADMIN and above can decide (`ADMIN_REQUIRED`).
+- **Account state.** `recompute_account_state()` turns PENDING into ACTIVE only when the latest verification is VERIFIED and 3 photos are APPROVED (BR-13); it never changes SUSPENDED, BANNED or DELETED accounts.
+- **Retention (OD-6).** `/api/cron/selfie-retention` (Vercel Cron, `Authorization: Bearer $CRON_SECRET`, constant-time compare; refuses when unset) deletes images past `verification.selfie_retention_days`; `mark_selfies_deleted()` re-checks the period, and the decision record stays.
+- **Notifications.** `notify()` is the only writer; payloads hold ids and reason codes, never personal data. Members read only their own rows.
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,
