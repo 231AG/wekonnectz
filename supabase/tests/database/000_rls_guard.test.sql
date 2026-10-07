@@ -1,7 +1,7 @@
 -- Guards that apply to every table in the public schema (spec §6 rule 2, §22).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(8);
 
 select is_empty(
   $$ select c.relname::text
@@ -70,10 +70,17 @@ select is_empty(
           'set_date_of_birth',        -- Phase 1: caller's own DOB, once (BR-4)
           'current_user_can_act',     -- Phase 1: caller's own status only
           'is_staff',                 -- Phase 1: caller's own role + MFA level only
-          'onboarding_progress'       -- Phase 2: caller's own onboarding flags only
+          'onboarding_progress',      -- Phase 2: caller's own onboarding flags only
+          'staff_photo_queue',        -- Phase 3: raises unless is_staff() (role + aal2); no storage paths
+          'staff_queue_counts',       -- Phase 3: raises unless is_staff(); counts only
+          'review_photo',             -- Phase 3: raises unless is_staff(); audited (BR-34)
+          'current_staff_role'        -- Phase 3: caller's own staff role only
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
+
+-- Spec §4: no public storage bucket, ever.
+select is_empty($$ select id from storage.buckets where public $$, 'no storage bucket is public');
 
 select * from finish();
 rollback;

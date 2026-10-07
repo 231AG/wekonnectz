@@ -12,6 +12,8 @@ export type OnboardingProgress = {
   rulesAccepted: boolean;
   basicsDone: boolean;
   interestsBioDone: boolean;
+  /** 3 photos uploaded and none of them rejected (spec §10 step 9). */
+  photosDone: boolean;
 };
 
 export type Member = {
@@ -56,6 +58,7 @@ export async function getMember(): Promise<Member | null> {
       rulesAccepted: p.rules_accepted === true,
       basicsDone: p.basics_done === true,
       interestsBioDone: p.interests_bio_done === true,
+      photosDone: p.photos_done === true,
     },
   };
 }
@@ -66,6 +69,8 @@ export async function requireMember(): Promise<Member> {
   if (!member) redirect("/login");
   // Server Components can't change cookies, so the sign-out happens in a route handler.
   if (!canHoldSession(member.status)) redirect("/auth/signout?notice=unavailable");
+  // Spec §7: staff use separate accounts and never the member app.
+  if (member.role !== "USER") redirect("/admin");
   return member;
 }
 
@@ -74,16 +79,19 @@ export const ONBOARDING_STEPS = {
   about: "/onboarding/about",
   interests: "/onboarding/interests",
   photos: "/onboarding/photos",
+  verify: "/onboarding/verify",
 } as const;
 
 /** Where a signed-in member goes next: the first incomplete step (spec §10: resume where you left off). */
-export function nextStepFor(member: Pick<Member, "hasDateOfBirth" | "onboarding">): string {
+export function nextStepFor(member: Pick<Member, "hasDateOfBirth" | "onboarding"> & { role?: UserRole }): string {
+  if (member.role && member.role !== "USER") return "/admin";
   if (!member.hasDateOfBirth) return "/signup";
   if (!member.onboarding.rulesAccepted) return ONBOARDING_STEPS.rules;
   if (!member.onboarding.basicsDone) return ONBOARDING_STEPS.about;
   if (!member.onboarding.interestsBioDone) return ONBOARDING_STEPS.interests;
-  // Photos, selfie and review arrive in Phases 3–4.
-  return ONBOARDING_STEPS.photos;
+  if (!member.onboarding.photosDone) return ONBOARDING_STEPS.photos;
+  // Selfie and review arrive in Phase 4.
+  return ONBOARDING_STEPS.verify;
 }
 
 type StepKey = keyof typeof ONBOARDING_STEPS;
@@ -91,7 +99,7 @@ type StepKey = keyof typeof ONBOARDING_STEPS;
 /** For a step page: the member may open this step only once every earlier step is done. */
 export async function requireOnboardingStep(step: StepKey): Promise<Member> {
   const member = await requireMember();
-  const order: StepKey[] = ["rules", "about", "interests", "photos"];
+  const order: StepKey[] = ["rules", "about", "interests", "photos", "verify"];
   const next = nextStepFor(member);
   const nextIndex = next === "/signup" ? -1 : order.findIndex((k) => ONBOARDING_STEPS[k] === next);
   if (nextIndex < order.indexOf(step)) redirect(next);

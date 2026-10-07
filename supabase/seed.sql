@@ -11,6 +11,7 @@ select vault.create_secret(
 -- DEV-ONLY limits until the owner approves T-19. Generous so tests are not throttled.
 update public.app_settings set value = '20'::jsonb where key = 'otp.max_per_phone_per_hour'; -- DEV-ONLY
 update public.app_settings set value = '200'::jsonb where key = 'otp.max_per_ip_per_hour';   -- DEV-ONLY
+update public.app_settings set value = '50'::jsonb where key = 'photos.max_uploads_per_hour'; -- DEV-ONLY
 
 -- DEV-ONLY area list until the owner provides the real one (T-09). The 15 counties of Liberia, with a few
 -- Monrovia communities taken from the mock-ups; every other county has a single placeholder entry.
