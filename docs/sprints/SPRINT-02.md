@@ -26,3 +26,12 @@ Photos (Phase 3), verification selfie and Under review (Phase 4), admin manageme
 - [x] Members can't write profile fields directly or call the write functions
 - [ ] Owner provides areas (T-09), interests (T-10), reviews detection terms (T-11)
 - [ ] Owner confirms Q14–Q16 (gender options, optional bio, display-name rules)
+
+## Self-audit
+
+Six review rounds, the last clean. Rounds 2–6 were on the detection engine, the part most open to evasion and false positives.
+
+- Round 1: 13 findings across actions, migration and UI, all fixed.
+- Rounds 2–5: phone-number evasions (words, emoji, spoken "double 7", tens/teen words, circled digits, long asides), false positives on ordinary bios (Bible verses, scores, heights, birth years, "Momo", "my number one", "Football, tv"), quadratic regexes. Phones are now matched by digit groups, not separators. Every string found is in the `MUST_BLOCK` / `MUST_PASS` corpus in `tests/unit/detection.test.ts` (383 tests).
+- Round 6: clean.
+- Accepted gaps are listed under T-11 in `docs/progress/OWNER_TASKS.md`.
