@@ -244,9 +244,9 @@ const LINK = [
   /(?<![a-z])www\s*\./,
   /(?<![a-z])(?:wa|t)\s*\.\s*me\s*\//,
   /(?<![a-z])(?:bit\.ly|tinyurl|linktr\.ee)(?![a-z])/,
-  // name.tld, name[.]tld, name(dot)tld — any TLD when nothing but the dot separates them. Not word lists
-  // written without spaces: "Gym.Music.TV", "Love.Me.Love" (a commas-only list is caught below only for com/net/org).
-  new RegExp(`(?<![a-z0-9.])[a-z0-9-]{3,63}(?:\\.|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\])${TLD}(?![a-z])(?!\\.[a-z])`),
+  // name.tld, name[.]tld, name(dot)tld — any TLD when nothing but the dot separates them. Subdomains count
+  // ("kofi.github.io"); a TLD-like word in the middle of a chain does not ("Love.Me.Love").
+  new RegExp(`(?<![a-z0-9])[a-z0-9-]{3,63}(?:\\.|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\])${TLD}(?![a-z])(?!\\.[a-z])`),
   // name . com, name dot com, name dotcom, name [dot] org — spaced out, only com/net/org: "Football, tv",
   // "Born in Monrovia, LR", "Family. Me time" and "polka dot me" are ordinary sentences
   new RegExp(
@@ -392,6 +392,16 @@ function isPhoneRun(view: string, groups: DigitGroup[]): boolean {
   // "Scores 77, 100, 1000" or "22. 180. 2000.".
   // After spelled-out digits a comma is fine too: "seven seven, 012 3456".
   const gaps = merged.slice(1).map((g, i) => view.slice(merged[i].end, g.start));
+  // The usual groupings, 77-012-3456 and 770-123-456, with any separator ("77/012/3456", "77, 012, 3456"),
+  // but not lists that end in round numbers or years ("Scores 77, 100, 1000", "22, 175, 2001").
+  const shape = merged.map((g) => g.digits.length).join("-");
+  if (
+    (shape === "2-3-4" || shape === "3-3-3") &&
+    !gaps.some((gap) => /[a-z]/.test(gap)) &&
+    !merged.slice(1).some((g) => /00$/.test(g.digits) || YEAR.test(g.digits))
+  ) {
+    return true;
+  }
   const separatorOk = (gap: string, i: number) =>
     PHONE_SEPARATOR.test(gap) || /[a-z]/.test(gap) || (merged[i].singles === true && /^,\s?$/.test(gap));
   if (!gaps.every(separatorOk)) return false;
@@ -419,14 +429,17 @@ function hasPhone(base: string): boolean {
     }
     // The start and the rest further apart: "0770 (that's my orange line) 123456", "770 is my line, 123456".
     // The rest may itself be split by phone separators: "770 (orange) and the rest: 123 456".
-    if (first.digits.length >= 3 && /^(?:0|231)?(?:77|88|55|33|22)/.test(first.digits)) {
+    // Without 0/231 only the 770 + 123456 shape counts, and not round numbers: "I walk 5500 steps … 12000".
+    const prefixed = /^(?:0|231)(?:77|88|55|33|22)/.test(first.digits);
+    if (prefixed || /^(?:77|88|55|33|22)\d$/.test(first.digits)) {
       let rest = "";
       for (let k = i + 1; k < groups.length && rest.length < 8; k += 1) {
         const gap = view.slice(groups[k - 1].end, groups[k].start);
         if (k === i + 1 ? gap.length > MAX_PREFIXED_GAP : !PHONE_SEPARATOR.test(gap)) break;
         if (groups[k].digits.length < 3 || YEAR.test(groups[k].digits)) break;
+        if (!prefixed && /00$/.test(groups[k].digits)) break;
         rest += groups[k].digits;
-        if (LIBERIAN_MOBILE_EXACT.test(first.digits + rest)) return true;
+        if (LIBERIAN_MOBILE_EXACT.test(first.digits + rest) && (prefixed || rest.length === 6)) return true;
       }
     }
   }
