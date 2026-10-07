@@ -9,7 +9,7 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | ------------------- | ------- | -------------- | -------------- | ---------- |
 | Foundation          | 10      | 2              | 0              | 0          |
 | Auth and geo        | 12      | 1              | 1              | 1          |
-| Onboarding          | 1       | 0              | 7              | 0          |
+| Onboarding          | 5       | 2              | 1              | 0          |
 | Photos              | 0       | 0              | 8              | 0          |
 | Verification        | 0       | 0              | 6              | 2          |
 | Safety              | 0       | 0              | 11             | 0          |
@@ -22,11 +22,11 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Admin console       | 0       | 0              | 11             | 0          |
 | Notifications       | 0       | 0              | 5              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **23**  | **3**          | **96**         | **11**     |
+| **Total**           | **27**  | **5**          | **90**         | **11**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending.
 
 ## Planning
 
@@ -68,12 +68,12 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Onboarding
 
 - ✅ DOB stored and locked; under-18 blocked — P1 — BR-4
-- ⬜ Community rules & consents with document version — P2
-- ⬜ About you: name, gender, interested in, county + community, intent — P2 — BR-20
-- ⬜ Interests (≥3) & bio (≤500, detection) — P2 — BR-31
-- ⬜ Resume at first incomplete step — P2
-- ⬜ `areas`, `interests` admin-managed lists — P2 (admin UI P10)
-- ⬜ Detection engine + DB term list — P2 — BR-31
+- ✅ Community rules & consents with document version (text stored + SHA-256, immutable) — P2
+- ✅ About you: name, gender, interested in, county + community, intent — P2 — BR-20
+- ✅ Interests (≥3) & bio (≤500, detection) — P2 — BR-31
+- ✅ Resume at first incomplete step — P2
+- 🔄 `areas`, `interests` lists — P2 built with DEV-ONLY data (⛔ real lists T-09, T-10); admin UI P10
+- 🔄 Detection engine + DB term list — P2 — BR-31 (built; term list ⛔ T-11 review)
 - ⬜ Under review screen with live progress — P4
 
 ## Photos
@@ -126,7 +126,7 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 - ⬜ Conversations, members, messages tables + RLS — P6 — BR-23, BR-24
 - ⬜ Realtime channels authorised by membership — P6
-- ⬜ Text only; price/payment/money-request patterns flagged, phone numbers not flagged (OD-31) — P6
+- ⬜ Text only; price/payment/money-request patterns flagged, phone numbers not flagged (OD-31) — P6 (engine ready from P2)
 - ⬜ Read receipts — P6
 - ⬜ Suspended users cannot send — P6 — BR-5
 - ⬜ CASUAL conversations read-only without access — P9 — BR-25
