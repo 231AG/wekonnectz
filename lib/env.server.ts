@@ -12,6 +12,8 @@ const schema = z.object({
   GEO_TRUST_HEADER: z.string().optional(),
   DEV_GEO_COUNTRY: z.string().optional(),
   SMS_DEV_OUTBOX_DIR: z.string().default(".dev-sms-outbox"),
+  // Vercel Cron sends it as a bearer token to /api/cron/*. Unset → the cron routes refuse to run.
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

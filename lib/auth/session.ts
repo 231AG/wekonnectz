@@ -14,7 +14,11 @@ export type OnboardingProgress = {
   interestsBioDone: boolean;
   /** 3 photos uploaded and none of them rejected (spec §10 step 9). */
   photosDone: boolean;
+  /** Latest verification selfie (spec §9). */
+  verification: VerificationState;
 };
+
+export type VerificationState = "NOT_STARTED" | "PENDING" | "VERIFIED" | "REJECTED";
 
 export type Member = {
   id: string;
@@ -59,6 +63,9 @@ export async function getMember(): Promise<Member | null> {
       basicsDone: p.basics_done === true,
       interestsBioDone: p.interests_bio_done === true,
       photosDone: p.photos_done === true,
+      verification: (["PENDING", "VERIFIED", "REJECTED"].includes(String(p.verification))
+        ? p.verification
+        : "NOT_STARTED") as VerificationState,
     },
   };
 }
@@ -80,18 +87,27 @@ export const ONBOARDING_STEPS = {
   interests: "/onboarding/interests",
   photos: "/onboarding/photos",
   verify: "/onboarding/verify",
+  review: "/onboarding/review",
 } as const;
 
+/** Where ACTIVE members land (Phase 6 replaces it with the real Home). */
+export const MEMBER_HOME = "/home";
+
 /** Where a signed-in member goes next: the first incomplete step (spec §10: resume where you left off). */
-export function nextStepFor(member: Pick<Member, "hasDateOfBirth" | "onboarding"> & { role?: UserRole }): string {
+export function nextStepFor(
+  member: Pick<Member, "hasDateOfBirth" | "onboarding"> & { role?: UserRole; status?: AccountStatus },
+): string {
   if (member.role && member.role !== "USER") return "/admin";
   if (!member.hasDateOfBirth) return "/signup";
   if (!member.onboarding.rulesAccepted) return ONBOARDING_STEPS.rules;
   if (!member.onboarding.basicsDone) return ONBOARDING_STEPS.about;
   if (!member.onboarding.interestsBioDone) return ONBOARDING_STEPS.interests;
+  // ACTIVE = verified with 3 approved photos (spec §10). A rejected photo later doesn't send them back.
+  if (member.status === "ACTIVE") return MEMBER_HOME;
   if (!member.onboarding.photosDone) return ONBOARDING_STEPS.photos;
-  // Selfie and review arrive in Phase 4.
-  return ONBOARDING_STEPS.verify;
+  const v = member.onboarding.verification;
+  if (v === "NOT_STARTED" || v === "REJECTED") return ONBOARDING_STEPS.verify;
+  return ONBOARDING_STEPS.review;
 }
 
 type StepKey = keyof typeof ONBOARDING_STEPS;
@@ -99,9 +115,15 @@ type StepKey = keyof typeof ONBOARDING_STEPS;
 /** For a step page: the member may open this step only once every earlier step is done. */
 export async function requireOnboardingStep(step: StepKey): Promise<Member> {
   const member = await requireMember();
-  const order: StepKey[] = ["rules", "about", "interests", "photos", "verify"];
+  const order: StepKey[] = ["rules", "about", "interests", "photos", "verify", "review"];
   const next = nextStepFor(member);
-  const nextIndex = next === "/signup" ? -1 : order.findIndex((k) => ONBOARDING_STEPS[k] === next);
+  // ACTIVE members may revisit any step (editing their profile).
+  const nextIndex =
+    next === "/signup"
+      ? -1
+      : next === MEMBER_HOME
+        ? order.length
+        : order.findIndex((k) => ONBOARDING_STEPS[k] === next);
   if (nextIndex < order.indexOf(step)) redirect(next);
   return member;
 }

@@ -82,7 +82,10 @@ async function sweepQuarantine(userId: string): Promise<void> {
     admin.from("profile_photos").select("id").eq("user_id", userId).eq("status", "UPLOADING"),
   ]);
   const keep = new Set((open ?? []).map((r) => r.id));
-  const stale = (files ?? []).filter((f) => !keep.has(f.name)).map((f) => `${userId}/${f.name}`);
+  // Selfie captures ("v-…") are managed by lib/storage/verification.ts.
+  const stale = (files ?? [])
+    .filter((f) => !f.name.startsWith("v-") && !keep.has(f.name))
+    .map((f) => `${userId}/${f.name}`);
   if (stale.length) await admin.storage.from(QUARANTINE).remove(stale);
 }
 

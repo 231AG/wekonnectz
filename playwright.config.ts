@@ -19,7 +19,11 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
-    launchOptions: { executablePath },
+    launchOptions: {
+      executablePath,
+      // A synthetic camera for the verification selfie (spec §9: in-app capture), permission auto-granted.
+      args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+    },
   },
   projects: [
     {

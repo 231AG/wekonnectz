@@ -54,9 +54,7 @@ test("§11: a member uploads 3 photos; each is processed, stored privately and w
   await page.goto("/onboarding");
   await expect(page).toHaveURL(/\/onboarding\/verify$/);
 
-  // Log out from the last step available so far.
-  await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId("pose-prompt")).toBeVisible();
   expect(errors).toEqual([]);
 });
 

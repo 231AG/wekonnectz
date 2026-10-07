@@ -3,9 +3,17 @@ import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { adminClient, createMember, randomLiberianPhone, signInMemberViaApi } from "./auth-helpers";
-import { SHOTS_P3, trackPageErrors } from "./helpers";
+import { SHOTS_P3, SHOTS_P4, trackPageErrors } from "./helpers";
+import sharp from "sharp";
 import { memberAtPhotos, PHOTO_FIXTURES } from "./member-helpers";
-import { createStaff, seedPendingPhotos, staffClientAal1, staffSignInViaUi, totp } from "./staff-helpers";
+import {
+  createStaff,
+  seedPendingPhotos,
+  seedPendingVerification,
+  staffClientAal1,
+  staffSignInViaUi,
+  totp,
+} from "./staff-helpers";
 
 test.use({ extraHTTPHeaders: { "x-vercel-ip-country": "LR" } });
 
@@ -196,4 +204,147 @@ test("§21 photo queue: a moderator approves and rejects (reason required); each
   // Two usable photos left: the step is no longer complete.
   await expect(memberPage.getByRole("button", { name: "Continue" })).toBeDisabled();
   expect(errors).toEqual([]);
+});
+
+test("§21 verification queue: each selfie view is audited; checklist, reject with reason, approve; ACTIVE with 3 approved photos", async ({
+  page,
+  browser,
+}) => {
+  const errors = trackPageErrors(page);
+  const memberPage = await browser.newPage({ extraHTTPHeaders: { "x-vercel-ip-country": "LR" } });
+  const name = `Verify ${Math.random().toString(36).slice(2, 6)}`;
+  const { userId } = await memberAtPhotos(memberPage, name);
+  const photoIds = await seedPendingPhotos(userId, PHOTO_FIXTURES.slice(0, 3));
+  const first = await seedPendingVerification(userId);
+  const admin = adminClient();
+
+  const staff = await createStaff();
+  await staffSignInViaUi(page, staff);
+  await expect(page.getByTestId("verifications-pending")).not.toHaveText("0");
+  await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Verification" }).click();
+  await expect(page.getByRole("heading", { name: "Verification queue" })).toBeVisible();
+
+  // Listing the queue is not a selfie view.
+  const views = async (id: string) =>
+    (
+      await admin
+        .from("audit_logs")
+        .select("id")
+        .eq("action", "SELFIE_VIEWED")
+        .eq("entity_id", id)
+        .eq("actor_id", staff.id)
+    ).data?.length ?? 0;
+  expect(await views(first)).toBe(0);
+
+  await page
+    .getByRole("navigation", { name: "Submissions" })
+    .getByRole("link", { name: new RegExp(name) })
+    .click();
+  await expect(page.getByRole("heading", { name: new RegExp(`^${name}, \\d+$`) })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Verification selfie" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^Profile photo/ })).toHaveCount(3);
+  expect(await views(first)).toBe(1);
+  const selfieSrc = await page.getByRole("img", { name: "Verification selfie" }).getAttribute("src");
+  expect(selfieSrc).toMatch(/\/storage\/v1\/object\/sign\/verification\/.+\?token=/);
+  await page.screenshot({ path: `${SHOTS_P4}/admin-verification-queue.png` });
+
+  // Approve needs every check; reject needs a reason.
+  await expect(page.getByRole("button", { name: "Approve" })).toBeDisabled();
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Choose a reason to reject." })).toBeVisible();
+  await page.getByLabel("Rejection reason").selectOption({ label: "Pose doesn’t match the prompt" });
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page).toHaveURL(/\/admin\/verification$/);
+
+  const { data: audit } = await admin
+    .from("audit_logs")
+    .select("action, metadata")
+    .eq("entity_id", first)
+    .eq("action", "VERIFICATION_REJECTED");
+  expect(audit?.[0]?.metadata).toMatchObject({ reason: "POSE_NOT_MATCHING", user_id: userId });
+
+  // The member sees a neutral reason and a new pose.
+  await memberPage.goto("/onboarding");
+  await expect(memberPage).toHaveURL(/\/onboarding\/verify$/);
+  await expect(memberPage.getByText("The pose didn’t match the instruction.")).toBeVisible();
+
+  // Second selfie: approved. Photos approved → ACTIVE (BR-13).
+  const second = await seedPendingVerification(userId);
+  await page.goto(`/admin/verification?id=${second}`);
+  for (const check of [
+    "Pose matches the prompt",
+    "Same person as the profile photos",
+    "Clearly appears 18 or older",
+    "No signs of a photo of a screen or printout",
+  ]) {
+    await page.getByLabel(check).check();
+  }
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page).toHaveURL(/\/admin\/verification$/);
+  expect((await admin.from("users").select("status").eq("id", userId).single()).data?.status).toBe("PENDING");
+
+  await page.goto("/admin/photos");
+  for (let i = 0; i < photoIds.length; i += 1) {
+    await page.getByRole("article").filter({ hasText: name }).first().getByRole("button", { name: "Approve" }).click();
+  }
+  await expect(page.getByRole("article").filter({ hasText: name })).toHaveCount(0);
+  await expect
+    .poll(async () => (await admin.from("users").select("status").eq("id", userId).single()).data?.status)
+    .toBe("ACTIVE");
+
+  await memberPage.goto("/onboarding");
+  await expect(memberPage).toHaveURL(/\/home$/);
+  await expect(memberPage.getByText("Verified", { exact: true })).toBeVisible();
+  await memberPage.screenshot({ path: `${SHOTS_P4}/member-home-verified.png`, fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test("OD-6: the selfie retention job needs the cron secret and deletes only expired selfies", async ({ request }) => {
+  expect((await request.get("/api/cron/selfie-retention")).status()).toBe(401);
+  expect(
+    (
+      await request.get("/api/cron/selfie-retention", { headers: { authorization: "Bearer wrong-secret-value" } })
+    ).status(),
+  ).toBe(401);
+
+  const phone = randomLiberianPhone();
+  const userId = await createMember(phone.e164);
+  const admin = adminClient();
+  // A verification decided 200 days ago, with its image still stored.
+  const id = crypto.randomUUID();
+  const path = `${id}.webp`;
+  const image = await sharp(PHOTO_FIXTURES[0]).webp().toBuffer();
+  expect(
+    (await admin.storage.from("verification").upload(path, image, { contentType: "image/webp" })).error,
+  ).toBeNull();
+  const decidedAt = new Date(Date.now() - 200 * 86_400_000).toISOString();
+  expect(
+    (
+      await admin.from("verifications").insert({
+        id,
+        user_id: userId,
+        pose_prompt: "Touch your chin with one finger",
+        status: "REJECTED",
+        rejection_reason: "UNCLEAR",
+        selfie_storage_path: path,
+        submitted_at: decidedAt,
+        reviewed_at: decidedAt,
+      })
+    ).error,
+  ).toBeNull();
+  const row = { id };
+
+  const res = await request.get("/api/cron/selfie-retention", {
+    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+  });
+  expect(res.status()).toBe(200);
+  expect((await res.json()).deleted).toBeGreaterThanOrEqual(1);
+  const { data: after } = await admin
+    .from("verifications")
+    .select("selfie_storage_path, selfie_deleted_at, status")
+    .eq("id", row!.id)
+    .single();
+  expect(after).toMatchObject({ selfie_storage_path: null, status: "REJECTED" });
+  expect(after?.selfie_deleted_at).not.toBeNull();
+  expect((await admin.storage.from("verification").list("", { search: row!.id })).data ?? []).toHaveLength(0);
 });

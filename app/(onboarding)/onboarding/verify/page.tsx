@@ -1,34 +1,53 @@
-import { ShieldCheck } from "lucide-react";
+import { redirect } from "next/navigation";
+import { User } from "lucide-react";
 
-import { MobileScreen, ScreenLead, ScreenTitle } from "@/components/layout/mobile-screen";
-import { Button } from "@/components/ui/button";
+import { MobileScreen, ScreenTitle } from "@/components/layout/mobile-screen";
+import { SelfieCapture } from "@/components/onboarding/selfie-capture";
 import { Card } from "@/components/ui/card";
 import { StepHeader } from "@/components/ui/step-header";
-import { signOut } from "@/lib/auth/actions/login";
-import { requireOnboardingStep } from "@/lib/auth/session";
+import { nextStepFor, requireOnboardingStep } from "@/lib/auth/session";
+import { reviewStatus, startVerification } from "@/lib/storage/verification";
+import { prepareSelfieUpload, sendSelfie } from "@/lib/verification/actions";
+import { VERIFICATION_REASONS } from "@/lib/verification/reasons";
 
 export const metadata = { title: "Verify it’s you" };
 
-/** End of Phase 3. The verification selfie (spec §10 step 10) arrives in Phase 4. */
+/** Spec §10 step 10 / §9 layer 3 (mock-up 07): a live selfie with a pose chosen by the server. */
 export default async function VerifyStepPage() {
-  await requireOnboardingStep("verify");
+  const member = await requireOnboardingStep("verify");
+  const v = member.onboarding.verification;
+  if (v === "PENDING" || v === "VERIFIED") redirect(nextStepFor(member));
+
+  const [started, status] = await Promise.all([
+    startVerification(member.id),
+    v === "REJECTED" ? reviewStatus(member.id) : Promise.resolve(null),
+  ]);
+  if ("error" in started) {
+    if (["PHOTOS_REQUIRED", "PROFILE_INCOMPLETE"].includes(started.error.kind === "db" ? started.error.code : "")) {
+      redirect(nextStepFor(member));
+    }
+    throw new Error("verification unavailable");
+  }
+
   return (
-    <MobileScreen
-      footer={
-        <form action={signOut}>
-          <Button type="submit" variant="outline">
-            Log out
-          </Button>
-        </form>
-      }
-    >
+    <MobileScreen>
       <StepHeader step={7} total={8} backHref="/onboarding/photos" />
       <ScreenTitle>Verify it’s you</ScreenTitle>
-      <ScreenLead>A quick selfie, seen only by our reviewers, confirms your photos are really you.</ScreenLead>
-      <Card className="flex items-center gap-3.5">
-        <ShieldCheck className="size-6 shrink-0 text-verified" strokeWidth={1.8} aria-hidden />
-        <p className="flex-1 text-[15px] text-muted-foreground">Verification opens in the next release.</p>
+      {status?.rejectionReason ? (
+        <Card tone="dashed" role="status" className="text-[15px] text-muted-foreground">
+          {VERIFICATION_REASONS[status.rejectionReason].member}
+        </Card>
+      ) : null}
+      <Card tone="notice" className="flex items-center gap-4">
+        <User className="size-7 shrink-0 text-pending" strokeWidth={1.6} aria-hidden />
+        <div>
+          <p className="text-[13px] font-bold tracking-wide text-pending uppercase">Your pose</p>
+          <p className="text-[17px] font-bold" data-testid="pose-prompt">
+            {started.pose}
+          </p>
+        </div>
       </Card>
+      <SelfieCapture verificationId={started.verificationId} prepare={prepareSelfieUpload} send={sendSelfie} />
     </MobileScreen>
   );
 }

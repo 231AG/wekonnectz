@@ -90,3 +90,34 @@ export async function seedPendingPhotos(userId: string, files: string[]): Promis
   }
   return ids;
 }
+
+/**
+ * Puts a verification selfie in the queue for a member who has 3 photos, through the same database
+ * functions and storage the server uses. Dated a week back so it leads the queue.
+ */
+export async function seedPendingVerification(userId: string, file = "docs/mockups/html/images/musu1.jpg") {
+  const admin = adminClient();
+  const { data: started, error } = await admin.rpc("start_verification", { p_user_id: userId });
+  expect(error).toBeNull();
+  const verificationId = (started as { verification_id: string }[])[0].verification_id;
+  const path = `${verificationId}.webp`;
+  const webp = await sharp(file).webp().toBuffer();
+  expect((await admin.storage.from("verification").upload(path, webp, { contentType: "image/webp" })).error).toBeNull();
+  expect(
+    (await admin.rpc("claim_verification_selfie", { p_user_id: userId, p_verification_id: verificationId })).data,
+  ).toBe(true);
+  expect(
+    (
+      await admin.rpc("submit_verification", {
+        p_user_id: userId,
+        p_verification_id: verificationId,
+        p_storage_path: path,
+      })
+    ).error,
+  ).toBeNull();
+  const submitted = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  expect(
+    (await admin.from("verifications").update({ submitted_at: submitted }).eq("id", verificationId)).error,
+  ).toBeNull();
+  return verificationId;
+}

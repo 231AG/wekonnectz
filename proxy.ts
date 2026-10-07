@@ -30,6 +30,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Skip static assets, images, the auth hook route and the dev UI kit.
-    "/((?!_next/static|_next/image|icon.png|brand/|api/auth/hooks/|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|icon.png|brand/|api/auth/hooks/|api/cron/|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
   ],
 };
