@@ -206,7 +206,7 @@ insert into public.app_settings (key, value, description) values
        'lonestar money', 'lone star money', 'mtn money', 'cash app', 'airtime', 'scratch card', 'pay me',
        'transport fare', 'tp money'),
      'money_request', jsonb_build_array(
-       'send me money', 'send money', 'i need money', 'lend me money', 'loan me', 'borrow money')
+       'send me money', 'i need money', 'lend me money', 'loan me')
    ),
    'Contact, price and money-request terms for content checks (§17, OD-31). PROPOSED v1 — owner review: T-11.')
 on conflict (key) do nothing;

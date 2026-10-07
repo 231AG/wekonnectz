@@ -95,6 +95,15 @@ function asciiDigit(ch: string): string {
   return String((cp - start) % 10);
 }
 
+/** Circled digits NFKC leaves alone: ❶ ➀ ➊ (1–10), ⓫ (11–20), ⓵ (1–10), ⓿ (0). */
+function dingbatDigits(ch: string): string {
+  const cp = ch.codePointAt(0)!;
+  if (cp === 0x24ff) return "0";
+  if (cp >= 0x24eb && cp <= 0x24f4) return String(cp - 0x24eb + 11);
+  const start = cp >= 0x278a ? 0x278a : cp >= 0x2780 ? 0x2780 : cp >= 0x2776 ? 0x2776 : 0x24f5;
+  return String(cp - start + 1);
+}
+
 export function normalizeForDetection(text: string): string {
   let t = text.slice(0, MAX_DETECTION_LENGTH).normalize("NFKC").toLowerCase();
   t = t
@@ -106,8 +115,10 @@ export function normalizeForDetection(text: string): string {
     .replace(/[‘’ʼ`´]/g, "'")
     .replace(/[‐-―]/g, "-");
   t = t.replace(/\p{Nd}/gu, (d) => (/[0-9]/.test(d) ? d : asciiDigit(d)));
+  t = t.replace(/[❶-➓⓫-⓿]/g, dingbatDigits);
   t = t.replace(/[Ͱ-ϿЀ-ӿԀ-ԯ]/g, (c) => CONFUSABLES[c] ?? c);
-  return t;
+  // NFKC can lengthen text (one "ﷺ" becomes 18 characters), so cut again.
+  return t.slice(0, MAX_DETECTION_LENGTH);
 }
 
 /** "w h a t s a p p", "w.h.a.t.s.a.p.p", "c o m" → joined (runs of 3+ single letters). */
@@ -149,13 +160,31 @@ const NUMBER_WORD: Record<string, string> = {
   eight: "8",
   nine: "9",
 };
+const TENS: Record<string, string> = {
+  twenty: "2",
+  thirty: "3",
+  forty: "4",
+  fifty: "5",
+  sixty: "6",
+  seventy: "7",
+  eighty: "8",
+  ninety: "9",
+};
+const TENS_RUN =
+  /(?<![a-z])(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[\s-]?(one|two|three|four|five|six|seven|eight|nine))?(?![a-z])/g;
 const NUMBER_WORD_RUN = /(?<![a-z])(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)+(?![a-z])/g;
 
 /** Everything turned towards digits, for phone checks. */
 function digitView(text: string): string {
+  // Tens: "seventy-seven" → "77", "fifty six" → "56", "seventy" → "70".
+  text = text.replace(TENS_RUN, (_m, tens: string, unit?: string) => `${TENS[tens]}${unit ? NUMBER_WORD[unit] : "0"}`);
   // Whole runs of number words: "zerosevenseven" → "077" ("someone" is untouched).
   let t = text.replace(NUMBER_WORD_RUN, (run) =>
     run.replace(/zero|oh|one|two|three|four|five|six|seven|eight|nine/g, (w) => NUMBER_WORD[w]),
+  );
+  // "double 7" → "77", "triple 0" → "000" (spoken numbers).
+  t = t.replace(/(?<![a-z])(double|triple)[^a-z0-9]{0,3}(\d)/g, (_m, n: string, d: string) =>
+    d.repeat(n === "double" ? 2 : 3),
   );
   for (let i = 0; i < 3; i += 1) {
     t = t
@@ -173,25 +202,38 @@ function digitView(text: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Phone numbers are found by shape, not by separators: digits that sit close together (anything up to
- * 12 characters apart, words included) form a cluster, and a cluster is a phone number when its digits
- * contain a Liberian mobile number (optionally with 231 or a leading 0) or an international number
- * written with "+". Dates, years, Bible verses, room numbers and ages don't have that shape.
+ * Phone numbers are found by shape, not by separators. Digit groups that sit close together (up to 12
+ * characters apart, words included) are joined, and a run of whole groups is a phone number when it
+ * spells a Liberian mobile number: 0 or 231 (optional), a mobile prefix and 7 digits.
+ *
+ * Written with 0 / 231 / "+" the number is blocked however it is split ("077 01 2 2019"). Without a prefix,
+ * ordinary bios produce the same digits from verses, scores, heights and years ("Psalm 22:1, …",
+ * "88 kg, 188 cm, born 1988"), so the remaining groups must have 3+ digits (or all be single digits), and
+ * a year-shaped group is only allowed when nothing but punctuation separates the groups.
  */
 const LIBERIAN_MOBILE = /(?:231|0)?(?:77|88|55|33|22)\d{7}/;
+const LIBERIAN_MOBILE_EXACT = /^(?:231|0)?(?:77|88|55|33|22)\d{7}$/;
 const MAX_DIGIT_GAP = 12;
+/** "0770 (that's my orange line) 123456": a prefixed start may be this far from the rest. */
+const MAX_PREFIXED_GAP = 40;
+const YEAR = /^(?:19|20)\d\d$/;
 
 // Common look-alike spellings of the TLD are included ("c0m") because LINK checks don't undo leetspeak:
 // doing so turns ordinary numbers into fake domains ("175.10" → "its.io").
 const TLD = "(?:c[o0]m|n[e3]t|[o0]rg|lr|i[o0]|c[o0]|ly|app|link|inf[o0]|biz|xyz|gg|tv|[o0]nline|site|me)";
+// "kofi dot co dot lr" counts too: a second-level domain followed by a country code.
+const STRICT_TLD = "(?:c[o0]m|n[e3]t|[o0]rg|(?:c[o0]|edu|gov)\\s*(?:\\.|。|,|\\sdot)\\s*[a-z]{2})";
 const LINK = [
   /(?<![a-z])https?:\/\//,
   /(?<![a-z])www\s*\./,
   /(?<![a-z])(?:wa|t)\s*\.\s*me\s*\//,
   /(?<![a-z])(?:bit\.ly|tinyurl|linktr\.ee)(?![a-z])/,
-  // name.tld, name . tld, name[.]tld, name (dot) tld, name dot tld, name dotcom
+  // name.tld, name,tld, name[.]tld, name(dot)tld — any TLD when nothing but the dot separates them
+  new RegExp(`(?<![a-z0-9])[a-z0-9-]{3,63}(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\])${TLD}(?![a-z])`),
+  // name . com, name dot com, name dotcom, name [dot] org — spaced out, only com/net/org: "Football, tv",
+  // "Born in Monrovia, LR", "Family. Me time" and "polka dot me" are ordinary sentences
   new RegExp(
-    `(?<![a-z0-9])[a-z0-9-]{3,63}\\s*(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\]|\\sdot\\s|\\sdot)\\s*${TLD}(?![a-z])`,
+    `(?<![a-z0-9])[a-z0-9-]{3,63}\\s*(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\]|\\sdot)\\s*${STRICT_TLD}(?![a-z])`,
   ),
   // email-like: kofi@gmail, kofi at gmail
   /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|ymail)(?![a-z])/,
@@ -202,8 +244,9 @@ const HANDLE = [
   /(?:^|[\s(:,])@[a-z0-9_.]{2,}/,
   // "IG: kofi.lib", "snap: kofi_23", "fb: kofi", "insta @kofi"
   new RegExp(`(?<![a-z])${PLATFORM}\\s*[:@=]\\s*@?[a-z0-9_.]{2,}`),
-  // "ig kofi23", "snap kofi_23" — a handle-shaped word (starts with a letter or _, has a digit, _ or .)
-  new RegExp(`(?<![a-z])${PLATFORM}(?![a-z])\\s+@?[a-z_](?=[a-z0-9_.]*[0-9_.])[a-z0-9_.]{2,}`),
+  // "ig kofi23", "snap kofi_23" — a handle-shaped word (starts with a letter or _, has a digit, _ or an
+  // inner ".": "snap photos." is a sentence)
+  new RegExp(`(?<![a-z])${PLATFORM}(?![a-z])\\s+@?[a-z_](?=[a-z0-9_.]*(?:[0-9_]|\\.[a-z0-9]))[a-z0-9_.]{2,}`),
   // "IG is kofi", "insta name kofi", "snap handle: kofi"
   new RegExp(`(?<![a-z])${PLATFORM}\\s+(?:is|name is|name|handle|id)\\s*:?\\s*@?[a-z][a-z0-9_.]{2,}`),
   // "my insta", "add me on snap", "find me on fb"
@@ -217,6 +260,8 @@ const WHATSAPP_FUZZY = /(?<![a-z])w+h*a*(?:t+s*|s+)a+p+s?(?![a-z])/;
 
 const NUM_WORD =
   "(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|thousand|million)";
+/** 3+ digits that are not a year or a measurement. */
+const AMOUNT = "(?<!\\d)(?!(?:19|20)\\d\\d(?!\\d))\\d{3,}(?!\\d)(?!\\s*(?:cm|kg|lbs?|ft|m(?![a-z])))";
 const PRICE = [
   // currency then amount: $20, $ 20, USD50, LD500, L$ 1000, €20, £20
   /(?:\$|€|£|(?<![a-z])(?:usd|lrd|ld|us\$|l\$))\s*\d/,
@@ -233,8 +278,10 @@ const PRICE = [
   // charge 50, rate: 100, price $20, fee 500 — not "rate 10/10" or "charge 4 christ"
   /(?<![a-z])(?:charge|rate|price|fee)s?\s*[:=-]?\s*(?:(?:\$|usd|lrd|ld|l\$)\s*\d|\d{2,}(?![\d\s]*\/))/,
   // momo only in a money context — it is also a common name ("I'm Momo, 25")
-  /(?<![a-z])momo(?![a-z]).{0,20}\d{3}|(?<!\d)\d{3,}.{0,20}(?<![a-z])momo(?![a-z])/,
-  /(?<![a-z])(?:send|pay|via|by|on|accept|accepted|accepting|my|use)\s+(?:me\s+)?(?:on\s+)?momo(?![a-z])/,
+  // and an amount, not a birth year or a height: "Momo, 28, 180cm", "I'm Momo, born 1999"
+  new RegExp(`(?<![a-z])momo(?![a-z]).{0,20}${AMOUNT}|${AMOUNT}.{0,20}(?<![a-z])momo(?![a-z])`),
+  /(?<![a-z])(?:send|pay|via|accept|accepted|accepting|my|use)\s+(?:me\s+)?(?:on\s+)?momo(?![a-z'])/,
+  /(?<![a-z])(?:send|pay)\s+(?:\S+\s+){0,3}(?:by|on)\s+momo(?![a-z'])/,
   /(?<![a-z])momo\s+(?:accepted|only|number|no|account|me)(?![a-z])/,
   // transport only as money: "transport money", "for transport", "give me transport"
   /(?<![a-z])transport(?:ation)?\s+(?:fare|money|fee|fees|cash)(?![a-z])/,
@@ -243,7 +290,11 @@ const PRICE = [
 
 const MONEY_REQUEST = [
   // "I don't need money" / "not money" are not requests.
-  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend|loan|borrow|need|want)\s+(?:me\s+)?(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend|loan)\s+me\s+(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:need|want|borrow)\s+(?:(?:some|sum|small|little|any)\s+)?money(?![a-z])/,
+  // "send small money", "give some money pls" — but not "I send money home"
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend)\s+(?:some|sum|small|little)\s+money(?![a-z])/,
+  /(?<![a-z])(?<!(?:n'?t|not|never|no)\s+)(?:send|give|lend)\s+money\s+(?:to\s+me|pls|please|plz)(?![a-z])/,
   /(?<![a-z])pay\s+(?:for\s+)?my\s+(?:bills?|rent|fees?|phone|school|transport|light|current|data)(?![a-z])/,
 ];
 
@@ -285,32 +336,83 @@ function isCountingRun(digits: string): boolean {
   return digits.length <= 10 && ("0123456789".includes(digits) || "9876543210".includes(digits));
 }
 
+interface DigitGroup {
+  digits: string;
+  start: number;
+  end: number;
+}
+
+function isPhoneRun(view: string, groups: DigitGroup[]): boolean {
+  const digits = groups.map((g) => g.digits).join("");
+  if (!LIBERIAN_MOBILE_EXACT.test(digits) || isCountingRun(digits)) return false;
+  if (/^(?:0|231)/.test(digits) || view.slice(Math.max(0, groups[0].start - 2), groups[0].start).includes("+")) {
+    return true;
+  }
+  if (groups.every((g) => g.digits.length === 1)) return true;
+  const wordsBetween = groups.slice(1).some((g, i) => /[a-z]/.test(view.slice(groups[i].end, g.start)));
+  return groups.slice(1).every((g) => g.digits.length >= 3 && !(wordsBetween && YEAR.test(g.digits)));
+}
+
 function hasPhone(base: string): boolean {
   const view = digitView(base);
-  const clusters: { digits: string; plus: boolean }[] = [];
-  let current: { digits: string; plus: boolean; last: number } | null = null;
-  for (let i = 0; i < view.length; i += 1) {
-    if (!/\d/.test(view[i])) continue;
-    if (!current || i - current.last > MAX_DIGIT_GAP) {
-      if (current) clusters.push(current);
-      current = { digits: "", plus: view.slice(Math.max(0, i - 2), i).includes("+"), last: i };
-    }
-    current.digits += view[i];
-    current.last = i;
-  }
-  if (current) clusters.push(current);
+  const groups: DigitGroup[] = [...view.matchAll(/\d+/g)].map((m) => ({
+    digits: m[0],
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
 
-  return clusters.some(({ digits, plus }) => {
-    // "1 2 3 4 5 6 7 go" is counting, not a number.
-    if (isCountingRun(digits)) return false;
-    if (LIBERIAN_MOBILE.test(digits)) return true;
-    // International numbers written with a plus: "+44 7700 900123".
-    return plus && digits.length >= 10;
-  });
+  for (let i = 0; i < groups.length; i += 1) {
+    const first = groups[i];
+    // A long run of digits that contains a number: "07701234567".
+    if (first.digits.length >= 9 && !isCountingRun(first.digits) && LIBERIAN_MOBILE.test(first.digits)) return true;
+    let length = 0;
+    for (let j = i; j < groups.length && length <= 12; j += 1) {
+      if (j > i && groups[j].start - groups[j - 1].end > MAX_DIGIT_GAP) break;
+      length += groups[j].digits.length;
+      if (isPhoneRun(view, groups.slice(i, j + 1))) return true;
+    }
+    // A prefixed start and the rest further away: "0770 … 123456".
+    const next = groups[i + 1];
+    if (
+      next &&
+      next.start - first.end <= MAX_PREFIXED_GAP &&
+      /^(?:0|231)(?:77|88|55|33|22)/.test(first.digits) &&
+      LIBERIAN_MOBILE_EXACT.test(first.digits + next.digits)
+    ) {
+      return true;
+    }
+  }
+
+  // International numbers written with a plus: "+44 7700 900123".
+  for (let i = 0; i < groups.length; i += 1) {
+    if (!view.slice(Math.max(0, groups[i].start - 2), groups[i].start).includes("+")) continue;
+    let digits = "";
+    for (let j = i; j < groups.length; j += 1) {
+      if (j > i && groups[j].start - groups[j - 1].end > MAX_DIGIT_GAP) break;
+      digits += groups[j].digits;
+    }
+    if (digits.length >= 10) return true;
+  }
+  return false;
+}
+
+/**
+ * Everyday phrases that contain a term but mean something else. They are blanked before matching, so
+ * the rest of the text is still checked ("Family is my number one. My number is 0770…" is still blocked).
+ */
+const INNOCENT_PHRASES = [
+  /(?<![a-z])(?:in|within|for|after)\s+(?:a|such a)\s+(?:very\s+)?short\s+time(?![a-z])/g,
+  /(?<![a-z])pay\s+(?:me|us)\s+a\s+visit(?![a-z])/g,
+  /(?<![a-z])my\s+(?:number|num|no\.?)\s+(?:one|1)(?![a-z0-9])/g,
+  /(?<![a-z])call\s+me\s+on\s+(?=(?:weekends?|weekdays?|sundays?|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|holidays?)(?![a-z]))/g,
+];
+
+function blankInnocentPhrases(text: string): string {
+  return INNOCENT_PHRASES.reduce((t, re) => t.replace(re, (m) => " ".repeat(m.length)), text);
 }
 
 export function detect(text: string, mode: DetectionMode, terms: DetectionTerms): DetectionResult {
-  const base = normalizeForDetection(text);
+  const base = blankInnocentPhrases(normalizeForDetection(text));
   const spaced = collapseSpacedLetters(base);
   const joined = joinWords(spaced);
   const views = [base, spaced, joined];

@@ -49,6 +49,21 @@ const MUST_BLOCK: Record<string, string[]> = {
     "0 7 7 0\n1 2 3\n4 5 6",
   ],
   "phone numbers, disguised": [
+    "0 double 7 0123456",
+    "zero double seven 012 3456",
+    "O double 7, 012 3456",
+    "+231 double 7 012 3456",
+    "zero seventy-seven, zero one two, three four five six",
+    "oh seventy seven 0123456",
+    "zero seven seven zero, one twenty three, four fifty six",
+    "077 012 34 fifty six",
+    "0770 (that's my orange line) 123456",
+    "077 is the start, the rest is 0123456",
+    "first part 0770 second part 123456",
+    "⓿❼❼⓿❶❷❸❹❺❻",
+    "⓿➆➆ ⓿➀➁ ➂➃➄➅",
+    "77 012 3456",
+    "Family is my number one. My number is 0770123456",
     "077 x 012 x 3456",
     "077 abc 012 abc 3456",
     "077 also 012 also 3456",
@@ -82,6 +97,7 @@ const MUST_BLOCK: Record<string, string[]> = {
     "0️⃣7️⃣7️⃣0️⃣1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣",
   ],
   links: [
+    "kofi dot com",
     "kofi,com",
     "kofi。com",
     "see www.example.com",
@@ -175,6 +191,7 @@ const MUST_BLOCK: Record<string, string[]> = {
     "cashapp",
   ],
   "money requests": [
+    "give some money pls",
     "send me money",
     "I need money for school fees",
     "lend me money",
@@ -186,6 +203,42 @@ const MUST_BLOCK: Record<string, string[]> = {
 };
 
 const MUST_PASS = [
+  "Psalm 22:1, Proverbs 3:5-6, John 3:16",
+  "Matthew 22:37-39, 1 Cor 13:4-7",
+  "33, born 1991, 5ft 11",
+  "Born 22 05 1998, 5 ft 7",
+  "Age 25. 5ft 5in. 55kg. Born 1999.",
+  "88 kg, 188 cm, born 1988",
+  "Born July 22, 1998 at 5:30am",
+  "Best years: 2022, 2023, 2024",
+  "Class of 2022, UL 2018-2022",
+  "Grade 12, 2022 graduate, 2023 nursing",
+  "Scores: 77, 88, 95, 100",
+  "Love cooking, me too",
+  "Mother, nurse, me",
+  "Football, tv and music",
+  "Music, online games and church",
+  "Born in Monrovia, LR",
+  "Love Liberia, LR forever",
+  "Movies. TV. Food.",
+  "Family. Me time. Church.",
+  "Single. Me? Love music.",
+  "Polka dot me",
+  "Family is my number one",
+  "God is my number one priority",
+  "My number one fan is my mom",
+  "Call me on weekends",
+  "I learn fast, in a short time",
+  "Come pay me a visit in Gbarnga",
+  "I'm Momo, born 1999",
+  "Momo, 28, 180cm",
+  "Raised by Momo, my grandma",
+  "I'm on Momo's team",
+  "I send money home to my mum every month",
+  "My mom always said: never borrow money",
+  "I love to snap photos.",
+  "I love to snap pics...",
+  "Team captain of fb 11.",
   "I'm Momo, 25, love football",
   "Momo Kamara, 30 years",
   "I work at live music events",
@@ -318,8 +371,16 @@ describe("OD-31 conversation mode", () => {
     expect(r.categories.every((c) => c === "PRICE" || c === "MONEY_REQUEST")).toBe(true);
   });
 
-  it("does not flag ordinary chat", () => {
-    expect(chat("Mostly old-school highlife. You?").flagged).toBe(false);
+  it.each([
+    "Mostly old-school highlife. You?",
+    "I learn fast, in a short time",
+    "Come pay me a visit in Gbarnga",
+    "I send money home to my mum every month",
+    "My mom always said: never borrow money",
+    "Raised by Momo, my grandma",
+    "Momo, 28, 180cm",
+  ])("does not flag ordinary chat %j", (text) => {
+    expect(chat(text).flagged).toBe(false);
   });
 });
 
@@ -345,6 +406,10 @@ describe("performance (no catastrophic backtracking)", () => {
     "w".repeat(5000) + "a",
     "o".repeat(5000),
     "0 ".repeat(1000) + "o ".repeat(1000),
+    "ﷺ".repeat(5000),
+    "double 7 ".repeat(600),
+    "seventy seven ".repeat(400),
+    "❼ ".repeat(2500),
   ];
   it.each(adversarial.map((s, i) => [i, s] as const))("input #%i (%#) stays fast", (_i, text) => {
     const start = performance.now();
