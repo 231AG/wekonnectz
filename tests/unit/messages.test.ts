@@ -50,5 +50,9 @@ describe("links in chat (§14 send rule, OD-31)", () => {
     expect(containsLink("me@wa.me/231770123456")).toBe(true);
     expect(containsLink("x@www.evil.com")).toBe(true);
     expect(containsLink("x@site.com/path")).toBe(true);
+    // A website disguised as an address is still a link; only known mail providers are addresses.
+    expect(containsLink("me@scam-pay.site")).toBe(true);
+    expect(containsLink("x@kofi.github.io")).toBe(true);
+    expect(containsLink("write to kofi.b@yahoo.co.uk")).toBe(false);
   });
 });
