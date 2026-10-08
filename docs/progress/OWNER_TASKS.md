@@ -229,12 +229,13 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `staff_login.max_per_ip_per_hour`                                 | Failed staff sign-ins per IP          | 30 (DEV-ONLY 200 in seed)                                                  | Phase 3   |
 | `staff_login.max_per_account_per_hour`                            | Failed sign-ins, one staff, one IP    | 10 (DEV-ONLY 20 in seed)                                                   | Phase 3   |
 | `staff_login.max_per_account_all_ips_per_hour`                    | Failed sign-ins, one staff, any IP    | 50 (DEV-ONLY 100 in seed)                                                  | Phase 3   |
+| Suspension lengths (code, not a setting)                          | Moderator choices                     | 1, 3, 7 or 30 days (built; admins can lift early)                          | Phase 5   |
 | Signed URL lifetime (code, not a setting)                         | How long a photo link works           | 120 s (spec, built)                                                        | Phase 3   |
 | `verification.rejections_before_escalation`                       | Rejected selfies → next goes to admin | 3 (DEV-ONLY 3 in seed)                                                     | Phase 4   |
 | `verification.pose_prompts`                                       | Pose list (one picked at random)      | 8 proposed — see `supabase/seed.sql` (no left/right: front cameras mirror) | Phase 4   |
 | `verification.selfie_retention_days`                              | OD-6: days after a decision           | 90 (DEV-ONLY 90 in seed)                                                   | Phase 4   |
-| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h             | 3 (spec)                                                                   | Phase 5   |
-| `reports.per_user_per_day`                                        | Report rate limit                     | 10                                                                         | Phase 5   |
+| `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h             | 3 (spec) (DEV-ONLY 3 in seed)                                              | Phase 5   |
+| `reports.per_user_per_day`                                        | Reports one member may send per day   | 10 (DEV-ONLY 30 in seed)                                                   | Phase 5   |
 | `relationship.pass_cooldown_days`                                 | Passed profile returns after          | 30                                                                         | Phase 6   |
 | `relationship.daily_like_cap`                                     | OD-10                                 | — your call                                                                | Phase 6   |
 | `claims.rejections_before_flag`                                   | Rejected claims → member flagged      | 3                                                                          | Phase 7   |

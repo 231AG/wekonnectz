@@ -138,20 +138,46 @@ Triggers on `auth.users`: `guard_auth_user_insert` (+231, blocklist, geo pass, n
 
 Settings: `verification.pose_prompts`, `verification.rejections_before_escalation` (T-19), `verification.selfie_retention_days` (OD-6) — no values in the migration.
 
+### Phase 5 ✅ (`20261010000000_safety.sql`)
+
+| Table              | Key columns                                                                                                                       | Client access | Notes                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------- |
+| `blocks`           | blocker_id, blocked_id (unique pair, not self)                                                                                    | none          | Silent (BR-24). The member's own list via `member_blocked_list()`     |
+| `reports`          | reporter_id, reported_user_id, category (8, §17), priority (HIGH · MEDIUM · LOW), description ≤500, photo_id, status, reviewed by | none          | Priority from `report_priority_for()`; reporter never shown to anyone |
+| `report_notes`     | report_id, author_id, note                                                                                                        | none          | Internal staff notes                                                  |
+| `moderation_flags` | entity_type, entity_id, reason (`MANY_REPORTS`, `AGE_DOUBT`; later phases add more), details, status                              | none          | One open flag per entity + reason                                     |
+
+`users` gains `hidden_reason` (`UNDER_18_REPORT` · `REPORT_THRESHOLD`) and `hidden_at`: out of discovery pending review, not a ban. A suspension is now an overlay: `suspended_until` on a PENDING or ACTIVE row, read through `effective_account_status()`, so the account returns to exactly its stored status when it ends (legacy rows stored as SUSPENDED keep their Phase 1 meaning).
+
+| Function                                                            | Callable by                        | Purpose                                                                      |
+| ------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------- |
+| `can_view_profile(viewer, owner)`                                   | internal                           | Both ACTIVE members, no block either way, owner not hidden                   |
+| `block_user` / `unblock_user` / `member_blocked_list`               | service_role                       | Member id from the session                                                   |
+| `submit_report(reporter, target, category, description, photo)`     | service_role                       | Automatic actions (§17), rate limit `reports.per_user_per_day`               |
+| `member_profile_for_viewer(viewer, owner)`                          | service_role                       | Public profile fields only (no DOB, phone, paths, status)                    |
+| `staff_reports_queue` / `staff_report_detail` / `add_report_note`   | authenticated, `is_staff()`        | Priority-sorted queue; detail without reporter identity or paths             |
+| `report_review_paths(report)`                                       | service_role                       | Reported member's photo paths for signing after `requireStaff()`             |
+| `resolve_report(report, dismiss, restore_visibility, photo_reason)` | authenticated, `is_staff()`        | Close, decide a hidden photo, optionally unhide; audited `REPORT_RESOLVED`   |
+| `suspend_user(target, until, report)`                               | authenticated, `is_staff()`        | ≤ 366 days; audited `USER_SUSPENDED`                                         |
+| `ban_user(target, reason, report)` / `restore_user(target)`         | authenticated, `is_staff('ADMIN')` | Ban adds the phone to the blocklist; audited `USER_BANNED` / `USER_RESTORED` |
+| `staff_flags_queue` / `resolve_flag(flag, dismiss)`                 | authenticated, `is_staff()`        | Audited `REPORT_RESOLVED` (entity `moderation_flag`)                         |
+
+Settings: `reports.auto_hide_threshold`, `reports.per_user_per_day` (T-19) — no values in the migration.
+
 ## Planned (spec §18)
 
-| Table                              | Phase |     | Table                                              | Phase |
-| ---------------------------------- | ----- | --- | -------------------------------------------------- | ----- |
-| users ✅                           | 1     |     | payments                                           | 7     |
-| profiles ✅                        | 1–2   |     | payment_events                                     | 7     |
-| geo_checks ✅                      | 1     |     | payment_claims                                     | 7     |
-| phone_blocklist ✅                 | 1     |     | merchant_accounts                                  | 7     |
-| consents ✅                        | 1–2   |     | card_customers                                     | 7     |
-| areas ✅                           | 2     |     | likes                                              | 6     |
-| interests / user_interests ✅      | 2     |     | passes                                             | 6     |
-| user_settings ✅                   | 2     |     | matches                                            | 6     |
-| profile_photos ✅                  | 3     |     | message_requests                                   | 9     |
-| verifications ✅                   | 4     |     | conversations / conversation_members / messages    | 6     |
-| notifications ✅                   | 4     |     | saved_profiles                                     | 9     |
-| availability                       | 8     |     | blocks / reports / report_notes / moderation_flags | 5     |
-| subscription_plans / subscriptions | 7     |     | geo pass (single-use, see plan §1.5)               | 1     |
+| Table                              | Phase |     | Table                                                 | Phase |
+| ---------------------------------- | ----- | --- | ----------------------------------------------------- | ----- |
+| users ✅                           | 1     |     | payments                                              | 7     |
+| profiles ✅                        | 1–2   |     | payment_events                                        | 7     |
+| geo_checks ✅                      | 1     |     | payment_claims                                        | 7     |
+| phone_blocklist ✅                 | 1     |     | merchant_accounts                                     | 7     |
+| consents ✅                        | 1–2   |     | card_customers                                        | 7     |
+| areas ✅                           | 2     |     | likes                                                 | 6     |
+| interests / user_interests ✅      | 2     |     | passes                                                | 6     |
+| user_settings ✅                   | 2     |     | matches                                               | 6     |
+| profile_photos ✅                  | 3     |     | message_requests                                      | 9     |
+| verifications ✅                   | 4     |     | conversations / conversation_members / messages       | 6     |
+| notifications ✅                   | 4     |     | saved_profiles                                        | 9     |
+| availability                       | 8     |     | blocks / reports / report_notes / moderation_flags ✅ | 5     |
+| subscription_plans / subscriptions | 7     |     | geo pass (single-use, see plan §1.5)                  | 1     |
