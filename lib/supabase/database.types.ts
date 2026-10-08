@@ -75,6 +75,31 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"blocks": {
+                  Row: {
+                    "blocked_id": string,"blocker_id": string,"created_at": string,"id": string
+                  }
+                  Insert: {
+                    "blocked_id": string,"blocker_id": string,"created_at"?: string,"id"?: string
+                  }
+                  Update: {
+                    "blocked_id"?: string,"blocker_id"?: string,"created_at"?: string,"id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "blocks_blocked_id_fkey"
+      columns: ["blocked_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "blocks_blocker_id_fkey"
+      columns: ["blocker_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"consents": {
                   Row: {
                     "accepted_at": string,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"id": string,"user_id": string,"version": string
@@ -151,6 +176,25 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"moderation_flags": {
+                  Row: {
+                    "created_at": string,"details": NonNullable<Json>,"entity_id": string,"entity_type": string,"id": string,"reason": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["flag_status"]
+                  }
+                  Insert: {
+                    "created_at"?: string,"details"?: NonNullable<Json>,"entity_id": string,"entity_type": string,"id"?: string,"reason": string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["flag_status"]
+                  }
+                  Update: {
+                    "created_at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string,"entity_type"?: string,"id"?: string,"reason"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["flag_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "moderation_flags_reviewed_by_fkey"
+      columns: ["reviewed_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"notifications": {
                   Row: {
@@ -253,6 +297,68 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
+                },"report_notes": {
+                  Row: {
+                    "author_id": string,"created_at": string,"id": string,"note": string,"report_id": string
+                  }
+                  Insert: {
+                    "author_id": string,"created_at"?: string,"id"?: string,"note": string,"report_id": string
+                  }
+                  Update: {
+                    "author_id"?: string,"created_at"?: string,"id"?: string,"note"?: string,"report_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "report_notes_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "report_notes_report_id_fkey"
+      columns: ["report_id"]
+isOneToOne: false
+      referencedRelation: "reports"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"reports": {
+                  Row: {
+                    "category": Database["public"]['Enums']["report_category"],"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
+                  }
+                  Insert: {
+                    "category": Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                  }
+                  Update: {
+                    "category"?: Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reports_photo_id_fkey"
+      columns: ["photo_id"]
+isOneToOne: false
+      referencedRelation: "profile_photos"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_reported_user_id_fkey"
+      columns: ["reported_user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_reporter_id_fkey"
+      columns: ["reporter_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_reviewed_by_fkey"
+      columns: ["reviewed_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"user_interests": {
                   Row: {
                     "created_at": string,"interest_id": string,"user_id": string
@@ -299,13 +405,13 @@ isOneToOne: true
                   ]
                 },"users": {
                   Row: {
-                    "created_at": string,"deleted_at": string | null,"id": string,"last_seen_at": string | null,"role": Database["public"]['Enums']["user_role"],"status": Database["public"]['Enums']["account_status"],"suspended_until": string | null,"updated_at": string
+                    "created_at": string,"deleted_at": string | null,"hidden_at": string | null,"hidden_reason": string | null,"id": string,"last_seen_at": string | null,"role": Database["public"]['Enums']["user_role"],"status": Database["public"]['Enums']["account_status"],"suspended_until": string | null,"updated_at": string
                   }
                   Insert: {
-                    "created_at"?: string,"deleted_at"?: string | null,"id": string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
+                    "created_at"?: string,"deleted_at"?: string | null,"hidden_at"?: string | null,"hidden_reason"?: string | null,"id": string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"deleted_at"?: string | null,"id"?: string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
+                    "created_at"?: string,"deleted_at"?: string | null,"hidden_at"?: string | null,"hidden_reason"?: string | null,"id"?: string,"last_seen_at"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"status"?: Database["public"]['Enums']["account_status"],"suspended_until"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -347,6 +453,9 @@ isOneToOne: false
 "accept_current_documents":
 { Args: { "p_user_id": string,"p_versions": Json }; Returns: undefined
                            },
+"add_report_note":
+{ Args: { "p_note": string,"p_report_id": string }; Returns: undefined
+                           },
 "age_in_years":
 { Args: { "p_dob": string,"p_on"?: string }; Returns: number
                            },
@@ -356,17 +465,29 @@ isOneToOne: false
 "assert_can_verify":
 { Args: { "p_user_id": string }; Returns: undefined
                            },
+"assert_member_can_act":
+{ Args: { "p_user_id": string }; Returns: undefined
+                           },
 "assert_member_can_manage_photos":
 { Args: { "p_user_id": string }; Returns: undefined
                            },
+"assert_staff_target":
+{ Args: { "p_target": string }; Returns: undefined
+                           },
 "audit":
 { Args: { "p_action": Database["public"]['Enums']["audit_action"],"p_entity_id": string,"p_entity_type": string,"p_metadata"?: Json }; Returns: string
+                           },
+"ban_user":
+{ Args: { "p_reason": string,"p_report_id"?: string,"p_target": string }; Returns: undefined
                            },
 "begin_photo_upload":
 { Args: { "p_user_id": string }; Returns: string
                            },
 "begin_signup":
 { Args: { "p_ip": string,"p_ip_country": string,"p_phone": string }; Returns: Database["public"]['Enums']["geo_result"]
+                           },
+"block_user":
+{ Args: { "p_target": string,"p_user_id": string }; Returns: undefined
                            },
 "bootstrap_super_admin":
 { Args: { "p_user_id": string }; Returns: undefined
@@ -416,6 +537,9 @@ isOneToOne: false
 "hook_password_verification_attempt":
 { Args: { "event": Json }; Returns: Json
                            },
+"is_blocked_pair":
+{ Args: { "p_a": string,"p_b": string }; Returns: boolean
+                           },
 "is_liberian_phone":
 { Args: { "p_phone": string }; Returns: boolean
                            },
@@ -434,10 +558,18 @@ isOneToOne: false
 "mark_selfies_deleted":
 { Args: { "p_verification_ids": (string)[] }; Returns: number
                            },
+"member_blocked_list":
+{ Args: { "p_user_id": string }; Returns: {
+              "blocked_at": string,"display_name": string,"user_id": string
+            }[]
+                           },
 "member_photos":
 { Args: { "p_user_id": string }; Returns: {
               "id": string,"is_primary": boolean,"rejection_reason": Database["public"]['Enums']["photo_rejection_reason"],"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
+                           },
+"member_profile_for_viewer":
+{ Args: { "p_owner": string,"p_viewer": string }; Returns: Json
                            },
 "member_review_status":
 { Args: { "p_user_id": string }; Returns: Json
@@ -468,6 +600,9 @@ isOneToOne: false
               "id": string,"is_primary": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
                            },
+"raise_flag":
+{ Args: { "p_details"?: Json,"p_entity_id": string,"p_entity_type": string,"p_reason": string }; Returns: undefined
+                           },
 "rate_limit_count":
 { Args: { "p_bucket": string,"p_subject": string,"p_window_seconds": number }; Returns: number
                            },
@@ -488,6 +623,23 @@ isOneToOne: false
                            },
 "renumber_photos":
 { Args: { "p_user_id": string }; Returns: string
+                           },
+"report_priority_for":
+{ Args: { "p_category": Database["public"]['Enums']["report_category"] }; Returns: Database["public"]['Enums']["report_priority"]
+                           },
+"report_review_paths":
+{ Args: { "p_report_id": string }; Returns: {
+              "id": string,"is_reported": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
+            }[]
+                           },
+"resolve_flag":
+{ Args: { "p_dismiss": boolean,"p_flag_id": string }; Returns: undefined
+                           },
+"resolve_report":
+{ Args: { "p_dismiss": boolean,"p_photo_reason"?: Database["public"]['Enums']["photo_rejection_reason"],"p_report_id": string,"p_restore_visibility"?: boolean }; Returns: undefined
+                           },
+"restore_user":
+{ Args: { "p_target": string }; Returns: undefined
                            },
 "review_photo":
 { Args: { "p_approve": boolean,"p_photo_id": string,"p_reason"?: Database["public"]['Enums']["photo_rejection_reason"] }; Returns: undefined
@@ -517,6 +669,11 @@ isOneToOne: false
 "set_primary_photo":
 { Args: { "p_photo_id": string,"p_user_id": string }; Returns: undefined
                            },
+"staff_flags_queue":
+{ Args: { "p_limit"?: number }; Returns: {
+              "account_status": Database["public"]['Enums']["account_status"],"created_at": string,"details": Json,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string
+            }[]
+                           },
 "staff_photo_queue":
 { Args: { "p_limit"?: number }; Returns: {
               "age": number,"approved_count": number,"display_name": string,"is_primary": boolean,"photo_id": string,"sort_order": number,"uploaded_at": string,"user_id": string
@@ -524,6 +681,14 @@ isOneToOne: false
                            },
 "staff_queue_counts":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"staff_report_detail":
+{ Args: { "p_report_id": string }; Returns: Json
+                           },
+"staff_reports_queue":
+{ Args: { "p_include_closed"?: boolean,"p_limit"?: number }; Returns: {
+              "category": Database["public"]['Enums']["report_category"],"created_at": string,"priority": Database["public"]['Enums']["report_priority"],"report_id": string,"reported_user_id": string,"reporters_24h": number,"status": Database["public"]['Enums']["report_status"],"target_hidden": string
+            }[]
                            },
 "staff_sign_in_allowed":
 { Args: { "p_account": string,"p_ip": string }; Returns: boolean
@@ -541,8 +706,17 @@ isOneToOne: false
               "pose_prompt": string,"verification_id": string
             }[]
                            },
+"submit_report":
+{ Args: { "p_category": Database["public"]['Enums']["report_category"],"p_description"?: string,"p_photo_id"?: string,"p_reporter": string,"p_target": string }; Returns: string
+                           },
 "submit_verification":
 { Args: { "p_storage_path": string,"p_user_id": string,"p_verification_id": string }; Returns: undefined
+                           },
+"suspend_user":
+{ Args: { "p_report_id"?: string,"p_target": string,"p_until": string }; Returns: undefined
+                           },
+"unblock_user":
+{ Args: { "p_target": string,"p_user_id": string }; Returns: undefined
                            },
 "verification_review_paths":
 { Args: { "p_verification_id": string }; Returns: {
@@ -551,7 +725,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -671,7 +845,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
           }
         }
 } as const

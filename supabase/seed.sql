@@ -68,3 +68,7 @@ update public.app_settings set value = '[
 ]'::jsonb where key = 'verification.pose_prompts'; -- DEV-ONLY
 update public.app_settings set value = '3'::jsonb where key = 'verification.rejections_before_escalation'; -- DEV-ONLY
 update public.app_settings set value = '90'::jsonb where key = 'verification.selfie_retention_days';   -- DEV-ONLY
+
+-- DEV-ONLY report limits until the owner approves T-19 (spec recommends 3 for the hide threshold).
+update public.app_settings set value = '3'::jsonb where key = 'reports.auto_hide_threshold'; -- DEV-ONLY
+update public.app_settings set value = '30'::jsonb where key = 'reports.per_user_per_day';   -- DEV-ONLY

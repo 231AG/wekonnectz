@@ -79,7 +79,16 @@ select is_empty(
           'staff_verification_queue', -- Phase 4: raises unless is_staff(); no storage paths
           'staff_verification_detail',-- Phase 4: raises unless is_staff(); no storage paths
           'log_selfie_view',          -- Phase 4: raises unless is_staff(); writes SELFIE_VIEWED (BR-34)
-          'review_verification'       -- Phase 4: raises unless is_staff() (ADMIN if escalated); audited
+          'review_verification',      -- Phase 4: raises unless is_staff() (ADMIN if escalated); audited
+          'staff_reports_queue',      -- Phase 5: raises unless is_staff()
+          'staff_report_detail',      -- Phase 5: raises unless is_staff()
+          'add_report_note',          -- Phase 5: raises unless is_staff()
+          'resolve_report',           -- Phase 5: raises unless is_staff(); audited
+          'suspend_user',             -- Phase 5: raises unless is_staff(); audited
+          'ban_user',                 -- Phase 5: raises unless is_staff('ADMIN'); audited
+          'restore_user',             -- Phase 5: raises unless is_staff('ADMIN'); audited
+          'staff_flags_queue',        -- Phase 5: raises unless is_staff()
+          'resolve_flag'              -- Phase 5: raises unless is_staff(); audited
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
