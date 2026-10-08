@@ -89,7 +89,9 @@ select is_empty(
           'restore_user',             -- Phase 5: raises unless is_staff('ADMIN'); audited
           'staff_flags_queue',        -- Phase 5: raises unless is_staff()
           'resolve_flag',             -- Phase 5: raises unless is_staff(); audited
-          'unhide_member'             -- Phase 5: raises unless is_staff(); audited
+          'unhide_member',            -- Phase 5: raises unless is_staff(); audited
+          'can_join_conversation_topic', -- Phase 6: Realtime join check; answers only for auth.uid()
+          'staff_report_messages'     -- Phase 6: raises unless is_staff(); audited per view (OD-33)
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );

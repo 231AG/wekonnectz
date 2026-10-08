@@ -125,6 +125,50 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"conversation_members": {
+                  Row: {
+                    "conversation_id": string,"joined_at": string,"last_read_at": string | null,"user_id": string
+                  }
+                  Insert: {
+                    "conversation_id": string,"joined_at"?: string,"last_read_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "conversation_id"?: string,"joined_at"?: string,"last_read_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "conversation_members_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "conversation_members_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"conversations": {
+                  Row: {
+                    "closed_at": string | null,"closed_reason": string | null,"created_at": string,"id": string,"last_message_at": string | null,"match_id": string | null,"status": Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
+                  }
+                  Insert: {
+                    "closed_at"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
+                  }
+                  Update: {
+                    "closed_at"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type"?: Database["public"]['Enums']["conversation_type"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "conversations_match_id_fkey"
+      columns: ["match_id"]
+isOneToOne: true
+      referencedRelation: "matches"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"geo_checks": {
                   Row: {
                     "created_at": string,"id": string,"ip_country": string | null,"phone_country": string | null,"phone_hash": string | null,"result": Database["public"]['Enums']["geo_result"]
@@ -177,6 +221,87 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"likes": {
+                  Row: {
+                    "created_at": string,"id": string,"receiver_id": string,"sender_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"receiver_id": string,"sender_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"receiver_id"?: string,"sender_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "likes_receiver_id_fkey"
+      columns: ["receiver_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "likes_sender_id_fkey"
+      columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"matches": {
+                  Row: {
+                    "created_at": string,"id": string,"status": Database["public"]['Enums']["match_status"],"unmatched_at": string | null,"unmatched_by": string | null,"user_a_id": string,"user_b_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"status"?: Database["public"]['Enums']["match_status"],"unmatched_at"?: string | null,"unmatched_by"?: string | null,"user_a_id": string,"user_b_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"status"?: Database["public"]['Enums']["match_status"],"unmatched_at"?: string | null,"unmatched_by"?: string | null,"user_a_id"?: string,"user_b_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "matches_unmatched_by_fkey"
+      columns: ["unmatched_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "matches_user_a_id_fkey"
+      columns: ["user_a_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "matches_user_b_id_fkey"
+      columns: ["user_b_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"messages": {
+                  Row: {
+                    "body": string,"conversation_id": string,"created_at": string,"flagged": boolean,"id": string,"read_at": string | null,"sender_id": string | null
+                  }
+                  Insert: {
+                    "body": string,"conversation_id": string,"created_at"?: string,"flagged"?: boolean,"id"?: string,"read_at"?: string | null,"sender_id"?: string | null
+                  }
+                  Update: {
+                    "body"?: string,"conversation_id"?: string,"created_at"?: string,"flagged"?: boolean,"id"?: string,"read_at"?: string | null,"sender_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "messages_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "messages_sender_id_fkey"
+      columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"moderation_flags": {
                   Row: {
                     "created_at": string,"details": NonNullable<Json>,"entity_id": string,"entity_type": string,"id": string,"reason": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["flag_status"]
@@ -210,6 +335,31 @@ isOneToOne: false
                     {
       foreignKeyName: "notifications_user_id_fkey"
       columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"passes": {
+                  Row: {
+                    "created_at": string,"id": string,"receiver_id": string,"sender_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"receiver_id": string,"sender_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"receiver_id"?: string,"sender_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "passes_receiver_id_fkey"
+      columns: ["receiver_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "passes_sender_id_fkey"
+      columns: ["sender_id"]
 isOneToOne: false
       referencedRelation: "users"
       referencedColumns: ["id"]
@@ -297,6 +447,37 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
+                },"report_messages": {
+                  Row: {
+                    "body": string,"id": string,"message_id": string | null,"report_id": string,"sender_id": string | null,"sent_at": string
+                  }
+                  Insert: {
+                    "body": string,"id"?: string,"message_id"?: string | null,"report_id": string,"sender_id"?: string | null,"sent_at": string
+                  }
+                  Update: {
+                    "body"?: string,"id"?: string,"message_id"?: string | null,"report_id"?: string,"sender_id"?: string | null,"sent_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "report_messages_message_id_fkey"
+      columns: ["message_id"]
+isOneToOne: false
+      referencedRelation: "messages"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "report_messages_report_id_fkey"
+      columns: ["report_id"]
+isOneToOne: false
+      referencedRelation: "reports"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "report_messages_sender_id_fkey"
+      columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"report_notes": {
                   Row: {
                     "author_id": string | null,"created_at": string,"id": string,"note": string,"report_id": string
@@ -324,16 +505,22 @@ isOneToOne: false
                   ]
                 },"reports": {
                   Row: {
-                    "category": Database["public"]['Enums']["report_category"],"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string | null,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
+                    "category": Database["public"]['Enums']["report_category"],"conversation_id": string | null,"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string | null,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
                   }
                   Insert: {
-                    "category": Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "category": Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Update: {
-                    "category"?: Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "category"?: Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Relationships: [
                     {
+      foreignKeyName: "reports_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "reports_photo_id_fkey"
       columns: ["photo_id"]
 isOneToOne: false
@@ -462,6 +649,9 @@ isOneToOne: false
 "assert_can_edit_profile":
 { Args: { "p_user_id": string }; Returns: undefined
                            },
+"assert_can_report":
+{ Args: { "p_reporter": string }; Returns: undefined
+                           },
 "assert_can_verify":
 { Args: { "p_user_id": string }; Returns: undefined
                            },
@@ -492,6 +682,12 @@ isOneToOne: false
 "bootstrap_super_admin":
 { Args: { "p_user_id": string }; Returns: undefined
                            },
+"can_join_conversation_topic":
+{ Args: { "p_topic": string }; Returns: boolean
+                           },
+"can_send_in":
+{ Args: { "p_conversation": string,"p_viewer": string }; Returns: boolean
+                           },
 "can_view_profile":
 { Args: { "p_owner": string,"p_viewer": string }; Returns: boolean
                            },
@@ -504,8 +700,22 @@ isOneToOne: false
 "claim_verification_selfie":
 { Args: { "p_user_id": string,"p_verification_id": string }; Returns: boolean
                            },
+"close_pair":
+{ Args: { "p_a": string,"p_b": string,"p_reason": string }; Returns: undefined
+                           },
 "complete_photo_upload":
 { Args: { "p_photo_id": string,"p_storage_path": string,"p_user_id": string }; Returns: undefined
+                           },
+"conversation_other":
+{ Args: { "p_conversation": string,"p_viewer": string }; Returns: string
+                           },
+"conversation_view":
+{ Args: { "p_conversation": string,"p_limit"?: number,"p_viewer": string }; Returns: Json
+                           },
+"conversations_list":
+{ Args: { "p_viewer": string }; Returns: {
+              "card": Json,"conversation_id": string,"last_body": string,"last_message_at": string,"last_mine": boolean,"photo_path": string,"type": Database["public"]['Enums']["conversation_type"],"unread": number
+            }[]
                            },
 "current_staff_role":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["user_role"]
@@ -519,8 +729,16 @@ isOneToOne: false
 "delete_photo":
 { Args: { "p_photo_id": string,"p_user_id": string }; Returns: string
                            },
+"discover_candidates":
+{ Args: { "p_area_id"?: string,"p_interest_ids"?: (string)[],"p_limit"?: number,"p_max_age"?: number,"p_min_age"?: number,"p_viewer": string }; Returns: {
+              "card": Json,"photo_path": string
+            }[]
+                           },
 "effective_account_status":
 { Args: { "p_status": Database["public"]['Enums']["account_status"],"p_suspended_until": string }; Returns: Database["public"]['Enums']["account_status"]
+                           },
+"file_report":
+{ Args: { "p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description": string,"p_photo_id": string,"p_reporter": string,"p_target": string }; Returns: string
                            },
 "get_setting":
 { Args: { "p_key": string }; Returns: Json
@@ -549,8 +767,19 @@ isOneToOne: false
 "latest_verification_status":
 { Args: { "p_user_id": string }; Returns: string
                            },
+"like_user":
+{ Args: { "p_target": string,"p_viewer": string }; Returns: Json
+                           },
+"likes_received":
+{ Args: { "p_viewer": string }; Returns: {
+              "card": Json,"liked_at": string,"photo_path": string
+            }[]
+                           },
 "log_selfie_view":
 { Args: { "p_verification_id": string }; Returns: undefined
+                           },
+"mark_conversation_read":
+{ Args: { "p_conversation": string,"p_viewer": string }; Returns: undefined
                            },
 "mark_notifications_read":
 { Args: Record<PropertyKey, never>; Returns: undefined
@@ -558,10 +787,18 @@ isOneToOne: false
 "mark_selfies_deleted":
 { Args: { "p_verification_ids": (string)[] }; Returns: number
                            },
+"matches_list":
+{ Args: { "p_viewer": string }; Returns: {
+              "card": Json,"conversation_id": string,"has_messages": boolean,"match_id": string,"matched_at": string,"photo_path": string
+            }[]
+                           },
 "member_blocked_list":
 { Args: { "p_user_id": string }; Returns: {
               "blocked_at": string,"display_name": string,"user_id": string
             }[]
+                           },
+"member_card":
+{ Args: { "p_user": string }; Returns: Json
                            },
 "member_photos":
 { Args: { "p_user_id": string }; Returns: {
@@ -592,6 +829,9 @@ isOneToOne: false
 "otp_send_allowed":
 { Args: { "p_phone": string }; Returns: boolean
                            },
+"pass_user":
+{ Args: { "p_target": string,"p_viewer": string }; Returns: undefined
+                           },
 "phone_hash":
 { Args: { "p_phone": string }; Returns: string
                            },
@@ -599,6 +839,9 @@ isOneToOne: false
 { Args: { "p_owner": string,"p_viewer": string }; Returns: {
               "id": string,"is_primary": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
+                           },
+"primary_photo_path":
+{ Args: { "p_user": string }; Returns: string
                            },
 "raise_flag":
 { Args: { "p_details"?: Json,"p_entity_id": string,"p_entity_type": string,"p_reason": string }; Returns: undefined
@@ -614,6 +857,15 @@ isOneToOne: false
                            },
 "record_staff_sign_in_failure":
 { Args: { "p_account": string,"p_ip": string }; Returns: undefined
+                           },
+"relationship_compatible":
+{ Args: { "p_a": string,"p_b": string }; Returns: boolean
+                           },
+"relationship_eligible":
+{ Args: { "p_user": string }; Returns: boolean
+                           },
+"relationship_summary":
+{ Args: { "p_viewer": string }; Returns: Json
                            },
 "release_hook_receipt":
 { Args: { "p_message_id": string }; Returns: undefined
@@ -666,6 +918,9 @@ isOneToOne: false
               "storage_path": string,"verification_id": string
             }[]
                            },
+"send_message":
+{ Args: { "p_body": string,"p_categories"?: (string)[],"p_conversation": string,"p_flagged"?: boolean,"p_viewer": string }; Returns: Json
+                           },
 "set_date_of_birth":
 { Args: { "p_dob": string }; Returns: undefined
                            },
@@ -674,7 +929,7 @@ isOneToOne: false
                            },
 "staff_flags_queue":
 { Args: { "p_limit"?: number }; Returns: {
-              "account_status": Database["public"]['Enums']["account_status"],"created_at": string,"details": Json,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string,"stored_status": Database["public"]['Enums']["account_status"],"suspended_until": string
+              "account_id": string,"account_status": Database["public"]['Enums']["account_status"],"created_at": string,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string,"stored_status": Database["public"]['Enums']["account_status"],"suspended_until": string
             }[]
                            },
 "staff_photo_queue":
@@ -687,6 +942,11 @@ isOneToOne: false
                            },
 "staff_report_detail":
 { Args: { "p_report_id": string }; Returns: Json
+                           },
+"staff_report_messages":
+{ Args: { "p_report_id": string }; Returns: {
+              "body": string,"from_reported": boolean,"sent_at": string
+            }[]
                            },
 "staff_reports_queue":
 { Args: { "p_include_closed"?: boolean,"p_limit"?: number,"p_member"?: string }; Returns: {
@@ -709,6 +969,9 @@ isOneToOne: false
               "pose_prompt": string,"verification_id": string
             }[]
                            },
+"submit_conversation_report":
+{ Args: { "p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description"?: string,"p_reporter": string }; Returns: string
+                           },
 "submit_report":
 { Args: { "p_category": Database["public"]['Enums']["report_category"],"p_description"?: string,"p_photo_id"?: string,"p_reporter": string,"p_target": string }; Returns: string
                            },
@@ -724,6 +987,9 @@ isOneToOne: false
 "unhide_member":
 { Args: { "p_target": string }; Returns: undefined
                            },
+"unmatch":
+{ Args: { "p_match_id": string,"p_viewer": string }; Returns: undefined
+                           },
 "verification_review_paths":
 { Args: { "p_verification_id": string }; Returns: {
               "id": string,"is_primary": boolean,"kind": string,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
@@ -731,7 +997,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED","consent_document": "TERMS"|"PRIVACY"|"RULES","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"|"REPORTED_MESSAGES_VIEWED","consent_document": "TERMS"|"PRIVACY"|"RULES","conversation_status": "OPEN"|"CLOSED","conversation_type": "RELATIONSHIP"|"CASUAL","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","match_status": "ACTIVE"|"UNMATCHED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -851,7 +1117,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED", "REPORTED_MESSAGES_VIEWED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"conversation_status": ["OPEN", "CLOSED"],"conversation_type": ["RELATIONSHIP", "CASUAL"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"match_status": ["ACTIVE", "UNMATCHED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
           }
         }
 } as const

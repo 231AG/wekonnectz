@@ -72,3 +72,7 @@ update public.app_settings set value = '90'::jsonb where key = 'verification.sel
 -- DEV-ONLY report limits until the owner approves T-19 (spec recommends 3 for the hide threshold).
 update public.app_settings set value = '3'::jsonb where key = 'reports.auto_hide_threshold'; -- DEV-ONLY
 update public.app_settings set value = '30'::jsonb where key = 'reports.per_user_per_day';   -- DEV-ONLY
+
+-- DEV-ONLY messaging limits until the owner approves T-19.
+update public.app_settings set value = '60'::jsonb where key = 'messages.max_per_minute';  -- DEV-ONLY
+update public.app_settings set value = '20'::jsonb where key = 'reports.messages_captured'; -- DEV-ONLY
