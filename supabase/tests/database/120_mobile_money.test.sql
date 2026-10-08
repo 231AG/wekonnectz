@@ -1,7 +1,7 @@
 -- Phase 7: mobile money access (spec §16, §21; BR-26, 27, 28, 29, 30, 35, 36, 37, 38, 39, 41; §6 rule 11).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(76);
+select plan(77);
 
 -- Fixtures (fictional): Musu and Hawa verified ACTIVE members; Siah PENDING (not verified); a moderator;
 -- an admin (aal2 + TOTP) and the same admin without MFA.
@@ -273,6 +273,11 @@ where user_id = 'bbbbbbbb-7000-0000-0000-000000000002';
 select set_config('wk.subscription_admin', 'off', true);
 select ok(public.expire_subscriptions() >= 1, 'the tidy job marks ended access EXPIRED');
 select is((select status::text from public.subscriptions where user_id = 'bbbbbbbb-7000-0000-0000-000000000002'), 'EXPIRED', 'recorded');
+
+-- OD-7: purging a member's account still works when they had passes and payments (records kept).
+delete from auth.users where id = 'bbbbbbbb-7000-0000-0000-000000000001';
+select is((select count(*)::int from public.payments where user_id is null and claim_id = (select id from ids where n = 'c1')), 1,
+  'an account purge removes the access but keeps the payment record (unlinked)');
 
 select * from finish();
 rollback;

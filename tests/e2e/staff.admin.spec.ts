@@ -210,6 +210,9 @@ test("§21 verification queue: each selfie view is audited; checklist, reject wi
   page,
   browser,
 }) => {
+  // Two staff sign-ins (with TOTP set-up) and a member session in one flow: ~25 s alone, more under the
+  // full parallel suite.
+  test.setTimeout(60_000);
   const errors = trackPageErrors(page);
   const memberPage = await browser.newPage({ extraHTTPHeaders: { "x-vercel-ip-country": "LR" } });
   const name = `Verify ${Math.random().toString(36).slice(2, 6)}`;

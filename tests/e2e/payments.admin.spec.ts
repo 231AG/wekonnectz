@@ -136,7 +136,8 @@ test("§16 / §21: an admin verifies a claim against the wallet records and appr
   await m.page.screenshot({ path: `${SHOTS_P7}/member-claim-status-needs-info.png`, fullPage: true });
   await m.page.getByLabel("Your answer").fill("The ID is in the confirmation SMS; screenshot attached earlier.");
   await m.page.getByRole("button", { name: "Send answer" }).click();
-  await expect(m.page.getByText("Sent. We’ll check it again.")).toBeVisible();
+  // The claim goes back to review (the page re-renders without the question).
+  await expect(m.page.getByTestId("claim").filter({ hasText: second.txn })).toContainText("Checking");
 
   // OD-17: a wrong amount is rejected; the member reads a neutral reason.
   await page.goto(`/admin/payments?id=${second.claimId}`);
