@@ -12,7 +12,7 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Onboarding          | 7       | 2              | 0              | 0          |
 | Photos              | 6       | 1              | 1              | 0          |
 | Verification        | 3       | 4              | 0              | 1          |
-| Safety              | 0       | 0              | 12             | 0          |
+| Safety              | 8       | 4              | 0              | 0          |
 | Relationship mode   | 0       | 0              | 6              | 1          |
 | Messaging           | 0       | 0              | 7              | 0          |
 | Mobile money access | 0       | 0              | 11             | 1          |
@@ -22,11 +22,11 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **40**  | **12**         | **73**         | **10**     |
+| **Total**           | **48**  | **16**         | **61**         | **10**     |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending.
 
 ## Planning
 
@@ -101,18 +101,18 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Safety
 
-- ⬜ An expired suspension restores the status the account had before (a never-verified PENDING account must not read as ACTIVE) — P5 — BR-5 (found in Phase 4 audit; `effective_account_status` today maps any expired suspension to ACTIVE, harmless until `suspend_user` exists)
-- ⬜ Blocks (silent, symmetric, everywhere) — P5 — BR-24
-- ⬜ Reports with categories/priorities — P5
-- ⬜ Under-18 report → instant hide — P5 — BR-32
-- ⬜ Threshold auto-hide (distinct reporters / 24 h) — P5 — BR-33
-- ⬜ Suspend / ban / restore + phone blocklist — P5 — BR-3, BR-5, BR-6, BR-34
-- ⬜ Staff never act on own member account — P5
-- ⬜ Moderation flags + Flags queue — P5
-- ⬜ Reports queue with internal notes — P5 — BR-34
-- ⬜ Member profile view with report/block in two taps — P5
-- ⬜ Safety page and in-chat reminder — P5/P6
-- ⬜ Behaviour signals (many reports, bursts, duplicate text, short windows) — P5/P8/P9
+- ✅ An expired suspension restores the status the account had before (suspension is an overlay) — P5 — BR-5
+- ✅ Blocks (silent, symmetric; profile view and photos now, discovery/likes/messages reuse `can_view_profile`) — P5 — BR-24
+- ✅ Reports with categories/priorities; one open report per reporter, member and category — P5
+- 🔄 Under-18 report → instant hide (profile + discovery now; availability when it exists, P8) — P5 — BR-32
+- 🔄 Threshold auto-hide (distinct reporters / 24 h, open HIGH reports) — P5 — BR-33 (value: T-19)
+- ✅ Suspend / ban / restore + phone blocklist — P5 — BR-3, BR-5, BR-6, BR-34
+- ✅ Staff never act on own or staff accounts — P5
+- ✅ Moderation flags + Flags queue (MANY_REPORTS, AGE_DOUBT) — P5
+- ✅ Reports queue with internal notes, unhide, audited decisions — P5 — BR-34
+- ✅ Member profile view with report/block in two taps; blocked list — P5
+- 🔄 Safety page (done) and in-chat reminder (P6) — P5/P6
+- 🔄 Behaviour signals: many reports (done); bursts, duplicate text, short windows — P8/P9
 
 ## Relationship mode
 
