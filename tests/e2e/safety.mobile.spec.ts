@@ -92,6 +92,10 @@ test("BR-32: an under-18 report removes the member from view at once; an inappro
   await expect(page.getByRole("dialog", { name: "Thanks for telling us" })).toBeVisible();
   const { data: hidden } = await admin.from("users").select("hidden_reason, status").eq("id", joseph.userId).single();
   expect(hidden).toEqual({ hidden_reason: "UNDER_18_REPORT", status: "ACTIVE" });
+  // BR-24: the reporter can still block the member their report just hid.
+  await page.getByRole("button", { name: "Also block Joseph" }).click();
+  await page.getByRole("button", { name: "Block", exact: true }).click();
+  await expect(page).toHaveURL(/\/home\?blocked=1$/);
   expect((await page.goto(`/m/${joseph.userId}`))?.status()).toBe(404);
 
   await page.goto(`/m/${varney.userId}`);
@@ -101,6 +105,9 @@ test("BR-32: an under-18 report removes the member from view at once; an inappro
   await page.getByRole("radio", { name: "Photo 2" }).check();
   await page.getByRole("button", { name: "Send report" }).click();
   await expect(page.getByRole("dialog", { name: "Thanks for telling us" })).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  // The profile refreshes without the hidden photo.
+  await expect(page.getByRole("img", { name: /Varney’s/ })).toHaveCount(2);
   const { data: photo } = await admin.from("profile_photos").select("status").eq("id", varney.photoIds[1]).single();
   expect(photo?.status).toBe("HIDDEN");
   await page.goto(`/m/${varney.userId}`);

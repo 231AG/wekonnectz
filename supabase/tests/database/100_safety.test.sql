@@ -1,7 +1,7 @@
 -- Phase 5: blocks, reports, flags, suspend / ban / restore (spec §7, §8, §17, §21; BR-5, 6, 24, 32, 33, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(109);
+select plan(117);
 
 -- Fixtures: six ACTIVE members with 3 approved photos (Musu, Comfort, Hawa, Jartu, Fatu, Kemah), one PENDING
 -- member (Siah), a moderator and an admin. All fictional.
@@ -108,8 +108,10 @@ select is(public.member_profile_for_viewer('ffffffff-0000-0000-0000-000000000006
   'a PENDING member cannot view profiles');
 select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001', 'UNDER_18') $$,
   '42501', 'ACCOUNT_CANNOT_ACT', 'only verified ACTIVE members can report (no unverified sockpuppets)');
-select throws_ok($$ select public.block_user('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001') $$,
-  'P0002', 'MEMBER_NOT_FOUND', 'members can block only someone they can see (blocking is not a way round reporting rules)');
+select lives_ok($$ select public.block_user('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001') $$,
+  'BR-24: any member account can block, even one that cannot see the other');
+select is((select target_visible from public.blocks where blocker_id = 'ffffffff-0000-0000-0000-000000000006'), false,
+  'the block records that the target was not visible');
 
 -- ---------------------------------------------------------------------------
 -- Reports: categories, priority and automatic actions
@@ -130,6 +132,12 @@ select is((select status::text from public.users where id = 'ffffffff-0000-0000-
   'auto-hide is not a ban or suspension');
 select ok(not public.can_view_profile('ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000001'),
   'BR-32: while hidden, the member cannot browse others either');
+select lives_ok($$ select public.block_user('ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000004') $$,
+  'BR-24: the reporter can still block the member their report just hid ("Also block")');
+select lives_ok($$ select public.block_user('ffffffff-0000-0000-0000-000000000007', 'ffffffff-0000-0000-0000-000000000004') $$,
+  'another member blocks the hidden member');
+select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000007', 'ffffffff-0000-0000-0000-000000000004', 'SPAM') $$,
+  'P0002', 'MEMBER_NOT_FOUND', 'but a block made while the member was invisible does not open a way to report them');
 
 -- BR-33: HIGH reports from distinct reporters within 24 h reach the threshold (DEV-ONLY 3).
 select public.submit_report('ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX');
@@ -174,6 +182,10 @@ insert into rx select 'mainphoto', public.submit_report('ffffffff-0000-0000-0000
   'INAPPROPRIATE_PHOTO', null, (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0));
 select is((select count(*)::int from public.profile_photos where user_id = 'ffffffff-0000-0000-0000-000000000001' and status = 'PENDING_REVIEW'), 0,
   'hiding the main photo pulls no other photo back into review');
+select public.renumber_photos('ffffffff-0000-0000-0000-000000000001');
+select ok((select is_primary from public.profile_photos where id = (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0))
+  and not exists (select 1 from public.profile_photos where user_id = 'ffffffff-0000-0000-0000-000000000001' and status = 'PENDING_REVIEW'),
+  'later photo changes keep the reported main photo as main until staff decide');
 select throws_ok($$ select public.delete_photo('ffffffff-0000-0000-0000-000000000001',
   (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0)) $$,
   '22023', 'PHOTO_UNDER_REVIEW', 'a reported photo cannot be deleted before staff decide (evidence)');
@@ -212,6 +224,8 @@ select lives_ok($$ select public.resolve_report((select id from rx where n = 'ph
   'dismissing the photo report puts the photo back');
 select lives_ok($$ select public.resolve_report((select id from rx where n = 'mainphoto'), false, false, 'NUDITY_OR_SEXUAL') $$,
   'resolving the main-photo report rejects that photo');
+select throws_ok($$ select public.unhide_member('ffffffff-0000-0000-0000-000000000005') $$, '22023', 'HIGH_REPORTS_OPEN',
+  'a member stays hidden while HIGH reports about them are open');
 select lives_ok($$ select public.resolve_report(id, true) from er $$, 'moderator dismisses every report about Fatu');
 select throws_ok($$ select public.unhide_member('ffffffff-0000-0000-0000-000000000004') $$, '22023', 'NOT_HIDDEN',
   'unhide applies only to hidden members');
@@ -252,7 +266,7 @@ select throws_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-00000000
   'P0002', 'MEMBER_NOT_FOUND', '§7: staff accounts cannot be suspended from the member tools');
 select throws_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-0000000000aa', now() + interval '1 day') $$,
   '42501', 'OWN_CONTENT', 'staff cannot act on their own account');
-select lives_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-000000000002', now() + interval '7 days') $$,
+select lives_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-000000000002', now() + interval '7 days', (select id from rx where n = 'u18')) $$,
   'moderator suspends Comfort for 7 days');
 select throws_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-000000000002', now() + interval '1 day') $$,
   '22023', 'ALREADY_SUSPENDED_LONGER', '§7: a moderator cannot shorten a suspension (only an admin lifts one)');
@@ -264,6 +278,8 @@ select ok(not public.can_view_profile('ffffffff-0000-0000-0000-000000000001', 'f
   'BR-5: a suspended member is out of discovery');
 select is((select count(*)::int from public.audit_logs where action = 'USER_SUSPENDED'
   and entity_id = 'ffffffff-0000-0000-0000-000000000002'), 1, 'BR-34: the suspension is audited');
+select ok((select not (metadata ? 'report_id') from public.audit_logs where action = 'USER_SUSPENDED'
+  and entity_id = 'ffffffff-0000-0000-0000-000000000002'), 'the audit row cites a report only when it is about that member');
 select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000003', 'SPAM') $$,
   '42501', 'ACCOUNT_CANNOT_ACT', 'BR-5: a suspended member cannot report');
 
@@ -342,6 +358,9 @@ select set_config('request.jwt.claims', '', true);
 select is((select count(*)::int from public.audit_logs where action = 'REPORT_RESOLVED' and entity_type = 'moderation_flag'), 1,
   'BR-34: resolving a flag is audited');
 
+delete from auth.users where id = 'ffffffff-0000-0000-0000-000000000003';
+select ok(exists (select 1 from public.reports where reporter_id is null and reported_user_id = 'ffffffff-0000-0000-0000-000000000004'
+  and category = 'UNDER_18'), 'reports outlive the reporter''s account (evidence is kept)');
 update public.users set status = 'DELETED', deleted_at = now() where id = 'ffffffff-0000-0000-0000-000000000006';
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);

@@ -64,8 +64,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
   const { data: rows, error: queueError } = await supabase.rpc("staff_reports_queue", {
     p_include_closed: includeClosed,
     p_limit: 200,
+    p_member: memberId,
   });
-  const all = (queueError ? [] : (rows ?? [])).filter((r) => !memberId || r.reported_user_id === memberId);
+  const all = queueError ? [] : (rows ?? []);
   const shown = priority ? all.filter((r) => r.priority === priority) : all;
 
   const href = (next: { priority?: ReportPriority | null; closed?: boolean; id?: string }) => {

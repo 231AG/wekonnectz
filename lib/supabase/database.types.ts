@@ -77,13 +77,13 @@ export type Database = {
                   ]
                 },"blocks": {
                   Row: {
-                    "blocked_id": string,"blocker_id": string,"created_at": string,"id": string
+                    "blocked_id": string,"blocker_id": string,"created_at": string,"id": string,"target_visible": boolean
                   }
                   Insert: {
-                    "blocked_id": string,"blocker_id": string,"created_at"?: string,"id"?: string
+                    "blocked_id": string,"blocker_id": string,"created_at"?: string,"id"?: string,"target_visible"?: boolean
                   }
                   Update: {
-                    "blocked_id"?: string,"blocker_id"?: string,"created_at"?: string,"id"?: string
+                    "blocked_id"?: string,"blocker_id"?: string,"created_at"?: string,"id"?: string,"target_visible"?: boolean
                   }
                   Relationships: [
                     {
@@ -299,13 +299,13 @@ isOneToOne: true
                   ]
                 },"report_notes": {
                   Row: {
-                    "author_id": string,"created_at": string,"id": string,"note": string,"report_id": string
+                    "author_id": string | null,"created_at": string,"id": string,"note": string,"report_id": string
                   }
                   Insert: {
-                    "author_id": string,"created_at"?: string,"id"?: string,"note": string,"report_id": string
+                    "author_id"?: string | null,"created_at"?: string,"id"?: string,"note": string,"report_id": string
                   }
                   Update: {
-                    "author_id"?: string,"created_at"?: string,"id"?: string,"note"?: string,"report_id"?: string
+                    "author_id"?: string | null,"created_at"?: string,"id"?: string,"note"?: string,"report_id"?: string
                   }
                   Relationships: [
                     {
@@ -324,13 +324,13 @@ isOneToOne: false
                   ]
                 },"reports": {
                   Row: {
-                    "category": Database["public"]['Enums']["report_category"],"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
+                    "category": Database["public"]['Enums']["report_category"],"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string | null,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
                   }
                   Insert: {
-                    "category": Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "category": Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Update: {
-                    "category"?: Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "category"?: Database["public"]['Enums']["report_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Relationships: [
                     {
@@ -689,7 +689,7 @@ isOneToOne: false
 { Args: { "p_report_id": string }; Returns: Json
                            },
 "staff_reports_queue":
-{ Args: { "p_include_closed"?: boolean,"p_limit"?: number }; Returns: {
+{ Args: { "p_include_closed"?: boolean,"p_limit"?: number,"p_member"?: string }; Returns: {
               "category": Database["public"]['Enums']["report_category"],"created_at": string,"priority": Database["public"]['Enums']["report_priority"],"report_id": string,"reported_user_id": string,"reporters_24h": number,"status": Database["public"]['Enums']["report_status"],"target_hidden": string
             }[]
                            },

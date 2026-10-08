@@ -43,6 +43,8 @@ create table public.blocks (
   id         uuid primary key default gen_random_uuid(),
   blocker_id uuid not null references public.users (id) on delete cascade,
   blocked_id uuid not null references public.users (id) on delete cascade,
+  -- Whether the blocker could see the member when blocking: only then may they report them later.
+  target_visible boolean not null default false,
   created_at timestamptz not null default now(),
   constraint blocks_not_self check (blocker_id <> blocked_id),
   constraint blocks_unique_pair unique (blocker_id, blocked_id)
@@ -120,7 +122,8 @@ $$;
 
 create table public.reports (
   id               uuid primary key default gen_random_uuid(),
-  reporter_id      uuid not null references public.users (id) on delete cascade,
+  -- Reports outlive the reporter's account (evidence; OD-7 purge must not erase them).
+  reporter_id      uuid references public.users (id) on delete set null,
   reported_user_id uuid not null references public.users (id) on delete cascade,
   category         public.report_category not null,
   priority         public.report_priority not null,
@@ -147,7 +150,7 @@ create policy reports_no_client_access on public.reports
 create table public.report_notes (
   id         uuid primary key default gen_random_uuid(),
   report_id  uuid not null references public.reports (id) on delete cascade,
-  author_id  uuid not null references public.users (id) on delete cascade,
+  author_id  uuid references public.users (id) on delete set null,
   note       text not null check (length(btrim(note)) between 1 and 2000),
   created_at timestamptz not null default now()
 );
@@ -239,8 +242,9 @@ begin
 end;
 $$;
 
--- BR-24: block silently. Only a member the blocker can see (so a block is never a way round the
--- reporting rules below). Unblocking always works.
+-- BR-24: block silently, any member account, whatever either side's state (a member must be able to
+-- block someone hidden or suspended before they come back). The block records whether the target was
+-- visible, and only such a block lets the blocker report them later (no way round the report rules).
 create or replace function public.block_user(p_user_id uuid, p_target uuid)
 returns void
 language plpgsql
@@ -249,13 +253,12 @@ set search_path = ''
 as $$
 begin
   perform public.assert_member_can_act(p_user_id);
-  if exists (select 1 from public.blocks where blocker_id = p_user_id and blocked_id = p_target) then
-    return;
-  end if;
-  if p_target is null or p_target = p_user_id or not public.can_view_profile(p_user_id, p_target) then
+  if p_target is null or p_target = p_user_id
+     or not exists (select 1 from public.users where id = p_target and role = 'USER') then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
-  insert into public.blocks (blocker_id, blocked_id) values (p_user_id, p_target)
+  insert into public.blocks (blocker_id, blocked_id, target_visible)
+  values (p_user_id, p_target, public.can_view_profile(p_user_id, p_target))
   on conflict (blocker_id, blocked_id) do nothing;
 end;
 $$;
@@ -322,7 +325,8 @@ begin
   end if;
   -- Only someone who could see the member, or who blocked them, can report them.
   if not (public.can_view_profile(p_reporter, p_target)
-          or exists (select 1 from public.blocks where blocker_id = p_reporter and blocked_id = p_target)) then
+          or exists (select 1 from public.blocks where blocker_id = p_reporter and blocked_id = p_target
+                     and target_visible)) then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
   if p_category = 'INAPPROPRIATE_PHOTO' and (
@@ -400,7 +404,11 @@ begin
 end;
 $$;
 
-create or replace function public.staff_reports_queue(p_include_closed boolean default false, p_limit integer default 100)
+create or replace function public.staff_reports_queue(
+  p_include_closed boolean default false,
+  p_limit          integer default 100,
+  p_member         uuid default null
+)
 returns table (
   report_id        uuid,
   reported_user_id uuid,
@@ -427,7 +435,8 @@ begin
               and x.created_at > now() - interval '24 hours')
     from public.reports r
     join public.users u on u.id = r.reported_user_id
-    where p_include_closed or r.status = 'OPEN'
+    where (p_include_closed or r.status = 'OPEN')
+      and (p_member is null or r.reported_user_id = p_member)
     order by (r.status = 'OPEN') desc, r.priority, r.created_at
     limit least(greatest(coalesce(p_limit, 100), 1), 200);
 end;
@@ -561,11 +570,11 @@ begin
        where id = v_photo;
       v_photo_decision := 'REJECTED';
       -- A rejected main photo hands over to the next one, which is checked as a main photo (§11).
-      perform public.renumber_photos(v_target);
     else
       update public.profile_photos set status = 'APPROVED' where id = v_photo;
       v_photo_decision := 'APPROVED';
     end if;
+    perform public.renumber_photos(v_target);
   end if;
 
   if p_restore_visibility then
@@ -732,6 +741,57 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- A main photo hidden by an open report stays the main photo until staff decide (no other photo is
+-- pulled back into review meanwhile, whatever the member uploads or deletes). Otherwise as Phase 3.
+-- ---------------------------------------------------------------------------
+create or replace function public.renumber_photos(p_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_primary  uuid;
+  v_requeued uuid;
+begin
+  with ordered as (
+    select id, row_number() over (order by sort_order, created_at) - 1 as n
+    from public.profile_photos
+    where user_id = p_user_id and status not in ('DELETED', 'UPLOADING')
+  )
+  update public.profile_photos p set sort_order = o.n
+  from ordered o
+  where p.id = o.id and p.sort_order is distinct from o.n;
+
+  select p.id into v_primary from public.profile_photos p
+  where p.user_id = p_user_id and p.is_primary and p.status = 'HIDDEN'
+    and exists (select 1 from public.reports r where r.photo_id = p.id and r.status = 'OPEN');
+
+  -- Else the main photo is the first photo that is approved or waiting for review.
+  if v_primary is null then
+    select id into v_primary from public.profile_photos
+    where user_id = p_user_id and status in ('PENDING_REVIEW', 'APPROVED')
+    order by sort_order, created_at
+    limit 1;
+  end if;
+
+  update public.profile_photos set is_primary = false
+  where user_id = p_user_id and is_primary and id is distinct from v_primary;
+
+  -- §11: a photo approved as a secondary photo is checked again before it becomes the main photo.
+  select id into v_requeued from public.profile_photos
+  where id = v_primary and not is_primary and status = 'APPROVED' and not reviewed_as_primary;
+
+  update public.profile_photos
+     set is_primary = true,
+         status = case when id = v_requeued then 'PENDING_REVIEW'::public.photo_status else status end,
+         submitted_at = case when id = v_requeued then now() else submitted_at end
+   where id = v_primary and not is_primary;
+  return v_requeued;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- A photo hidden by a report is evidence: the member can't delete it until staff decide (Phase 5).
 -- ---------------------------------------------------------------------------
 create or replace function public.delete_photo(p_user_id uuid, p_photo_id uuid)
@@ -894,7 +954,7 @@ revoke all on function public.member_blocked_list(uuid) from public, anon, authe
 revoke all on function public.submit_report(uuid, uuid, public.report_category, text, uuid) from public, anon, authenticated;
 revoke all on function public.member_profile_for_viewer(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.report_review_paths(uuid) from public, anon, authenticated;
-revoke all on function public.staff_reports_queue(boolean, integer) from public, anon;
+revoke all on function public.staff_reports_queue(boolean, integer, uuid) from public, anon;
 revoke all on function public.staff_report_detail(uuid) from public, anon;
 revoke all on function public.add_report_note(uuid, text) from public, anon;
 revoke all on function public.resolve_report(uuid, boolean, boolean, public.photo_rejection_reason) from public, anon;
@@ -914,7 +974,7 @@ grant execute on function public.member_profile_for_viewer(uuid, uuid) to servic
 grant execute on function public.report_review_paths(uuid) to service_role;
 
 -- Staff functions check is_staff() (role + password + TOTP) and, where it matters, ADMIN.
-grant execute on function public.staff_reports_queue(boolean, integer) to authenticated;
+grant execute on function public.staff_reports_queue(boolean, integer, uuid) to authenticated;
 grant execute on function public.staff_report_detail(uuid) to authenticated;
 grant execute on function public.add_report_note(uuid, text) to authenticated;
 grant execute on function public.resolve_report(uuid, boolean, boolean, public.photo_rejection_reason) to authenticated;

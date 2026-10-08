@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Ban, Flag } from "lucide-react";
 
 import { FormError } from "@/components/layout/mobile-screen";
@@ -28,6 +29,7 @@ function ProfileSafety({
   report: (prev: ReportState, formData: FormData) => Promise<ReportState>;
   block: (targetId: string) => Promise<{ error?: string }>;
 }) {
+  const router = useRouter();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [opened, setOpened] = useState(0);
@@ -70,7 +72,11 @@ function ProfileSafety({
 
       <Sheet
         open={reportOpen}
-        onOpenChange={setReportOpen}
+        onOpenChange={(open) => {
+          setReportOpen(open);
+          // A report may have hidden the member or a photo: show the profile as it now is.
+          if (!open && reportDone) router.refresh();
+        }}
         title={reportDone ? "Thanks for telling us" : `Report ${name}`}
         description={
           reportDone
@@ -89,7 +95,13 @@ function ProfileSafety({
             >
               Also block {name}
             </Button>
-            <Button variant="outline" onClick={() => setReportOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReportOpen(false);
+                router.refresh();
+              }}
+            >
               Done
             </Button>
           </div>
