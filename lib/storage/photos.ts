@@ -36,6 +36,7 @@ const DB_CODES = [
   "PHOTO_LIMIT_REACHED",
   "RATE_LIMITED",
   "PHOTO_NOT_FOUND",
+  "PHOTO_UNDER_REVIEW",
 ] as const;
 
 function dbError(message: string): PhotoError {

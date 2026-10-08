@@ -51,7 +51,7 @@ test("§21 reports queue: a moderator investigates, notes and dismisses an under
   await expect(panel.getByText("Photos and verified selfie show an adult.")).toBeVisible();
   await page.screenshot({ path: `${SHOTS_P5}/admin-reports.png` });
 
-  await panel.getByLabel("Make the member visible again").check();
+  await panel.getByLabel("Also make the member visible again").check();
   await panel.getByRole("button", { name: "Dismiss" }).click();
   await expect(panel.getByText(/· dismissed/)).toBeVisible();
 
@@ -89,7 +89,14 @@ test("§8 / BR-6: an admin bans from a report; the account is signed out and the
     .click();
   const panel = page.getByRole("region", { name: "Report" });
   await panel.getByRole("button", { name: "Ban", exact: true }).click();
-  await expect(panel.getByRole("alert")).toHaveText("Choose a reason.");
+  // A ban needs an explicit confirmation and a reason.
+  await expect(panel.getByRole("alert").filter({ hasText: "Tick the box" })).toHaveText(
+    "Tick the box to confirm the ban.",
+  );
+  await panel.getByLabel(/Ends their sessions/).check();
+  await panel.getByRole("button", { name: "Ban", exact: true }).click();
+  await expect(panel.getByRole("alert").filter({ hasText: "reason" })).toHaveText("Choose a reason.");
+  await panel.getByLabel(/Ends their sessions/).check();
   await panel.getByLabel("Ban reason").selectOption("SELLING_SEX");
   await panel.getByRole("button", { name: "Ban", exact: true }).click();
   await expect(panel.getByRole("button", { name: "Lift ban" })).toBeVisible();

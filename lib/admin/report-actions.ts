@@ -22,8 +22,10 @@ const DB_MESSAGES: Record<string, string> = {
   OWN_CONTENT: "You can’t act on your own account.",
   MEMBER_NOT_FOUND: "This account isn’t a member account.",
   ADMIN_REQUIRED: "Only an admin can do this.",
-  ACCOUNT_NOT_SUSPENDABLE: "This account can’t be suspended (banned, deleted or still in signup).",
-  ALREADY_BANNED: "This account is already banned.",
+  ACCOUNT_NOT_SUSPENDABLE: "This account can’t be suspended (it is banned or deleted).",
+  ALREADY_SUSPENDED_LONGER: "This account is already suspended for longer. Only an admin can shorten or lift it.",
+  ACCOUNT_NOT_BANNABLE: "This account is already banned or was deleted.",
+  NOT_HIDDEN: "This member is already visible.",
   NOTHING_TO_RESTORE: "This account isn’t banned or suspended.",
   FLAG_NOT_OPEN: "This flag was already handled.",
   INVALID_SUSPENSION_END: "Choose a suspension length.",
@@ -92,6 +94,7 @@ export async function suspendUserAction(_prev: StaffActionState, formData: FormD
 
 export async function banUserAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
   await requireStaff("ADMIN");
+  if (formData.get("confirm") !== "on") return { error: "Tick the box to confirm the ban." };
   const parsed = banSchema.safeParse({
     userId: formData.get("userId"),
     reason: formData.get("reason") || undefined,
@@ -110,6 +113,15 @@ export async function restoreUserAction(_prev: StaffActionState, formData: FormD
   if (!parsed.success) return { error: "Something went wrong." };
   const { error } = await (await createClient()).rpc("restore_user", { p_target: parsed.data });
   return error ? fail(error.message) : done("Account restored.");
+}
+
+/** Back into discovery after review (no open HIGH report about the member); audited. */
+export async function unhideMemberAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
+  await requireStaff();
+  const parsed = z.uuid().safeParse(formData.get("userId"));
+  if (!parsed.success) return { error: "Something went wrong." };
+  const { error } = await (await createClient()).rpc("unhide_member", { p_target: parsed.data });
+  return error ? fail(error.message) : done("The member is visible again.");
 }
 
 export async function resolveFlagAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {

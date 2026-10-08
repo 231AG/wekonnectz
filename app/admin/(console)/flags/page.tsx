@@ -1,3 +1,6 @@
+import Link from "next/link";
+
+import { MemberActions } from "@/components/admin/member-actions";
 import { StaffForm, StaffSubmit } from "@/components/admin/staff-form";
 import { Badge } from "@/components/ui/badge";
 import { resolveFlagAction } from "@/lib/admin/report-actions";
@@ -24,8 +27,11 @@ const REASONS: Record<string, { label: string; hint: string }> = {
  * Spec §21 Flags queue: automatic signals waiting for a person. Flags never act on an account by
  * themselves (§17: no automatic ban from signals alone); resolving one is audited (BR-34).
  */
+const RANK = { MODERATOR: 1, ADMIN: 2, SUPER_ADMIN: 3 } as const;
+
 export default async function FlagsPage() {
-  await requireStaff();
+  const staff = await requireStaff();
+  const isAdmin = RANK[staff.role] >= RANK.ADMIN;
   const { data, error } = await (await createClient()).rpc("staff_flags_queue", { p_limit: 200 });
   const flags = error ? [] : (data ?? []);
 
@@ -41,8 +47,8 @@ export default async function FlagsPage() {
         {flags.map((f) => {
           const reason = REASONS[f.reason] ?? { label: f.reason, hint: "" };
           return (
-            <li key={f.flag_id} className="flex items-center gap-6 rounded-card border border-border bg-surface-1 p-5">
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <li key={f.flag_id} className="flex items-start gap-6 rounded-card border border-border bg-surface-1 p-5">
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge tone={f.reason === "AGE_DOUBT" ? "danger" : "pending"}>{reason.label}</Badge>
                   <span className="font-bold">
@@ -57,6 +63,28 @@ export default async function FlagsPage() {
                 <p className="text-sm text-muted-foreground">
                   {reason.hint} Raised {timeAgo(f.created_at)}.
                 </p>
+                {f.entity_type === "USER" ? (
+                  <>
+                    <Link
+                      href={`/admin/reports?member=${f.entity_id}&closed=1`}
+                      prefetch={false}
+                      className="inline-flex min-h-11 items-center self-start text-sm font-semibold underline underline-offset-4"
+                    >
+                      Reports about this account
+                    </Link>
+                    {f.stored_status ? (
+                      <div className="max-w-md">
+                        <MemberActions
+                          userId={f.entity_id}
+                          storedStatus={f.stored_status}
+                          suspendedUntil={f.suspended_until}
+                          hiddenReason={f.hidden_reason}
+                          isAdmin={isAdmin}
+                        />
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
               <StaffForm action={resolveFlagAction} label={`Flag ${reason.label}`} className="shrink-0">
                 <input type="hidden" name="flagId" value={f.flag_id} />

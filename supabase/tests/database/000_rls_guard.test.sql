@@ -88,7 +88,8 @@ select is_empty(
           'ban_user',                 -- Phase 5: raises unless is_staff('ADMIN'); audited
           'restore_user',             -- Phase 5: raises unless is_staff('ADMIN'); audited
           'staff_flags_queue',        -- Phase 5: raises unless is_staff()
-          'resolve_flag'              -- Phase 5: raises unless is_staff(); audited
+          'resolve_flag',             -- Phase 5: raises unless is_staff(); audited
+          'unhide_member'             -- Phase 5: raises unless is_staff(); audited
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );

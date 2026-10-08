@@ -32,6 +32,7 @@ const MESSAGES: Record<string, string> = {
   RATE_LIMITED: "You’ve added a lot of photos in a short time. Please try again later.",
   ACCOUNT_CANNOT_EDIT: "Your account is restricted right now, so your photos can’t be changed.",
   PHOTO_NOT_FOUND: "That photo was already changed. The page has been updated.",
+  PHOTO_UNDER_REVIEW: "This photo is being reviewed. You can change it once the review is done.",
   storage: "The upload didn’t finish. Check your connection and try again.",
 };
 const GENERIC = "Something went wrong. Try again.";

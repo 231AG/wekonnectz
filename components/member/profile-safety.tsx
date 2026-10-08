@@ -29,10 +29,9 @@ function ProfileSafety({
   block: (targetId: string) => Promise<{ error?: string }>;
 }) {
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+  const [opened, setOpened] = useState(0);
   const [blockOpen, setBlockOpen] = useState(false);
-  const [category, setCategory] = useState<ReportCategory | "">("");
-  const [photoId, setPhotoId] = useState("");
-  const [state, dispatch, sending] = useActionState(report, {});
   const [blocking, startBlocking] = useTransition();
   const [blockError, setBlockError] = useState<string>();
 
@@ -52,7 +51,16 @@ function ProfileSafety({
   return (
     <>
       <div className="flex gap-2">
-        <Button variant="secondary" size="icon" aria-label={`Report ${name}`} onClick={() => setReportOpen(true)}>
+        <Button
+          variant="secondary"
+          size="icon"
+          aria-label={`Report ${name}`}
+          onClick={() => {
+            setReportDone(false);
+            setOpened((n) => n + 1);
+            setReportOpen(true);
+          }}
+        >
           <Flag className="size-5" strokeWidth={1.8} aria-hidden />
         </Button>
         <Button variant="secondary" size="icon" aria-label={`Block ${name}`} onClick={() => setBlockOpen(true)}>
@@ -63,14 +71,14 @@ function ProfileSafety({
       <Sheet
         open={reportOpen}
         onOpenChange={setReportOpen}
-        title={state.done ? "Thanks for telling us" : `Report ${name}`}
+        title={reportDone ? "Thanks for telling us" : `Report ${name}`}
         description={
-          state.done
+          reportDone
             ? "A moderator will review it. They won’t know who reported them."
             : "They won’t know you reported them."
         }
       >
-        {state.done ? (
+        {reportDone ? (
           <div className="flex flex-col gap-3">
             <Button
               variant="danger"
@@ -86,70 +94,14 @@ function ProfileSafety({
             </Button>
           </div>
         ) : (
-          <form action={dispatch} className="flex max-h-[70dvh] flex-col gap-4 overflow-y-auto">
-            <input type="hidden" name="targetId" value={targetId} />
-            <fieldset className="flex flex-col gap-2">
-              <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">What’s wrong?</legend>
-              {REPORT_CATEGORY_KEYS.map((key) => (
-                <label
-                  key={key}
-                  className={cn(
-                    "flex min-h-11 cursor-pointer items-center gap-3 rounded-control border border-border px-4 py-2.5 text-[15px]",
-                    category === key && "border-pending bg-surface-2",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="category"
-                    value={key}
-                    checked={category === key}
-                    onChange={() => setCategory(key)}
-                    className="size-5 accent-pending"
-                  />
-                  {REPORT_CATEGORIES[key].member}
-                </label>
-              ))}
-            </fieldset>
-            {category === "INAPPROPRIATE_PHOTO" ? (
-              <fieldset className="flex flex-col gap-2">
-                <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Which photo?</legend>
-                <div className="flex gap-2">
-                  {photos.map((p, i) => (
-                    <label
-                      key={p.id}
-                      className={cn(
-                        "relative size-20 cursor-pointer overflow-hidden rounded-xl border-2 border-transparent has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
-                        photoId === p.id && "border-pending",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="photoId"
-                        value={p.id}
-                        checked={photoId === p.id}
-                        onChange={() => setPhotoId(p.id)}
-                        className="absolute inset-0 size-full cursor-pointer opacity-0"
-                        aria-label={`Photo ${i + 1}`}
-                      />
-                      {/* Short-lived signed URL (BR-11). */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.url} alt="" className="size-full object-cover" />
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
-            <div className="flex flex-col gap-2">
-              <label htmlFor="report-details" className="text-[13px] font-semibold text-muted-foreground">
-                Details (optional)
-              </label>
-              <Textarea id="report-details" name="details" maxLength={500} className="min-h-20" />
-            </div>
-            <FormError>{state.error}</FormError>
-            <Button type="submit" disabled={sending || !category}>
-              {sending ? "Sending…" : "Send report"}
-            </Button>
-          </form>
+          // A fresh form each time the sheet opens, so a second report starts clean.
+          <ReportForm
+            key={opened}
+            targetId={targetId}
+            photos={photos}
+            report={report}
+            onDone={() => setReportDone(true)}
+          />
         )}
       </Sheet>
 
@@ -168,6 +120,101 @@ function ProfileSafety({
         </Button>
       </Sheet>
     </>
+  );
+}
+
+function ReportForm({
+  targetId,
+  photos,
+  report,
+  onDone,
+}: {
+  targetId: string;
+  photos: { id: string; url: string }[];
+  report: (prev: ReportState, formData: FormData) => Promise<ReportState>;
+  onDone: () => void;
+}) {
+  const [category, setCategory] = useState<ReportCategory | "">("");
+  const [photoId, setPhotoId] = useState("");
+  const [details, setDetails] = useState("");
+  const [state, dispatch, sending] = useActionState(async (prev: ReportState, formData: FormData) => {
+    const result = await report(prev, formData);
+    if (result.done) onDone();
+    return result;
+  }, {});
+
+  return (
+    <form action={dispatch} className="flex max-h-[70dvh] flex-col gap-4 overflow-y-auto">
+      <input type="hidden" name="targetId" value={targetId} />
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">What’s wrong?</legend>
+        {REPORT_CATEGORY_KEYS.map((key) => (
+          <label
+            key={key}
+            className={cn(
+              "flex min-h-11 cursor-pointer items-center gap-3 rounded-control border border-border px-4 py-2.5 text-[15px]",
+              category === key && "border-pending bg-surface-2",
+            )}
+          >
+            <input
+              type="radio"
+              name="category"
+              value={key}
+              checked={category === key}
+              onChange={() => setCategory(key)}
+              className="size-5 accent-pending"
+            />
+            {REPORT_CATEGORIES[key].member}
+          </label>
+        ))}
+      </fieldset>
+      {category === "INAPPROPRIATE_PHOTO" ? (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Which photo?</legend>
+          <div className="flex gap-2">
+            {photos.map((p, i) => (
+              <label
+                key={p.id}
+                className={cn(
+                  "relative size-20 cursor-pointer overflow-hidden rounded-xl border-2 border-transparent has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
+                  photoId === p.id && "border-pending",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="photoId"
+                  value={p.id}
+                  checked={photoId === p.id}
+                  onChange={() => setPhotoId(p.id)}
+                  className="absolute inset-0 size-full cursor-pointer opacity-0"
+                  aria-label={`Photo ${i + 1}`}
+                />
+                {/* Short-lived signed URL (BR-11). */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt="" className="size-full object-cover" />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="report-details" className="text-[13px] font-semibold text-muted-foreground">
+          Details (optional)
+        </label>
+        <Textarea
+          id="report-details"
+          name="details"
+          maxLength={500}
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          className="min-h-20"
+        />
+      </div>
+      <FormError>{state.error}</FormError>
+      <Button type="submit" disabled={sending || !category}>
+        {sending ? "Sending…" : "Send report"}
+      </Button>
+    </form>
   );
 }
 

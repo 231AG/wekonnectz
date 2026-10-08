@@ -216,9 +216,11 @@ function PhotosManager({
         description={
           selected?.status === "REJECTED" && selected.rejectionReason
             ? REJECTION_REASONS[selected.rejectionReason].member
-            : selected?.isPrimary
-              ? "Your main photo must clearly show your face."
-              : "Your main photo must clearly show your face. A new main photo is checked again before others see it."
+            : selected?.status === "HIDDEN"
+              ? "This photo is hidden while our team reviews it. You can change it once the review is done."
+              : selected?.isPrimary
+                ? "Your main photo must clearly show your face."
+                : "Your main photo must clearly show your face. A new main photo is checked again before others see it."
         }
       >
         {selected && !selected.isPrimary && selected.status !== "REJECTED" && selected.status !== "HIDDEN" ? (
@@ -226,9 +228,11 @@ function PhotosManager({
             Make main photo
           </Button>
         ) : null}
-        <Button variant="danger" disabled={sheetBusy} onClick={() => runSheetAction(actions.remove)}>
-          Remove photo
-        </Button>
+        {selected?.status !== "HIDDEN" ? (
+          <Button variant="danger" disabled={sheetBusy} onClick={() => runSheetAction(actions.remove)}>
+            Remove photo
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={() => setSelected(null)}>
           Cancel
         </Button>

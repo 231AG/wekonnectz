@@ -624,6 +624,9 @@ isOneToOne: false
 "renumber_photos":
 { Args: { "p_user_id": string }; Returns: string
                            },
+"report_about":
+{ Args: { "p_report_id": string,"p_target": string }; Returns: string
+                           },
 "report_priority_for":
 { Args: { "p_category": Database["public"]['Enums']["report_category"] }; Returns: Database["public"]['Enums']["report_priority"]
                            },
@@ -671,7 +674,7 @@ isOneToOne: false
                            },
 "staff_flags_queue":
 { Args: { "p_limit"?: number }; Returns: {
-              "account_status": Database["public"]['Enums']["account_status"],"created_at": string,"details": Json,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string
+              "account_status": Database["public"]['Enums']["account_status"],"created_at": string,"details": Json,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string,"stored_status": Database["public"]['Enums']["account_status"],"suspended_until": string
             }[]
                            },
 "staff_photo_queue":
@@ -717,6 +720,9 @@ isOneToOne: false
                            },
 "unblock_user":
 { Args: { "p_target": string,"p_user_id": string }; Returns: undefined
+                           },
+"unhide_member":
+{ Args: { "p_target": string }; Returns: undefined
                            },
 "verification_review_paths":
 { Args: { "p_verification_id": string }; Returns: {

@@ -1,27 +1,14 @@
 import Link from "next/link";
 
+import { MemberActions } from "@/components/admin/member-actions";
+import { NoteField } from "@/components/admin/note-field";
 import { StaffForm, StaffSubmit } from "@/components/admin/staff-form";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  addReportNoteAction,
-  banUserAction,
-  resolveReportAction,
-  restoreUserAction,
-  suspendUserAction,
-} from "@/lib/admin/report-actions";
+import { addReportNoteAction, resolveReportAction } from "@/lib/admin/report-actions";
 import { requireStaff } from "@/lib/auth/staff";
 import { timeAgo } from "@/lib/domain/time";
 import { REJECTION_REASON_KEYS, REJECTION_REASONS } from "@/lib/photos/reasons";
-import {
-  accountRef,
-  BAN_REASON_KEYS,
-  BAN_REASONS,
-  REPORT_CATEGORIES,
-  SUSPENSION_DAYS,
-  type ReportCategory,
-  type ReportPriority,
-} from "@/lib/safety/categories";
+import { accountRef, REPORT_CATEGORIES, type ReportCategory, type ReportPriority } from "@/lib/safety/categories";
 import { signReportPhotos } from "@/lib/storage/profiles";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -71,13 +58,14 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
   const selectedId = typeof sp.id === "string" && /^[0-9a-f-]{36}$/i.test(sp.id) ? sp.id : undefined;
   const priority = PRIORITIES.find((p) => p === sp.priority);
   const includeClosed = sp.closed === "1";
+  const memberId = typeof sp.member === "string" && /^[0-9a-f-]{36}$/i.test(sp.member) ? sp.member : undefined;
   const isAdmin = RANK[staff.role] >= RANK.ADMIN;
 
   const { data: rows, error: queueError } = await supabase.rpc("staff_reports_queue", {
     p_include_closed: includeClosed,
     p_limit: 200,
   });
-  const all = queueError ? [] : (rows ?? []);
+  const all = (queueError ? [] : (rows ?? [])).filter((r) => !memberId || r.reported_user_id === memberId);
   const shown = priority ? all.filter((r) => r.priority === priority) : all;
 
   const href = (next: { priority?: ReportPriority | null; closed?: boolean; id?: string }) => {
@@ -85,6 +73,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
     const p = next.priority === undefined ? priority : next.priority;
     if (p) q.set("priority", p);
     if (next.closed ?? includeClosed) q.set("closed", "1");
+    if (memberId) q.set("member", memberId);
     if (next.id) q.set("id", next.id);
     const s = q.toString();
     return s ? `/admin/reports?${s}` : "/admin/reports";
@@ -105,7 +94,18 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-display text-[34px] font-bold">Reports</h1>
-        <p className="text-muted-foreground">Priority first · actions are audit-logged</p>
+        <p className="text-muted-foreground">
+          Priority first · actions are audit-logged
+          {memberId ? (
+            <>
+              {" "}
+              · showing {accountRef(memberId)} ·{" "}
+              <Link href="/admin/reports" className="underline underline-offset-4">
+                show all
+              </Link>
+            </>
+          ) : null}
+        </p>
       </div>
       {queueError ? <p role="alert">The queue couldn’t load. Refresh to try again.</p> : null}
 
@@ -288,16 +288,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
               ) : null}
               <StaffForm action={addReportNoteAction} label="Add internal note" key={`note-${detail.notes.length}`}>
                 <input type="hidden" name="reportId" value={detail.report_id} />
-                <label htmlFor="note" className="text-[13px] font-semibold text-muted-foreground">
-                  Internal note
-                </label>
-                <Textarea
-                  id="note"
-                  name="note"
-                  maxLength={2000}
-                  placeholder="What you checked and why"
-                  className="min-h-20"
-                />
+                <NoteField />
                 <StaffSubmit variant="secondary">Add note</StaffSubmit>
               </StaffForm>
 
@@ -307,7 +298,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
                   {detail.hidden_reason ? (
                     <label className="flex min-h-11 items-center gap-3 text-[15px]">
                       <input type="checkbox" name="restoreVisibility" className="size-5 accent-pending" />
-                      Make the member visible again
+                      Also make the member visible again
                     </label>
                   ) : null}
                   {photoStillHidden ? (
@@ -336,55 +327,14 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
                 </StaffForm>
               ) : null}
 
-              {detail.stored_status === "PENDING" || detail.stored_status === "ACTIVE" ? (
-                <StaffForm action={suspendUserAction} label="Suspend">
-                  <input type="hidden" name="userId" value={detail.reported_user_id} />
-                  <input type="hidden" name="reportId" value={detail.report_id} />
-                  <div className="flex gap-3">
-                    <select
-                      name="days"
-                      aria-label="Suspension length"
-                      className={cn(select, "flex-1")}
-                      defaultValue="7"
-                    >
-                      {SUSPENSION_DAYS.map((d) => (
-                        <option key={d} value={d}>
-                          {d} day{d === 1 ? "" : "s"}
-                        </option>
-                      ))}
-                    </select>
-                    <StaffSubmit variant="outline">Suspend</StaffSubmit>
-                  </div>
-                </StaffForm>
-              ) : null}
-
-              {isAdmin && detail.stored_status !== "BANNED" && detail.stored_status !== "DELETED" ? (
-                <StaffForm action={banUserAction} label="Ban">
-                  <input type="hidden" name="userId" value={detail.reported_user_id} />
-                  <input type="hidden" name="reportId" value={detail.report_id} />
-                  <div className="flex gap-3">
-                    <select name="reason" aria-label="Ban reason" className={cn(select, "flex-1")} defaultValue="">
-                      <option value="">Ban reason…</option>
-                      {BAN_REASON_KEYS.map((k) => (
-                        <option key={k} value={k}>
-                          {BAN_REASONS[k]}
-                        </option>
-                      ))}
-                    </select>
-                    <StaffSubmit variant="danger">Ban</StaffSubmit>
-                  </div>
-                </StaffForm>
-              ) : null}
-
-              {isAdmin && (detail.stored_status === "BANNED" || detail.suspended_until) ? (
-                <StaffForm action={restoreUserAction} label="Restore">
-                  <input type="hidden" name="userId" value={detail.reported_user_id} />
-                  <StaffSubmit variant="secondary">
-                    {detail.stored_status === "BANNED" ? "Lift ban" : "Lift suspension"}
-                  </StaffSubmit>
-                </StaffForm>
-              ) : null}
-              {!isAdmin ? <p className="text-sm text-muted-foreground">Bans are decided by an admin.</p> : null}
+              <MemberActions
+                userId={detail.reported_user_id}
+                reportId={detail.report_id}
+                storedStatus={detail.stored_status}
+                suspendedUntil={detail.suspended_until}
+                hiddenReason={detail.hidden_reason}
+                isAdmin={isAdmin}
+              />
             </div>
           ) : null}
         </section>

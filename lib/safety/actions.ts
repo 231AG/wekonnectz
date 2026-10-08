@@ -20,6 +20,7 @@ const REPORT_MESSAGES: Record<string, string> = {
   PHOTO_REQUIRED: "Choose the photo you’re reporting.",
   MEMBER_NOT_FOUND: "This profile isn’t available any more.",
   ACCOUNT_CANNOT_ACT: "Your account can’t send reports right now.",
+  ALREADY_REPORTED: "You’ve already reported this for this member. A moderator will review it.",
 };
 const GENERIC = "Something went wrong. Try again.";
 

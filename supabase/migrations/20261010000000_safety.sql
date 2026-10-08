@@ -70,8 +70,9 @@ as $$
 $$;
 
 -- Who may see whose profile and photos (spec §11 "Who sees what"): the owner; otherwise two ACTIVE
--- members (not suspended, BR-5), neither blocking the other (BR-24), the owner not hidden by reports
--- (BR-32, BR-33). Every profile and photo read goes through this check.
+-- members (not suspended, BR-5), neither blocking the other (BR-24), neither hidden by reports
+-- (BR-32, BR-33: a hidden member is out of discovery and can't browse others while under review).
+-- Every profile and photo read goes through this check.
 create or replace function public.can_view_profile(p_viewer uuid, p_owner uuid)
 returns boolean
 language sql
@@ -87,6 +88,7 @@ as $$
          and public.effective_account_status(o.status, o.suspended_until) = 'ACTIVE'
          and v.role = 'USER' and o.role = 'USER'
          and o.hidden_reason is null
+         and v.hidden_reason is null
          and not public.is_blocked_pair(p_viewer, p_owner)
       from public.users v, public.users o
       where v.id = p_viewer and o.id = p_owner
@@ -134,6 +136,8 @@ create table public.reports (
 create index reports_queue_idx on public.reports (priority, created_at) where status = 'OPEN';
 create index reports_target_idx on public.reports (reported_user_id, created_at desc);
 create index reports_reporter_idx on public.reports (reporter_id, created_at desc);
+-- One open report per reporter, member and category: repeating it adds nothing for the moderator.
+create unique index reports_one_open on public.reports (reporter_id, reported_user_id, category) where status = 'OPEN';
 
 alter table public.reports enable row level security;
 revoke all on public.reports from anon, authenticated;
@@ -235,7 +239,8 @@ begin
 end;
 $$;
 
--- BR-24: block silently. Works whether or not the blocker can currently see the other profile.
+-- BR-24: block silently. Only a member the blocker can see (so a block is never a way round the
+-- reporting rules below). Unblocking always works.
 create or replace function public.block_user(p_user_id uuid, p_target uuid)
 returns void
 language plpgsql
@@ -244,8 +249,10 @@ set search_path = ''
 as $$
 begin
   perform public.assert_member_can_act(p_user_id);
-  if p_target is null or p_target = p_user_id
-     or not exists (select 1 from public.users where id = p_target and role = 'USER') then
+  if exists (select 1 from public.blocks where blocker_id = p_user_id and blocked_id = p_target) then
+    return;
+  end if;
+  if p_target is null or p_target = p_user_id or not public.can_view_profile(p_user_id, p_target) then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
   insert into public.blocks (blocker_id, blocked_id) values (p_user_id, p_target)
@@ -279,10 +286,14 @@ $$;
 
 -- Report a member (spec §17). Automatic actions:
 --   UNDER_18             → hidden at once, pending review (BR-32)
---   HIGH categories      → hidden when distinct reporters within 24 h reach the threshold (BR-33)
---   INAPPROPRIATE_PHOTO  → that photo hidden pending review
+--   HIGH categories      → hidden when distinct reporters with OPEN HIGH reports from the last 24 h
+--                          reach the threshold (BR-33); dismissed reports never count again
+--   INAPPROPRIATE_PHOTO  → that photo hidden pending review (it stays the main photo until decided,
+--                          so no other photo is pulled back into review)
 --   any category         → MANY_REPORTS flag at the same threshold (behaviour signal)
--- The reporter may report a member they have blocked (block first, report after).
+-- Every report is itself an item in the Reports queue (the §17 "Flag"). Only ACTIVE members report
+-- (verified people; BR-5 suspended members can't), and only members they can see or blocked while
+-- they could see them (block first, report after).
 create or replace function public.submit_report(
   p_reporter    uuid,
   p_target      uuid,
@@ -301,7 +312,10 @@ declare
   v_high      integer;
   v_any       integer;
 begin
-  perform public.assert_member_can_act(p_reporter);
+  if not exists (select 1 from public.users u where u.id = p_reporter and u.role = 'USER'
+                 and public.effective_account_status(u.status, u.suspended_until) = 'ACTIVE') then
+    raise exception 'ACCOUNT_CANNOT_ACT' using errcode = '42501';
+  end if;
   if p_target is null or p_target = p_reporter
      or not exists (select 1 from public.users where id = p_target and role = 'USER') then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
@@ -327,6 +341,11 @@ begin
   -- Serialise reports about the same member so the threshold count is exact.
   perform 1 from public.users where id = p_target for update;
 
+  if exists (select 1 from public.reports where reporter_id = p_reporter and reported_user_id = p_target
+             and category = p_category and status = 'OPEN') then
+    raise exception 'ALREADY_REPORTED' using errcode = '22023';
+  end if;
+
   insert into public.reports (reporter_id, reported_user_id, category, priority, description, photo_id)
   values (p_reporter, p_target, p_category, public.report_priority_for(p_category),
           nullif(btrim(coalesce(p_description, '')), ''),
@@ -340,16 +359,15 @@ begin
 
   if p_category = 'INAPPROPRIATE_PHOTO' then
     update public.profile_photos set status = 'HIDDEN' where id = p_photo_id and status = 'APPROVED';
-    perform public.renumber_photos(p_target);
   end if;
 
   v_threshold := (public.get_setting('reports.auto_hide_threshold'))::int;
   select count(distinct reporter_id) filter (where priority = 'HIGH'), count(distinct reporter_id)
     into v_high, v_any
   from public.reports
-  where reported_user_id = p_target and created_at > now() - interval '24 hours';
+  where reported_user_id = p_target and status = 'OPEN' and created_at > now() - interval '24 hours';
 
-  if v_high >= v_threshold then
+  if public.report_priority_for(p_category) = 'HIGH' and v_high >= v_threshold then
     update public.users set hidden_reason = 'REPORT_THRESHOLD', hidden_at = now()
     where id = p_target and hidden_reason is null;
   end if;
@@ -405,7 +423,8 @@ begin
   return query
     select r.id, r.reported_user_id, r.category, r.priority, r.status, r.created_at, u.hidden_reason,
            (select count(distinct x.reporter_id) from public.reports x
-            where x.reported_user_id = r.reported_user_id and x.created_at > now() - interval '24 hours')
+            where x.reported_user_id = r.reported_user_id and x.status = 'OPEN'
+              and x.created_at > now() - interval '24 hours')
     from public.reports r
     join public.users u on u.id = r.reported_user_id
     where p_include_closed or r.status = 'OPEN'
@@ -446,7 +465,8 @@ begin
     'hidden_reason', u.hidden_reason,
     'verification', public.latest_verification_status(u.id),
     'reporters_24h', (select count(distinct x.reporter_id) from public.reports x
-                      where x.reported_user_id = r.reported_user_id and x.created_at > now() - interval '24 hours'),
+                      where x.reported_user_id = r.reported_user_id and x.status = 'OPEN'
+                        and x.created_at > now() - interval '24 hours'),
     'other_reports', coalesce((select jsonb_agg(jsonb_build_object('category', o.category, 'status', o.status, 'created_at', o.created_at)
                                                 order by o.created_at desc)
                                from public.reports o where o.reported_user_id = r.reported_user_id and o.id <> r.id), '[]'::jsonb),
@@ -512,6 +532,7 @@ declare
   v_target uuid;
   v_photo  uuid;
   v_unhid  boolean := false;
+  v_photo_decision text;
 begin
   if not public.is_staff('MODERATOR') then
     raise exception 'NOT_STAFF' using errcode = '42501';
@@ -538,10 +559,13 @@ begin
       update public.profile_photos
          set status = 'REJECTED', rejection_reason = p_photo_reason, reviewed_by = auth.uid(), reviewed_at = now()
        where id = v_photo;
+      v_photo_decision := 'REJECTED';
+      -- A rejected main photo hands over to the next one, which is checked as a main photo (§11).
+      perform public.renumber_photos(v_target);
     else
       update public.profile_photos set status = 'APPROVED' where id = v_photo;
+      v_photo_decision := 'APPROVED';
     end if;
-    perform public.renumber_photos(v_target);
   end if;
 
   if p_restore_visibility then
@@ -557,7 +581,47 @@ begin
       'user_id', v_target,
       'outcome', case when p_dismiss then 'DISMISSED' else 'RESOLVED' end,
       'visibility_restored', case when v_unhid then true end,
-      'photo_rejected', p_photo_reason)));
+      'photo_id', case when v_photo_decision is not null then v_photo end,
+      'photo_decision', v_photo_decision,
+      'photo_reason', case when v_photo_decision = 'REJECTED' then p_photo_reason end)));
+end;
+$$;
+
+-- The report a staff action cites, only when it is about that member (audit rows stay truthful).
+create or replace function public.report_about(p_report_id uuid, p_target uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select id from public.reports where id = p_report_id and reported_user_id = p_target;
+$$;
+
+-- Puts a hidden member back in discovery after review, when no HIGH report about them is open.
+create or replace function public.unhide_member(p_target uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_reason text;
+begin
+  if not public.is_staff('MODERATOR') then
+    raise exception 'NOT_STAFF' using errcode = '42501';
+  end if;
+  perform public.assert_staff_target(p_target);
+  select hidden_reason into v_reason from public.users where id = p_target for update;
+  if v_reason is null then
+    raise exception 'NOT_HIDDEN' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.reports where reported_user_id = p_target and status = 'OPEN' and priority = 'HIGH') then
+    raise exception 'HIGH_REPORTS_OPEN' using errcode = '22023';
+  end if;
+  update public.users set hidden_reason = null, hidden_at = null where id = p_target;
+  perform public.audit('USER_RESTORED', 'user', p_target::text,
+    jsonb_build_object('visibility_restored', true, 'hidden_reason', v_reason));
 end;
 $$;
 
@@ -578,13 +642,18 @@ begin
   if p_until is null or p_until <= now() or p_until > now() + interval '366 days' then
     raise exception 'INVALID_SUSPENSION_END' using errcode = '22023';
   end if;
+  perform 1 from public.users where id = p_target for update;
+  -- Suspensions only ever get longer here; shortening or lifting one is an admin's restore_user().
+  if exists (select 1 from public.users where id = p_target and suspended_until >= p_until) then
+    raise exception 'ALREADY_SUSPENDED_LONGER' using errcode = '22023';
+  end if;
   update public.users set suspended_until = p_until
   where id = p_target and status in ('PENDING', 'ACTIVE');
   if not found then
     raise exception 'ACCOUNT_NOT_SUSPENDABLE' using errcode = '22023';
   end if;
   perform public.audit('USER_SUSPENDED', 'user', p_target::text,
-    jsonb_strip_nulls(jsonb_build_object('until', p_until, 'report_id', p_report_id)));
+    jsonb_strip_nulls(jsonb_build_object('until', p_until, 'report_id', public.report_about(p_report_id, p_target))));
 end;
 $$;
 
@@ -606,10 +675,12 @@ begin
   if p_reason is null or p_reason !~ '^[A-Z_]{3,40}$' then
     raise exception 'REASON_REQUIRED' using errcode = '22023';
   end if;
-  update public.users set status = 'BANNED', suspended_until = null, hidden_reason = null, hidden_at = null
-  where id = p_target and status <> 'BANNED';
+  -- §8: a ban comes from an active, pending or suspended account, never a deleted one. A report hide
+  -- is kept, so lifting the ban later doesn't skip that review.
+  update public.users set status = 'BANNED', suspended_until = null
+  where id = p_target and status in ('PENDING', 'ACTIVE', 'SUSPENDED');
   if not found then
-    raise exception 'ALREADY_BANNED' using errcode = '22023';
+    raise exception 'ACCOUNT_NOT_BANNABLE' using errcode = '22023';
   end if;
   select nullif(phone, '') into v_phone from auth.users where id = p_target;
   if v_phone is not null then
@@ -618,7 +689,7 @@ begin
     on conflict (phone_hash) do nothing;
   end if;
   perform public.audit('USER_BANNED', 'user', p_target::text,
-    jsonb_strip_nulls(jsonb_build_object('reason', p_reason, 'report_id', p_report_id)));
+    jsonb_strip_nulls(jsonb_build_object('reason', p_reason, 'report_id', public.report_about(p_report_id, p_target))));
 end;
 $$;
 
@@ -631,15 +702,17 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_was  public.account_status;
+  v_was   public.account_status;
+  v_until timestamptz;
   v_phone text;
 begin
   if not public.is_staff('ADMIN') then
     raise exception 'ADMIN_REQUIRED' using errcode = '42501';
   end if;
   perform public.assert_staff_target(p_target);
-  select status into v_was from public.users where id = p_target for update;
-  if v_was = 'BANNED' then
+  select public.effective_account_status(status, suspended_until), suspended_until into v_was, v_until
+  from public.users where id = p_target for update;
+  if (select status from public.users where id = p_target) = 'BANNED' then
     update public.users set status = 'PENDING', suspended_until = null where id = p_target;
     select nullif(phone, '') into v_phone from auth.users where id = p_target;
     if v_phone is not null then
@@ -653,7 +726,43 @@ begin
   else
     raise exception 'NOTHING_TO_RESTORE' using errcode = '22023';
   end if;
-  perform public.audit('USER_RESTORED', 'user', p_target::text, jsonb_build_object('from', v_was));
+  perform public.audit('USER_RESTORED', 'user', p_target::text,
+    jsonb_strip_nulls(jsonb_build_object('from', v_was, 'suspended_until', case when v_until > now() then v_until end)));
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- A photo hidden by a report is evidence: the member can't delete it until staff decide (Phase 5).
+-- ---------------------------------------------------------------------------
+create or replace function public.delete_photo(p_user_id uuid, p_photo_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_path text;
+  v_status public.photo_status;
+begin
+  perform public.assert_member_can_manage_photos(p_user_id);
+  perform 1 from public.users where id = p_user_id for update;
+
+  select storage_path, status into v_path, v_status from public.profile_photos
+  where id = p_photo_id and user_id = p_user_id and status not in ('DELETED', 'UPLOADING')
+  for update;
+  if not found then
+    raise exception 'PHOTO_NOT_FOUND' using errcode = 'P0002';
+  end if;
+  if v_status = 'HIDDEN' then
+    raise exception 'PHOTO_UNDER_REVIEW' using errcode = '22023';
+  end if;
+
+  update public.profile_photos
+     set status = 'DELETED', is_primary = false, storage_path = null, rejection_reason = null
+   where id = p_photo_id;
+
+  perform public.renumber_photos(p_user_id);
+  return v_path;
 end;
 $$;
 
@@ -662,7 +771,8 @@ $$;
 -- ---------------------------------------------------------------------------
 create or replace function public.staff_flags_queue(p_limit integer default 100)
 returns table (flag_id uuid, entity_type text, entity_id uuid, reason text, details jsonb, created_at timestamptz,
-               display_name text, account_status public.account_status, hidden_reason text)
+               display_name text, account_status public.account_status, hidden_reason text,
+               stored_status public.account_status, suspended_until timestamptz)
 language plpgsql
 stable
 security definer
@@ -674,7 +784,8 @@ begin
   end if;
   return query
     select f.id, f.entity_type, f.entity_id, f.reason, f.details, f.created_at, p.display_name,
-           public.effective_account_status(u.status, u.suspended_until), u.hidden_reason
+           public.effective_account_status(u.status, u.suspended_until), u.hidden_reason,
+           u.status, case when u.suspended_until > now() then u.suspended_until end
     from public.moderation_flags f
     left join public.users u on f.entity_type = 'USER' and u.id = f.entity_id
     left join public.profiles p on f.entity_type = 'USER' and p.user_id = f.entity_id
@@ -792,6 +903,8 @@ revoke all on function public.ban_user(uuid, text, uuid) from public, anon;
 revoke all on function public.restore_user(uuid) from public, anon;
 revoke all on function public.staff_flags_queue(integer) from public, anon;
 revoke all on function public.resolve_flag(uuid, boolean) from public, anon;
+revoke all on function public.report_about(uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.unhide_member(uuid) from public, anon;
 
 grant execute on function public.block_user(uuid, uuid) to service_role;
 grant execute on function public.unblock_user(uuid, uuid) to service_role;
@@ -810,3 +923,4 @@ grant execute on function public.ban_user(uuid, text, uuid) to authenticated;
 grant execute on function public.restore_user(uuid) to authenticated;
 grant execute on function public.staff_flags_queue(integer) to authenticated;
 grant execute on function public.resolve_flag(uuid, boolean) to authenticated;
+grant execute on function public.unhide_member(uuid) to authenticated;

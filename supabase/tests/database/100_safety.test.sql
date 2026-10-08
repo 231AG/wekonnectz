@@ -1,9 +1,9 @@
 -- Phase 5: blocks, reports, flags, suspend / ban / restore (spec §7, §8, §17, §21; BR-5, 6, 24, 32, 33, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(90);
+select plan(109);
 
--- Fixtures: five ACTIVE members with 3 approved photos (Musu, Comfort, Hawa, Jartu, Fatu), one PENDING
+-- Fixtures: six ACTIVE members with 3 approved photos (Musu, Comfort, Hawa, Jartu, Fatu, Kemah), one PENDING
 -- member (Siah), a moderator and an admin. All fictional.
 insert into auth.users (id, phone, email, aud, role) values
   ('ffffffff-0000-0000-0000-000000000001', '231770001001', null, 'authenticated', 'authenticated'),
@@ -12,6 +12,7 @@ insert into auth.users (id, phone, email, aud, role) values
   ('ffffffff-0000-0000-0000-000000000004', '231770001004', null, 'authenticated', 'authenticated'),
   ('ffffffff-0000-0000-0000-000000000005', '231770001005', null, 'authenticated', 'authenticated'),
   ('ffffffff-0000-0000-0000-000000000006', '231770001006', null, 'authenticated', 'authenticated'),
+  ('ffffffff-0000-0000-0000-000000000007', '231770001007', null, 'authenticated', 'authenticated'),
   ('ffffffff-0000-0000-0000-0000000000aa', null, 'mod-100@example.test', 'authenticated', 'authenticated'),
   ('ffffffff-0000-0000-0000-0000000000bb', null, 'admin-100@example.test', 'authenticated', 'authenticated');
 insert into public.profiles (user_id, date_of_birth, display_name, gender, seeking_genders, area_id,
@@ -23,16 +24,17 @@ from (values ('ffffffff-0000-0000-0000-000000000001'::uuid, 'Musu'),
              ('ffffffff-0000-0000-0000-000000000003'::uuid, 'Hawa'),
              ('ffffffff-0000-0000-0000-000000000004'::uuid, 'Jartu'),
              ('ffffffff-0000-0000-0000-000000000005'::uuid, 'Fatu'),
-             ('ffffffff-0000-0000-0000-000000000006'::uuid, 'Siah')) as u(id, name);
+             ('ffffffff-0000-0000-0000-000000000006'::uuid, 'Siah'),
+             ('ffffffff-0000-0000-0000-000000000007'::uuid, 'Kemah')) as u(id, name);
 insert into public.profile_photos (user_id, status, storage_path, sort_order, is_primary, reviewed_as_primary, submitted_at)
 select u, 'APPROVED', gen_random_uuid() || '.webp', n, n = 0, n = 0, now()
 from unnest(array['ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000002',
                   'ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000004',
-                  'ffffffff-0000-0000-0000-000000000005']::uuid[]) as u,
+                  'ffffffff-0000-0000-0000-000000000005', 'ffffffff-0000-0000-0000-000000000007']::uuid[]) as u,
      generate_series(0, 2) as n;
 update public.users set status = 'ACTIVE' where id in (
   'ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000003',
-  'ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000005');
+  'ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000005', 'ffffffff-0000-0000-0000-000000000007');
 update public.users set role = 'MODERATOR', status = 'ACTIVE' where id = 'ffffffff-0000-0000-0000-0000000000aa';
 update public.users set role = 'ADMIN', status = 'ACTIVE' where id = 'ffffffff-0000-0000-0000-0000000000bb';
 
@@ -104,6 +106,10 @@ select ok(not (public.member_profile_for_viewer('ffffffff-0000-0000-0000-0000000
   ?| array['date_of_birth', 'phone', 'storage_path', 'status']), 'the profile view has no date of birth, phone, path or account status');
 select is(public.member_profile_for_viewer('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001'), null,
   'a PENDING member cannot view profiles');
+select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001', 'UNDER_18') $$,
+  '42501', 'ACCOUNT_CANNOT_ACT', 'only verified ACTIVE members can report (no unverified sockpuppets)');
+select throws_ok($$ select public.block_user('ffffffff-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000001') $$,
+  'P0002', 'MEMBER_NOT_FOUND', 'members can block only someone they can see (blocking is not a way round reporting rules)');
 
 -- ---------------------------------------------------------------------------
 -- Reports: categories, priority and automatic actions
@@ -122,6 +128,8 @@ select ok(public.can_view_profile('ffffffff-0000-0000-0000-000000000004', 'fffff
   'the hidden member still sees their own profile');
 select is((select status::text from public.users where id = 'ffffffff-0000-0000-0000-000000000004'), 'ACTIVE',
   'auto-hide is not a ban or suspension');
+select ok(not public.can_view_profile('ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000001'),
+  'BR-32: while hidden, the member cannot browse others either');
 
 -- BR-33: HIGH reports from distinct reporters within 24 h reach the threshold (DEV-ONLY 3).
 select public.submit_report('ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX');
@@ -138,11 +146,13 @@ select is((select count(*)::int from public.moderation_flags where entity_type =
 
 -- LOW categories flag at the threshold but never hide.
 select public.submit_report('ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000002', 'SPAM');
-select public.submit_report('ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000002', 'OTHER');
+select public.submit_report('ffffffff-0000-0000-0000-000000000007', 'ffffffff-0000-0000-0000-000000000002', 'OTHER');
 select is((select hidden_reason from public.users where id = 'ffffffff-0000-0000-0000-000000000002'), null,
   'BR-33: LOW-priority reports never auto-hide');
 select is((select count(*)::int from public.moderation_flags where entity_id = 'ffffffff-0000-0000-0000-000000000002'
   and reason = 'MANY_REPORTS'), 1, 'but three reporters of any category raise the MANY_REPORTS flag');
+select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000002', 'SPAM') $$,
+  '22023', 'ALREADY_REPORTED', 'one open report per reporter, member and category');
 select public.raise_flag('USER', 'ffffffff-0000-0000-0000-000000000002', 'MANY_REPORTS');
 select is((select count(*)::int from public.moderation_flags where entity_id = 'ffffffff-0000-0000-0000-000000000002'
   and reason = 'MANY_REPORTS'), 1, 'repeated signals do not flood the flags queue');
@@ -160,19 +170,29 @@ select is((select status::text from public.profile_photos where id = (select id 
 select is((select count(*)::int from public.photos_for_viewer('ffffffff-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000001')), 2,
   'other members no longer see it');
 select is((select priority::text from public.reports where id = (select id from rx where n = 'photo')), 'MEDIUM', 'INAPPROPRIATE_PHOTO is MEDIUM priority');
+insert into rx select 'mainphoto', public.submit_report('ffffffff-0000-0000-0000-000000000007', 'ffffffff-0000-0000-0000-000000000001',
+  'INAPPROPRIATE_PHOTO', null, (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0));
+select is((select count(*)::int from public.profile_photos where user_id = 'ffffffff-0000-0000-0000-000000000001' and status = 'PENDING_REVIEW'), 0,
+  'hiding the main photo pulls no other photo back into review');
+select throws_ok($$ select public.delete_photo('ffffffff-0000-0000-0000-000000000001',
+  (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0)) $$,
+  '22023', 'PHOTO_UNDER_REVIEW', 'a reported photo cannot be deleted before staff decide (evidence)');
 
 select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000001', 'OTHER', repeat('x', 501)) $$,
   '22023', 'DESCRIPTION_TOO_LONG', 'details are limited to 500 characters');
 select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000003', 'OTHER') $$,
   'P0002', 'MEMBER_NOT_FOUND', 'members cannot report themselves');
 update public.app_settings set value = '1'::jsonb where key = 'reports.per_user_per_day';
-select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000001', 'OTHER') $$,
+select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000007', 'ffffffff-0000-0000-0000-000000000003', 'OTHER') $$,
   '22023', 'RATE_LIMITED', 'reports per member per day are limited (T-19)');
 update public.app_settings set value = '30'::jsonb where key = 'reports.per_user_per_day';
 
 -- ---------------------------------------------------------------------------
 -- Staff: reports queue, notes, resolve (BR-34)
 -- ---------------------------------------------------------------------------
+create temp table er as select id from public.reports
+  where reported_user_id = 'ffffffff-0000-0000-0000-000000000005' and status = 'OPEN';
+grant select on er to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
 select is((select priority::text from public.staff_reports_queue() limit 1), 'HIGH', 'the queue is sorted by priority');
@@ -190,6 +210,12 @@ select throws_ok($$ select public.resolve_report((select id from rx where n = 'f
   'visibility is not restored while other HIGH reports about the member are open');
 select lives_ok($$ select public.resolve_report((select id from rx where n = 'photo'), true) $$,
   'dismissing the photo report puts the photo back');
+select lives_ok($$ select public.resolve_report((select id from rx where n = 'mainphoto'), false, false, 'NUDITY_OR_SEXUAL') $$,
+  'resolving the main-photo report rejects that photo');
+select lives_ok($$ select public.resolve_report(id, true) from er $$, 'moderator dismisses every report about Fatu');
+select throws_ok($$ select public.unhide_member('ffffffff-0000-0000-0000-000000000004') $$, '22023', 'NOT_HIDDEN',
+  'unhide applies only to hidden members');
+select lives_ok($$ select public.unhide_member('ffffffff-0000-0000-0000-000000000005') $$, 'and makes her visible again');
 reset role;
 select set_config('request.jwt.claims', '', true);
 
@@ -199,7 +225,16 @@ select is((select metadata ->> 'visibility_restored' from public.audit_logs wher
   and entity_id = (select id::text from rx where n = 'u18')), 'true', 'BR-34: the decision is audited');
 select is((select status::text from public.reports where id = (select id from rx where n = 'u18')), 'DISMISSED', 'the report is DISMISSED');
 select is((select status::text from public.profile_photos where id = (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 1)),
-  'APPROVED', 'the photo is approved again');
+  'PENDING_REVIEW', 'the photo was put back, and once the main photo was rejected it became the main photo and goes to a main-photo check (§11)');
+select is((select metadata ->> 'photo_decision' from public.audit_logs where action = 'REPORT_RESOLVED'
+  and entity_id = (select id::text from rx where n = 'mainphoto')), 'REJECTED', 'BR-34: the photo decision is audited');
+select is((select rejection_reason::text from public.profile_photos where id = (select id from pp where user_id = 'ffffffff-0000-0000-0000-000000000001' and sort_order = 0)),
+  'NUDITY_OR_SEXUAL', 'the rejected photo keeps its reason');
+select is((select metadata ->> 'hidden_reason' from public.audit_logs where action = 'USER_RESTORED'
+  and entity_id = 'ffffffff-0000-0000-0000-000000000005'), 'REPORT_THRESHOLD', 'BR-34: unhiding is audited');
+select public.submit_report('ffffffff-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX');
+select is((select hidden_reason from public.users where id = 'ffffffff-0000-0000-0000-000000000005'), null,
+  'BR-33: dismissed reports never count toward the threshold again');
 
 -- ---------------------------------------------------------------------------
 -- BR-5: suspension is an overlay that ends by itself
@@ -219,6 +254,8 @@ select throws_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-00000000
   '42501', 'OWN_CONTENT', 'staff cannot act on their own account');
 select lives_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-000000000002', now() + interval '7 days') $$,
   'moderator suspends Comfort for 7 days');
+select throws_ok($$ select public.suspend_user('ffffffff-0000-0000-0000-000000000002', now() + interval '1 day') $$,
+  '22023', 'ALREADY_SUSPENDED_LONGER', '§7: a moderator cannot shorten a suspension (only an admin lifts one)');
 reset role;
 select set_config('request.jwt.claims', '', true);
 select is((select public.effective_account_status(status, suspended_until)::text from public.users where id = 'ffffffff-0000-0000-0000-000000000002'),
@@ -227,6 +264,8 @@ select ok(not public.can_view_profile('ffffffff-0000-0000-0000-000000000001', 'f
   'BR-5: a suspended member is out of discovery');
 select is((select count(*)::int from public.audit_logs where action = 'USER_SUSPENDED'
   and entity_id = 'ffffffff-0000-0000-0000-000000000002'), 1, 'BR-34: the suspension is audited');
+select throws_ok($$ select public.submit_report('ffffffff-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000003', 'SPAM') $$,
+  '42501', 'ACCOUNT_CANNOT_ACT', 'BR-5: a suspended member cannot report');
 
 -- ---------------------------------------------------------------------------
 -- BR-6: ban (ADMIN only) and restore
@@ -238,9 +277,13 @@ select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000005
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
 select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000005', 'selling sex') $$, '22023', 'REASON_REQUIRED',
   'a ban needs a reason code');
+reset role;
+update public.users set hidden_reason = 'UNDER_18_REPORT', hidden_at = now() where id = 'ffffffff-0000-0000-0000-000000000005';
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
 select lives_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX', (select id from rx where n = 'fatu3')) $$,
   'admin bans Fatu');
-select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX') $$, '22023', 'ALREADY_BANNED',
+select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000005', 'SELLING_SEX') $$, '22023', 'ACCOUNT_NOT_BANNABLE',
   'banning twice is refused');
 reset role;
 select set_config('request.jwt.claims', '', true);
@@ -269,6 +312,10 @@ select is((select status::text from public.users where id = 'ffffffff-0000-0000-
   'a restored account is PENDING until it is verified again (no verification here)');
 select ok(not exists (select 1 from public.phone_blocklist where phone_hash = public.phone_hash('231770001005')),
   'the phone leaves the blocklist');
+select is((select hidden_reason from public.users where id = 'ffffffff-0000-0000-0000-000000000005'), 'UNDER_18_REPORT',
+  'a report hide survives a ban and restore (the review is not skipped)');
+select is((select metadata ->> 'from' from public.audit_logs where action = 'USER_RESTORED'
+  and entity_id = 'ffffffff-0000-0000-0000-000000000002'), 'SUSPENDED', 'BR-34: lifting a suspension is logged as from SUSPENDED');
 select is((select public.effective_account_status(status, suspended_until)::text from public.users where id = 'ffffffff-0000-0000-0000-000000000002'),
   'ACTIVE', 'the lifted suspension leaves Comfort ACTIVE');
 
@@ -294,6 +341,14 @@ reset role;
 select set_config('request.jwt.claims', '', true);
 select is((select count(*)::int from public.audit_logs where action = 'REPORT_RESOLVED' and entity_type = 'moderation_flag'), 1,
   'BR-34: resolving a flag is audited');
+
+update public.users set status = 'DELETED', deleted_at = now() where id = 'ffffffff-0000-0000-0000-000000000006';
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000006', 'SELLING_SEX') $$, '22023', 'ACCOUNT_NOT_BANNABLE',
+  '§8: a deleted account cannot be banned (and so never restored)');
+reset role;
+select set_config('request.jwt.claims', '', true);
 
 select * from finish();
 rollback;
