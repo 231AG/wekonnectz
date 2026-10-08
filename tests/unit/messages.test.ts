@@ -37,3 +37,13 @@ describe("Discover filters (§15)", () => {
     expect(discoverFiltersSchema.safeParse({ minAge: "16" }).success).toBe(false);
   });
 });
+
+describe("links in chat (§14 send rule, OD-31)", () => {
+  it("refuses web links but lets email addresses through as contact details", async () => {
+    const { containsLink } = await import("@/lib/domain/detection");
+    expect(containsLink("Look at example.com")).toBe(true);
+    expect(containsLink("https://kofi.example")).toBe(true);
+    expect(containsLink("My email is kofi@gmail.com")).toBe(false);
+    expect(containsLink("kofi at gmail")).toBe(false);
+  });
+});

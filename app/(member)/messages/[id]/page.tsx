@@ -7,7 +7,7 @@ import { ConversationSafety } from "@/components/messages/conversation-safety";
 import { Avatar } from "@/components/relationship/avatar";
 import { Button } from "@/components/ui/button";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
-import { markConversationRead, reportConversation, sendMessage } from "@/lib/messages/actions";
+import { loadMessages, markConversationRead, reportConversation, sendMessage } from "@/lib/messages/actions";
 import { unmatchMember } from "@/lib/relationship/actions";
 import { blockMember } from "@/lib/safety/actions";
 import { conversationView } from "@/lib/storage/relationship";
@@ -70,6 +70,7 @@ export default async function ConversationPage({ params }: PageProps<"/messages/
           cannotSendReason={reason}
           send={sendMessage}
           markRead={markConversationRead}
+          load={loadMessages}
         />
       </main>
     </div>

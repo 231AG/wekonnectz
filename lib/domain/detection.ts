@@ -239,6 +239,12 @@ const YEAR = /^(?:19|20)\d\d$/;
 const TLD = "(?:c[o0]m|n[e3]t|[o0]rg|lr|i[o0]|c[o0]|ly|app|link|inf[o0]|biz|xyz|gg|tv|[o0]nline|site|me)";
 // "kofi dot co dot lr" counts too: a second-level domain followed by a country code.
 const STRICT_TLD = "(?:c[o0]m|n[e3]t|[o0]rg|(?:c[o0]|edu|gov)\\s*(?:\\.|。|,|\\sdot)\\s*[a-z]{2})";
+// email-like: kofi@gmail, kofi at gmail
+const EMAIL_LIKE =
+  /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|ymail)(?![a-z])/;
+/** A written email address ("kofi@gmail.com"): contact details, not a link, in a conversation (OD-31). */
+const EMAIL_ADDRESS = /[a-z0-9._-]{1,64}\s*@\s*[a-z0-9-]{1,63}(?:\s*\.\s*[a-z0-9-]{1,63})*/g;
+
 const LINK = [
   /(?<![a-z])https?:\/\//,
   /(?<![a-z])www\s*\./,
@@ -252,8 +258,7 @@ const LINK = [
   new RegExp(
     `(?<![a-z0-9])[a-z0-9-]{3,63}\\s*(?:\\.|。|,|\\[\\.\\]|\\(\\.\\)|\\(dot\\)|\\[dot\\]|\\sdot)\\s*${STRICT_TLD}(?![a-z])`,
   ),
-  // email-like: kofi@gmail, kofi at gmail
-  /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|ymail)(?![a-z])/,
+  EMAIL_LIKE,
 ];
 
 const PLATFORM = "(?:instagram|insta|ig|snapchat|snap|sc|facebook|fb|tiktok|tt|twitter|telegram|whatsapp|wa)";
@@ -508,10 +513,13 @@ export function detect(text: string, mode: DetectionMode, terms: DetectionTerms)
   return { blocked: false, flagged: money.length > 0, categories: money };
 }
 
-/** True when the text contains a link (used by the Phase 6 send rule: no links in chat, §14). */
+/**
+ * True when the text contains a link (Phase 6 send rule: no links in chat, §14). Email addresses are
+ * contact details, which OD-31 allows in an accepted conversation, so they are not links here.
+ */
 export function containsLink(text: string): boolean {
-  const base = normalizeForDetection(text);
+  const base = normalizeForDetection(text).replace(EMAIL_ADDRESS, (m) => " ".repeat(m.length));
   const spaced = collapseSpacedLetters(base);
   const joined = joinWords(spaced);
-  return [base, spaced, joined].some((v) => LINK.some((re) => re.test(v)));
+  return [base, spaced, joined].some((v) => LINK.some((re) => re !== EMAIL_LIKE && re.test(v)));
 }

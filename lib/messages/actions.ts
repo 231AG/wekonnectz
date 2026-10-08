@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireMember } from "@/lib/auth/session";
 import { getDetectionTerms } from "@/lib/content/terms";
 import { containsLink, detect } from "@/lib/domain/detection";
-import type { ChatMessage } from "@/lib/storage/relationship";
+import { conversationView, type ChatMessage } from "@/lib/storage/relationship";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ReportCategory } from "@/lib/safety/categories";
 import { conversationReportSchema, messageSchema } from "@/lib/validation/messages";
@@ -97,4 +97,13 @@ export async function reportConversation(
     return { error: code ? REPORT_MESSAGES[code] : GENERIC };
   }
   return { done: true };
+}
+
+/** The latest messages of a conversation, to catch up after the live channel (re)connects. */
+export async function loadMessages(conversationId: string): Promise<ChatMessage[] | null> {
+  const member = await requireMember();
+  const parsed = z.uuid().safeParse(conversationId);
+  if (!parsed.success) return null;
+  const view = await conversationView(member.id, parsed.data);
+  return view ? view.messages : null;
 }

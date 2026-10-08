@@ -110,6 +110,8 @@ create table public.conversations (
   status          public.conversation_status not null default 'OPEN',
   closed_reason   text check (closed_reason in ('UNMATCHED', 'BLOCKED')),
   closed_at       timestamptz,
+  -- Who closed it: only they may still report from the closed conversation.
+  closed_by       uuid references public.users (id) on delete set null,
   last_message_at timestamptz,
   created_at      timestamptz not null default now(),
   constraint conversations_closed_has_reason check ((status = 'CLOSED') = (closed_reason is not null)),
@@ -269,9 +271,9 @@ as $$
   where user_id = p_user and is_primary and status = 'APPROVED';
 $$;
 
--- Closes every open conversation between two members and ends their match (BR-24: blocking closes
--- the conversation for both).
-create or replace function public.close_pair(p_a uuid, p_b uuid, p_reason text)
+-- A block closes every open conversation between the pair and ends their match (BR-24). p_actor is
+-- the member who blocked.
+create or replace function public.close_pair(p_actor uuid, p_other uuid, p_reason text)
 returns void
 language plpgsql
 security definer
@@ -279,13 +281,13 @@ set search_path = ''
 as $$
 begin
   update public.matches
-     set status = 'UNMATCHED', unmatched_by = p_a, unmatched_at = now()
-   where user_a_id = least(p_a, p_b) and user_b_id = greatest(p_a, p_b) and status = 'ACTIVE';
+     set status = 'UNMATCHED', unmatched_by = p_actor, unmatched_at = now()
+   where user_a_id = least(p_actor, p_other) and user_b_id = greatest(p_actor, p_other) and status = 'ACTIVE';
   update public.conversations c
-     set status = 'CLOSED', closed_reason = p_reason, closed_at = now()
+     set status = 'CLOSED', closed_reason = p_reason, closed_at = now(), closed_by = p_actor
    where c.status = 'OPEN'
-     and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = p_a)
-     and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = p_b);
+     and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = p_actor)
+     and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = p_other);
 end;
 $$;
 
@@ -379,6 +381,8 @@ begin
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
 
+  -- One like at a time per member (exact daily cap), then per pair (exactly one match).
+  perform pg_advisory_xact_lock(hashtextextended('likecap:' || p_viewer::text, 0));
   perform pg_advisory_xact_lock(hashtextextended('like:' || v_a::text || ':' || v_b::text, 0));
 
   if exists (select 1 from public.matches where user_a_id = v_a and user_b_id = v_b) then
@@ -490,7 +494,10 @@ begin
   if v_a is null then
     raise exception 'MATCH_NOT_FOUND' using errcode = 'P0002';
   end if;
-  perform public.close_pair(p_viewer, case when v_a = p_viewer then v_b else v_a end, 'UNMATCHED');
+  update public.matches set status = 'UNMATCHED', unmatched_by = p_viewer, unmatched_at = now() where id = p_match_id;
+  update public.conversations
+     set status = 'CLOSED', closed_reason = 'UNMATCHED', closed_at = now(), closed_by = p_viewer
+   where match_id = p_match_id and status = 'OPEN';
 end;
 $$;
 
@@ -509,11 +516,7 @@ begin
     'likes_received', case when public.relationship_eligible(p_viewer)
                            then (select count(*) from public.likes_received(p_viewer)) else 0 end,
     'new_matches', (select count(*) from public.matches_list(p_viewer) x where not x.has_messages),
-    'unread', (select count(*) from public.messages msg
-               join public.conversation_members me on me.conversation_id = msg.conversation_id and me.user_id = p_viewer
-               join public.conversations c on c.id = msg.conversation_id and c.status = 'OPEN'
-               where msg.sender_id is distinct from p_viewer
-                 and msg.created_at > coalesce(me.last_read_at, '-infinity'::timestamptz))
+    'unread', (select coalesce(sum(x.unread), 0) from public.conversations_list(p_viewer) x)
   );
 end;
 $$;
@@ -549,7 +552,12 @@ as $$
        and public.effective_account_status(me.status, me.suspended_until) = 'ACTIVE'
        and me.hidden_reason is null
        and o.status not in ('BANNED', 'DELETED')
+       -- Q29: nobody keeps messaging a member reported as possibly under 18 while staff review it.
+       and o.hidden_reason is distinct from 'UNDER_18_REPORT'
        and not public.is_blocked_pair(p_viewer, o.id)
+       -- BR-23: a Relationship conversation needs its match to be active.
+       and (c.type <> 'RELATIONSHIP'
+            or exists (select 1 from public.matches m where m.id = c.match_id and m.status = 'ACTIVE'))
     from public.conversations c
     join public.users me on me.id = p_viewer
     join public.users o on o.id = public.conversation_other(p_viewer, p_conversation)
@@ -658,9 +666,10 @@ begin
   update public.conversation_members set last_read_at = v_msg.created_at
   where conversation_id = p_conversation and user_id = p_viewer;
 
+  -- One open MONEY_TERMS flag per sender (repeats don't flood the queue); message text never goes in it.
   if v_msg.flagged then
-    perform public.raise_flag('MESSAGE', v_msg.id, 'MONEY_TERMS',
-      jsonb_build_object('sender_id', p_viewer, 'conversation_id', p_conversation,
+    perform public.raise_flag('USER', p_viewer, 'MONEY_TERMS',
+      jsonb_build_object('message_id', v_msg.id, 'conversation_id', p_conversation,
                          'categories', to_jsonb(coalesce(p_categories, array[]::text[]))));
   end if;
   return jsonb_build_object('id', v_msg.id, 'mine', true, 'body', v_msg.body, 'created_at', v_msg.created_at, 'read_at', null);
@@ -842,7 +851,12 @@ declare
   v_target uuid := public.conversation_other(p_reporter, p_conversation);
 begin
   perform public.assert_can_report(p_reporter);
-  if v_target is null or not exists (select 1 from public.users where id = v_target and role = 'USER') then
+  -- An open conversation, or one the reporter closed (block first, report after). A conversation the
+  -- other member closed reads as not found, the same for a block as for an unmatch (BR-24).
+  if v_target is null
+     or not exists (select 1 from public.users where id = v_target and role = 'USER')
+     or not exists (select 1 from public.conversations c where c.id = p_conversation
+                    and (c.status = 'OPEN' or c.closed_by = p_reporter)) then
     raise exception 'CONVERSATION_NOT_FOUND' using errcode = 'P0002';
   end if;
   if p_category = 'INAPPROPRIATE_PHOTO' then
@@ -910,7 +924,8 @@ begin
     'description', r.description,
     'photo_id', r.photo_id,
     'created_at', r.created_at,
-    'from_conversation', r.conversation_id is not null,
+    'from_conversation', r.conversation_id is not null
+                         or exists (select 1 from public.report_messages rm where rm.report_id = r.id),
     'captured_messages', (select count(*) from public.report_messages rm where rm.report_id = r.id),
     'reported_user_id', r.reported_user_id,
     'display_name', p.display_name,
@@ -1029,6 +1044,36 @@ as $$
      from public.profiles p
      left join public.areas a on a.id = p.area_id
      where p.user_id = p_owner)
+  end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- After an unmatch the two members no longer see each other's profiles either, so an unmatch and a
+-- block look the same from the other side (BR-24: a block is never revealed). Phase 5 rules kept.
+-- ---------------------------------------------------------------------------
+create or replace function public.can_view_profile(p_viewer uuid, p_owner uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case
+    when p_viewer is null or p_owner is null then false
+    when p_viewer = p_owner then true
+    else coalesce((
+      select public.effective_account_status(v.status, v.suspended_until) = 'ACTIVE'
+         and public.effective_account_status(o.status, o.suspended_until) = 'ACTIVE'
+         and v.role = 'USER' and o.role = 'USER'
+         and o.hidden_reason is null
+         and v.hidden_reason is null
+         and not public.is_blocked_pair(p_viewer, p_owner)
+         and not exists (select 1 from public.matches m
+                         where m.user_a_id = least(p_viewer, p_owner) and m.user_b_id = greatest(p_viewer, p_owner)
+                           and m.status = 'UNMATCHED')
+      from public.users v, public.users o
+      where v.id = p_viewer and o.id = p_owner
+    ), false)
   end;
 $$;
 

@@ -2,7 +2,7 @@
 -- (spec §14, §15, §17; BR-5, 8, 13, 23, 24, 34; OD-10, OD-26, OD-33).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(74);
+select plan(83);
 
 -- Fixtures (all fictional): Musu and Fatu (women seeking men); Prince and Joseph (men seeking women);
 -- Kemah (Casual only); Varney (never verified); a moderator.
@@ -169,9 +169,13 @@ select public.send_message('aaaaaaaa-6000-0000-0000-000000000001', (select id fr
   'Fictional money message', true, array['PRICE']);
 select is((select count(*)::int from public.messages where conversation_id = (select id from ids where n = 'conv')), 2,
   'OD-31: a flagged message is still delivered');
-select is((select count(*)::int from public.moderation_flags where entity_type = 'MESSAGE' and reason = 'MONEY_TERMS'
-  and details ->> 'sender_id' = 'aaaaaaaa-6000-0000-0000-000000000001'), 1, 'and raises a MONEY_TERMS flag');
-select ok(not exists (select 1 from public.moderation_flags where entity_type = 'MESSAGE' and details::text like '%Fictional money%'),
+select is((select count(*)::int from public.moderation_flags where entity_type = 'USER' and reason = 'MONEY_TERMS'
+  and entity_id = 'aaaaaaaa-6000-0000-0000-000000000001'), 1, 'and raises a MONEY_TERMS flag on the sender');
+select public.send_message('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv'),
+  'Another fictional money message', true, array['MONEY_REQUEST']);
+select is((select count(*)::int from public.moderation_flags where reason = 'MONEY_TERMS'
+  and entity_id = 'aaaaaaaa-6000-0000-0000-000000000001' and status = 'OPEN'), 1, 'repeats don''t flood the queue (one open flag per sender)');
+select ok(not exists (select 1 from public.moderation_flags where reason = 'MONEY_TERMS' and details::text like '%Fictional money%'),
   'OD-26: the flag holds no message text');
 
 -- Realtime authorisation (private channels).
@@ -202,12 +206,32 @@ select throws_ok($$ select public.like_user('aaaaaaaa-6000-0000-0000-00000000000
   '42501', 'NOT_ELIGIBLE', 'BR-5: no likes while suspended');
 update public.users set suspended_until = null where id = 'aaaaaaaa-6000-0000-0000-000000000001';
 
+-- Q26 / Q29: members hidden by reports.
+update public.users set hidden_reason = 'REPORT_THRESHOLD', hidden_at = now() where id = 'aaaaaaaa-6000-0000-0000-000000000001';
+select throws_ok($$ select public.send_message('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv'), 'hello') $$,
+  '42501', 'CANNOT_SEND', 'Q26: a member hidden by reports cannot send');
+update public.users set hidden_reason = null, hidden_at = null where id = 'aaaaaaaa-6000-0000-0000-000000000001';
+update public.users set hidden_reason = 'UNDER_18_REPORT', hidden_at = now() where id = 'aaaaaaaa-6000-0000-0000-000000000002';
+select throws_ok($$ select public.send_message('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv'), 'hello') $$,
+  '42501', 'CANNOT_SEND', 'Q29: nobody can message a member hidden after an under-18 report');
+update public.users set hidden_reason = null, hidden_at = null where id = 'aaaaaaaa-6000-0000-0000-000000000002';
+
+-- Banned members: no messages to them, and their conversation doesn't count as unread.
+select public.send_message('aaaaaaaa-6000-0000-0000-000000000002', (select id from ids where n = 'conv'), 'Hello Musu');
+select is((public.relationship_summary('aaaaaaaa-6000-0000-0000-000000000001') ->> 'unread')::int, 1, 'Musu has one unread message');
+update public.users set status = 'BANNED' where id = 'aaaaaaaa-6000-0000-0000-000000000002';
+select is((public.relationship_summary('aaaaaaaa-6000-0000-0000-000000000001') ->> 'unread')::int, 0,
+  'a conversation with a banned member is gone, unread included');
+select throws_ok($$ select public.send_message('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv'), 'hello') $$,
+  '42501', 'CANNOT_SEND', 'nobody messages a banned member');
+update public.users set status = 'ACTIVE' where id = 'aaaaaaaa-6000-0000-0000-000000000002';
+
 -- ---------------------------------------------------------------------------
 -- Reports from a conversation (§17, OD-26, OD-33)
 -- ---------------------------------------------------------------------------
 insert into ids select 'report', public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000002',
   (select id from ids where n = 'conv'), 'MONEY_SCAM', 'Asked for money.');
-select is((select count(*)::int from public.report_messages where report_id = (select id from ids where n = 'report')), 2,
+select is((select count(*)::int from public.report_messages where report_id = (select id from ids where n = 'report')), 4,
   'the recent messages are captured with the report');
 select throws_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000003', (select id from ids where n = 'conv'), 'SPAM') $$,
   'P0002', 'CONVERSATION_NOT_FOUND', 'only a member of the conversation can report from it');
@@ -219,13 +243,13 @@ select set_config('request.jwt.claims', (select c from claims where who = 'musu'
 select throws_ok($$ select * from public.staff_report_messages((select id from ids where n = 'report')) $$, '42501', 'NOT_STAFF',
   'OD-26: members cannot read captured messages');
 select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
-select is((public.staff_report_detail((select id from ids where n = 'report')) ->> 'captured_messages')::int, 2,
+select is((public.staff_report_detail((select id from ids where n = 'report')) ->> 'captured_messages')::int, 4,
   'the report detail says how many messages were captured (without showing them)');
-select is((select count(*)::int from public.staff_report_messages((select id from ids where n = 'report')) where from_reported), 2,
+select is((select count(*)::int from public.staff_report_messages((select id from ids where n = 'report')) where from_reported), 3,
   'the moderator reads the captured messages, marked by sender');
-select is((select count(*)::int from public.staff_report_messages((select id from ids where n = 'report'))), 2, 'and reads them again');
-select is((select account_id from public.staff_flags_queue() where entity_type = 'MESSAGE'), 'aaaaaaaa-6000-0000-0000-000000000001'::uuid,
-  'a message flag points to the sender''s account');
+select is((select count(*)::int from public.staff_report_messages((select id from ids where n = 'report'))), 4, 'and reads them again');
+select is((select account_id from public.staff_flags_queue() where reason = 'MONEY_TERMS'), 'aaaaaaaa-6000-0000-0000-000000000001'::uuid,
+  'a money-terms flag points to the sender''s account');
 reset role;
 select set_config('request.jwt.claims', '', true);
 select is((select count(*)::int from public.audit_logs where action = 'REPORTED_MESSAGES_VIEWED'
@@ -242,6 +266,8 @@ select lives_ok($$ select public.unmatch('aaaaaaaa-6000-0000-0000-000000000002',
 select throws_ok($$ select public.conversation_view('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv')) $$,
   'P0002', 'CONVERSATION_NOT_FOUND', 'the conversation is gone for Musu too');
 select is((select count(*)::int from public.matches_list('aaaaaaaa-6000-0000-0000-000000000001')), 0, 'and from her matches');
+select ok(not public.can_view_profile('aaaaaaaa-6000-0000-0000-000000000001', 'aaaaaaaa-6000-0000-0000-000000000002'),
+  'BR-24: after an unmatch the profiles are gone too, exactly as after a block');
 select throws_ok($$ select public.like_user('aaaaaaaa-6000-0000-0000-000000000001', 'aaaaaaaa-6000-0000-0000-000000000002') $$,
   'P0002', 'MEMBER_NOT_FOUND', 'an unmatched pair cannot match again');
 set local role authenticated;
@@ -262,6 +288,14 @@ select throws_ok($$ select public.send_message('aaaaaaaa-6000-0000-0000-00000000
   '42501', 'CANNOT_SEND', 'BR-24: no messages after a block');
 select lives_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000003', (select id from ids where n = 'conv2'), 'SPAM') $$,
   'the blocker can still report from the closed conversation');
+select throws_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv2'), 'UNDER_18') $$,
+  'P0002', 'CONVERSATION_NOT_FOUND', 'BR-24: the blocked member cannot report from it (same answer as after an unmatch)');
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'musu'), true);
+select ok(not public.can_join_conversation_topic('conversation:' || (select id from ids where n = 'conv2')),
+  'BR-24: nor join its channel');
+reset role;
+select set_config('request.jwt.claims', '', true);
 
 select * from finish();
 rollback;

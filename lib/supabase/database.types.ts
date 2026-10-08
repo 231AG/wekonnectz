@@ -152,16 +152,22 @@ isOneToOne: false
                   ]
                 },"conversations": {
                   Row: {
-                    "closed_at": string | null,"closed_reason": string | null,"created_at": string,"id": string,"last_message_at": string | null,"match_id": string | null,"status": Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
+                    "closed_at": string | null,"closed_by": string | null,"closed_reason": string | null,"created_at": string,"id": string,"last_message_at": string | null,"match_id": string | null,"status": Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
                   }
                   Insert: {
-                    "closed_at"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
+                    "closed_at"?: string | null,"closed_by"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type": Database["public"]['Enums']["conversation_type"]
                   }
                   Update: {
-                    "closed_at"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type"?: Database["public"]['Enums']["conversation_type"]
+                    "closed_at"?: string | null,"closed_by"?: string | null,"closed_reason"?: string | null,"created_at"?: string,"id"?: string,"last_message_at"?: string | null,"match_id"?: string | null,"status"?: Database["public"]['Enums']["conversation_status"],"type"?: Database["public"]['Enums']["conversation_type"]
                   }
                   Relationships: [
                     {
+      foreignKeyName: "conversations_closed_by_fkey"
+      columns: ["closed_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "conversations_match_id_fkey"
       columns: ["match_id"]
 isOneToOne: true
@@ -701,7 +707,7 @@ isOneToOne: false
 { Args: { "p_user_id": string,"p_verification_id": string }; Returns: boolean
                            },
 "close_pair":
-{ Args: { "p_a": string,"p_b": string,"p_reason": string }; Returns: undefined
+{ Args: { "p_actor": string,"p_other": string,"p_reason": string }; Returns: undefined
                            },
 "complete_photo_upload":
 { Args: { "p_photo_id": string,"p_storage_path": string,"p_user_id": string }; Returns: undefined

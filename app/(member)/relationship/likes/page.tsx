@@ -28,7 +28,7 @@ export default async function LikesPage() {
       {likes === null ? (
         <Card tone="dashed">
           <p className="text-[15px] text-muted-foreground">
-            Turn on Relationship in your profile to see who likes you.
+            Likes aren’t available on your account right now. Check that Relationship is on in your profile.
           </p>
         </Card>
       ) : likes.length === 0 ? (

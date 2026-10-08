@@ -103,8 +103,8 @@ test("§15 / BR-23: like → like back → match → live chat in two browsers; 
   const { data: flags } = await admin
     .from("moderation_flags")
     .select("reason, details")
-    .eq("entity_type", "MESSAGE")
-    .eq("details->>sender_id", musu.userId);
+    .eq("entity_type", "USER")
+    .eq("entity_id", musu.userId);
   expect(flags?.map((f) => f.reason)).toEqual(["MONEY_TERMS"]);
   expect(JSON.stringify(flags)).not.toContain("transport");
 

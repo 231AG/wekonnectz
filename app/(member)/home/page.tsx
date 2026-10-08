@@ -40,6 +40,11 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
         }
       >
         <ScreenTitle>Your account is restricted</ScreenTitle>
+        {blocked === "1" ? (
+          <p role="status" className="rounded-control bg-surface-2 px-4 py-3 text-[15px]">
+            Blocked. They won’t be told.
+          </p>
+        ) : null}
         <ScreenLead>
           Your account is temporarily restricted, so you can’t be seen or send messages right now. You can still read
           your messages. It will be lifted automatically at the end of the restriction.
@@ -56,7 +61,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const relationshipLine = !summary.intentRelationship
     ? "Turned off in your profile"
     : !summary.eligible
-      ? "You’ll appear once your profile has 3 approved photos"
+      ? "Not showing in Discover right now"
       : summary.likesReceived || summary.newMatches
         ? `${plural(summary.likesReceived, "new like", "new likes")} · ${plural(summary.newMatches, "new match", "new matches")}`
         : "See who’s new today";

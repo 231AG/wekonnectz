@@ -25,6 +25,7 @@ function ConversationLive({
   cannotSendReason,
   send,
   markRead,
+  load,
 }: {
   conversationId: string;
   meId: string;
@@ -33,6 +34,7 @@ function ConversationLive({
   cannotSendReason: string;
   send: (conversationId: string, body: string) => Promise<SendResult>;
   markRead: (conversationId: string) => Promise<void>;
+  load: (conversationId: string) => Promise<ChatMessage[] | null>;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initial);
   const [draft, setDraft] = useState("");
@@ -41,12 +43,25 @@ function ConversationLive({
   const [sending, startSending] = useTransition();
   const bottom = useRef<HTMLDivElement>(null);
 
-  const add = useCallback((m: ChatMessage) => {
-    setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
+  // Merge by id and keep time order (a catch-up fetch and live events can overlap).
+  const merge = useCallback((incoming: ChatMessage[]) => {
+    setMessages((list) => {
+      const byId = new Map(list.map((m) => [m.id, m]));
+      for (const m of incoming)
+        byId.set(m.id, { ...byId.get(m.id), ...m, readAt: m.readAt ?? byId.get(m.id)?.readAt ?? null });
+      return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    });
   }, []);
+  const add = useCallback((m: ChatMessage) => merge([m]), [merge]);
+
+  // Read receipts only while the member is actually looking at the conversation.
+  const readIfVisible = useCallback(() => {
+    if (document.visibilityState === "visible") void markRead(conversationId);
+  }, [conversationId, markRead]);
 
   useEffect(() => {
-    void markRead(conversationId);
+    readIfVisible();
+    document.addEventListener("visibilitychange", readIfVisible);
     const supabase = browserClient();
     let cancelled = false;
     const channel = supabase.channel(`conversation:${conversationId}`, { config: { private: true } });
@@ -54,7 +69,7 @@ function ConversationLive({
       .on("broadcast", { event: "message" }, ({ payload }) => {
         const p = payload as { id: string; sender_id: string; body: string; created_at: string };
         add({ id: p.id, mine: p.sender_id === meId, body: p.body, createdAt: p.created_at, readAt: null });
-        if (p.sender_id !== meId) void markRead(conversationId);
+        if (p.sender_id !== meId) readIfVisible();
       })
       .on("broadcast", { event: "read" }, ({ payload }) => {
         const p = payload as { reader_id: string; read_at: string };
@@ -64,13 +79,25 @@ function ConversationLive({
     // Realtime needs the member's access token for a private channel.
     void supabase.realtime.setAuth().then(() => {
       if (cancelled) return;
-      channel.subscribe((status) => setLive(status === "SUBSCRIBED"));
+      channel.subscribe((status) => {
+        setLive(status === "SUBSCRIBED");
+        // Broadcasts sent while connecting or offline are not replayed: catch up on every (re)join.
+        if (status === "SUBSCRIBED") {
+          void load(conversationId).then((latest) => {
+            if (!cancelled && latest) {
+              merge(latest);
+              readIfVisible();
+            }
+          });
+        }
+      });
     });
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", readIfVisible);
       void supabase.removeChannel(channel);
     };
-  }, [conversationId, meId, add, markRead]);
+  }, [conversationId, meId, add, merge, load, readIfVisible]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
