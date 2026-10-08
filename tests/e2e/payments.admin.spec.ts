@@ -93,6 +93,7 @@ test("§16 / §21: an admin verifies a claim against the wallet records and appr
   ]) {
     await panel.getByLabel(label).check();
   }
+  await panel.getByLabel("Amount in the wallet record (USD)").fill("5.00");
   await panel.getByRole("button", { name: "Approve and start the pass" }).click();
   await expect(panel.getByRole("alert").filter({ hasText: "Open the screenshot" })).toBeVisible();
   await panel.getByRole("button", { name: "Show screenshot" }).click();
@@ -106,6 +107,7 @@ test("§16 / §21: an admin verifies a claim against the wallet records and appr
   ]) {
     await panel.getByLabel(label).check();
   }
+  await panel.getByLabel("Amount in the wallet record (USD)").fill("5.00");
   await panel.getByRole("button", { name: "Approve and start the pass" }).click();
   await expect(panel.getByRole("status").filter({ hasText: "This claim is approved." })).toBeVisible();
 

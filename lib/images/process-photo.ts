@@ -44,7 +44,14 @@ export function sniffImageType(bytes: Uint8Array): ImageKind | null {
  * Validates and re-encodes a photo: magic bytes, size cap, decodes fully, applies the camera
  * orientation, resizes to fit MAX_DIMENSION, converts to WebP and drops every metadata block.
  */
-export async function processPhoto(input: Uint8Array): Promise<Buffer> {
+export type ProcessOptions = { minDimension?: number; maxDimension?: number; quality?: number };
+
+/** Payment receipts (Phase 7): cropped SMS screenshots are short, and transaction IDs must stay sharp. */
+export const RECEIPT_OPTIONS: ProcessOptions = { minDimension: 120, maxDimension: 2400, quality: 90 };
+
+export async function processPhoto(input: Uint8Array, opts: ProcessOptions = {}): Promise<Buffer> {
+  const minDimension = opts.minDimension ?? MIN_DIMENSION;
+  const maxDimension = opts.maxDimension ?? MAX_DIMENSION;
   if (input.byteLength > MAX_UPLOAD_BYTES) throw new PhotoRejectedError("TOO_LARGE");
   const kind = sniffImageType(input);
   if (!kind) throw new PhotoRejectedError("NOT_AN_IMAGE");
@@ -59,14 +66,14 @@ export async function processPhoto(input: Uint8Array): Promise<Buffer> {
   // The decoder must agree with the magic bytes (a JPEG header glued onto something else fails here).
   if (meta.format !== kind || !meta.width || !meta.height) throw new PhotoRejectedError("NOT_AN_IMAGE");
   // Orientations 5–8 swap width and height once applied; either way the short side is the same.
-  if (Math.min(meta.width, meta.height) < MIN_DIMENSION) throw new PhotoRejectedError("TOO_SMALL");
+  if (Math.min(meta.width, meta.height) < minDimension) throw new PhotoRejectedError("TOO_SMALL");
 
   try {
     // sharp writes no metadata unless asked (no withMetadata/keepExif here), so EXIF and GPS are gone.
     return await sharp(input, options)
       .rotate()
-      .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 82 })
+      .resize({ width: maxDimension, height: maxDimension, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: opts.quality ?? 82 })
       .toBuffer();
   } catch {
     throw new PhotoRejectedError("NOT_AN_IMAGE");

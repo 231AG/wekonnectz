@@ -21,6 +21,18 @@ const REASONS: Record<string, { label: string; hint: string }> = {
     label: "Money terms in a message",
     hint: "A message mentioned prices, payment or a money request. It was delivered. Message text is shown only through a member's report.",
   },
+  DUPLICATE_EVIDENCE: {
+    label: "Same payment screenshot",
+    hint: "This payment screenshot was used on another claim. Decide the claim in Payment claims.",
+  },
+  REUSED_TRANSACTION: {
+    label: "Transaction used before",
+    hint: "This transaction ID was claimed before. Decide the claim in Payment claims.",
+  },
+  REPEATED_REJECTED_CLAIMS: {
+    label: "Several rejected payments",
+    hint: "This member has had several payment claims rejected. Look at their claims before deciding.",
+  },
   AGE_DOUBT: {
     label: "Doubt about age",
     hint: "A selfie was rejected because the member may be under 18. Check the profile and photos.",
@@ -67,6 +79,15 @@ export default async function FlagsPage() {
                 <p className="text-sm text-muted-foreground">
                   {reason.hint} Raised {timeAgo(f.created_at)}.
                 </p>
+                {f.entity_type === "CLAIM" ? (
+                  <Link
+                    href={`/admin/payments?id=${f.entity_id}`}
+                    prefetch={false}
+                    className="inline-flex min-h-11 items-center self-start text-sm font-semibold underline underline-offset-4"
+                  >
+                    Open the payment claim
+                  </Link>
+                ) : null}
                 {f.account_id ? (
                   <>
                     <Link

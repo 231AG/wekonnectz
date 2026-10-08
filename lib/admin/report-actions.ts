@@ -28,6 +28,7 @@ const DB_MESSAGES: Record<string, string> = {
   NOT_HIDDEN: "This member is already visible.",
   NOTHING_TO_RESTORE: "This account isn’t banned or suspended.",
   FLAG_NOT_OPEN: "This flag was already handled.",
+  CLAIM_PENDING: "Decide the payment claim first; its flags are settled with it.",
   INVALID_SUSPENSION_END: "Choose a suspension length.",
 };
 

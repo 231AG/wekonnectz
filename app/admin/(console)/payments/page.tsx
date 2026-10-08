@@ -39,6 +39,7 @@ type Detail = {
   created_at: string;
   access_until: string | null;
   flags: string[];
+  earlier_screenshots: number;
   earlier_claims: { status: string; amount: number; rejection_reason: string | null; created_at: string }[];
 };
 
@@ -157,6 +158,12 @@ export default async function PaymentClaimsPage({ searchParams }: PageProps<"/ad
                   <dt className="text-muted-foreground">Reference code</dt>
                   <dd className="font-mono">{detail.reference_code}</dd>
                 </dl>
+                {detail.earlier_screenshots > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    The member replaced the screenshot {detail.earlier_screenshots} time
+                    {detail.earlier_screenshots === 1 ? "" : "s"}; earlier ones are kept as evidence.
+                  </p>
+                ) : null}
                 {detail.member_note ? (
                   <p className="rounded-control bg-background p-3 text-[15px]">
                     <span className="block text-[13px] font-semibold text-muted-foreground">Member’s answer</span>
@@ -204,6 +211,16 @@ export default async function PaymentClaimsPage({ searchParams }: PageProps<"/ad
                           </label>
                         ))}
                       </fieldset>
+                      <label htmlFor="walletAmount" className="text-[13px] font-semibold text-muted-foreground">
+                        Amount in the wallet record (USD)
+                      </label>
+                      <input
+                        id="walletAmount"
+                        name="walletAmount"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        className={cn(select, "w-40")}
+                      />
                       <StaffSubmit>Approve and start the pass</StaffSubmit>
                     </StaffForm>
                     <StaffForm action={rejectClaimAction} label="Reject">

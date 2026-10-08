@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 
-import { PhotoRejectedError, processPhoto, type PhotoRejection } from "@/lib/images/process-photo";
+import { PhotoRejectedError, processPhoto, RECEIPT_OPTIONS, type PhotoRejection } from "@/lib/images/process-photo";
 import { sweepQuarantine } from "@/lib/storage/photos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -69,7 +69,7 @@ async function storeEvidence(
     const bytes = new Uint8Array(await file.arrayBuffer());
     let processed: Buffer;
     try {
-      processed = await processPhoto(bytes);
+      processed = await processPhoto(bytes, RECEIPT_OPTIONS);
     } catch (e) {
       return { error: { kind: "rejected", reason: e instanceof PhotoRejectedError ? e.reason : "NOT_AN_IMAGE" } };
     }
@@ -130,7 +130,7 @@ export async function replyToClaim(
     if ("error" in r) return r.error;
     stored = r;
   }
-  const { data: oldPath, error } = await admin.rpc("reply_payment_claim", {
+  const { error } = await admin.rpc("reply_payment_claim", {
     p_user: userId,
     p_claim: claimId,
     p_note: note ?? "",
@@ -141,7 +141,6 @@ export async function replyToClaim(
     if (stored) await admin.storage.from(EVIDENCE).remove([stored.path]);
     return dbError(error.message);
   }
-  if (oldPath) await admin.storage.from(EVIDENCE).remove([oldPath]);
   return null;
 }
 
@@ -157,6 +156,7 @@ export type PaymentOptions = {
   accessUntil: string | null;
   cardActive: boolean;
   pendingClaims: number;
+  maxPending: number;
 };
 
 export async function paymentOptions(userId: string): Promise<PaymentOptions> {
@@ -169,6 +169,7 @@ export async function paymentOptions(userId: string): Promise<PaymentOptions> {
     access_until: string | null;
     card_active: boolean;
     pending_claims: number;
+    max_pending: number;
   };
   return {
     plans: d.plans.map((p) => ({ ...p, durationHours: p.duration_hours, price: Number(p.price) })),
@@ -181,6 +182,7 @@ export async function paymentOptions(userId: string): Promise<PaymentOptions> {
     accessUntil: d.access_until,
     cardActive: d.card_active,
     pendingClaims: Number(d.pending_claims),
+    maxPending: Number(d.max_pending),
   };
 }
 
@@ -254,7 +256,9 @@ export async function paymentHousekeeping(): Promise<{ expired: number; evidence
   if (due?.length) {
     const { error: removeError } = await admin.storage.from(EVIDENCE).remove(due.map((r) => r.evidence_path));
     if (removeError) throw new Error("evidence removal failed");
-    const { data: marked } = await admin.rpc("mark_evidence_deleted", { p_claim_ids: due.map((r) => r.claim_id) });
+    const { data: marked } = await admin.rpc("mark_evidence_deleted", {
+      p_evidence_ids: due.map((r) => r.evidence_id),
+    });
     evidenceDeleted = Number(marked ?? 0);
   }
   return { expired: Number(expired ?? 0), evidenceDeleted };

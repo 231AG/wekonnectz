@@ -70,6 +70,9 @@ create table public.payment_claims (
   merchant_account_id uuid not null references public.merchant_accounts (id),
   reference_code      text not null check (reference_code ~ '^WK-[A-Z0-9]{4}$'),
   transaction_id      text not null check (length(transaction_id) between 4 and 40),
+  -- BR-35: the comparison key — letters and digits only, leading zeros dropped from all-digit IDs —
+  -- so "PP231008.1234" and "pp2310081234" are the same payment.
+  transaction_key     text not null check (transaction_key ~ '^[A-Z0-9]{1,40}$'),
   sender_phone        text not null check (sender_phone ~ '^\+231[0-9]{7,9}$'),
   amount              numeric(10, 2) not null,
   currency            text not null check (currency = 'USD'),
@@ -88,12 +91,26 @@ create table public.payment_claims (
   constraint payment_claims_reason_when_rejected check ((status = 'REJECTED') = (rejection_reason is not null)),
   constraint payment_claims_evidence check (evidence_path is not null or evidence_deleted_at is not null)
 );
--- BR-35 / §18: a transaction ID can be live on one claim only per provider.
-create unique index payment_claims_one_live_transaction on public.payment_claims (provider, transaction_id)
+-- BR-35 / §18: a transaction can be live on one claim only — across providers too, so an ID can't be
+-- claimed once as Orange Money and once as MTN.
+create unique index payment_claims_one_live_transaction on public.payment_claims (transaction_key)
   where status in ('PENDING_REVIEW', 'NEEDS_INFO', 'APPROVED');
 create index payment_claims_queue_idx on public.payment_claims (created_at) where status in ('PENDING_REVIEW', 'NEEDS_INFO');
 create index payment_claims_user_idx on public.payment_claims (user_id, created_at desc);
 create index payment_claims_sha_idx on public.payment_claims (evidence_sha256);
+
+-- Every screenshot a claim ever had (append-only): a replaced one stays as evidence (§17 fake receipts)
+-- and its hash keeps counting for duplicate detection. Files leave only through the OD-18 retention job.
+create table public.claim_evidence (
+  id          uuid primary key default gen_random_uuid(),
+  claim_id    uuid not null references public.payment_claims (id) on delete cascade,
+  path        text not null check (path ~ '^[0-9a-f-]{36}\.webp$'),
+  sha256      text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  created_at  timestamptz not null default clock_timestamp(),
+  deleted_at  timestamptz
+);
+create index claim_evidence_claim_idx on public.claim_evidence (claim_id, created_at);
+create index claim_evidence_sha_idx on public.claim_evidence (sha256);
 
 create table public.payments (
   id                      uuid primary key default gen_random_uuid(),
@@ -102,14 +119,15 @@ create table public.payments (
   source                  public.payment_source not null,
   provider                public.payment_provider not null,
   provider_transaction_id text not null,
+  transaction_key         text not null,
   claim_id                uuid unique references public.payment_claims (id),
   amount                  numeric(10, 2) not null check (amount > 0),
   currency                text not null check (currency = 'USD'),
   status                  public.payment_status not null,
   paid_at                 timestamptz,
   created_at              timestamptz not null default now(),
-  -- BR-35: once per provider.
-  constraint payments_unique_transaction unique (provider, provider_transaction_id)
+  -- BR-35: once, whatever the spelling or provider.
+  constraint payments_unique_transaction unique (transaction_key)
 );
 
 create table public.payment_events (
@@ -160,8 +178,10 @@ alter table public.payments enable row level security;
 alter table public.payment_events enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.card_customers enable row level security;
+alter table public.claim_evidence enable row level security;
 revoke all on public.subscription_plans, public.merchant_accounts, public.payment_claims, public.payments,
-  public.payment_events, public.subscriptions, public.card_customers from anon, authenticated, service_role;
+  public.payment_events, public.subscriptions, public.card_customers, public.claim_evidence
+  from anon, authenticated, service_role;
 grant select on public.subscription_plans, public.merchant_accounts, public.payment_claims, public.payments,
   public.payment_events, public.subscriptions to service_role;
 create policy subscription_plans_no_client_access on public.subscription_plans
@@ -177,6 +197,8 @@ create policy payment_events_no_client_access on public.payment_events
 create policy subscriptions_no_client_access on public.subscriptions
   as restrictive for all to anon, authenticated using (false) with check (false);
 create policy card_customers_no_client_access on public.card_customers
+  as restrictive for all to anon, authenticated using (false) with check (false);
+create policy claim_evidence_no_client_access on public.claim_evidence
   as restrictive for all to anon, authenticated using (false) with check (false);
 
 -- ---------------------------------------------------------------------------
@@ -199,6 +221,7 @@ begin
      or new.provider is distinct from old.provider or new.plan_id is distinct from old.plan_id
      or new.source is distinct from old.source or new.provider_transaction_id is distinct from old.provider_transaction_id
      or new.claim_id is distinct from old.claim_id or new.paid_at is distinct from old.paid_at
+     or new.transaction_key is distinct from old.transaction_key
      or new.created_at is distinct from old.created_at
      or (new.user_id is distinct from old.user_id and new.user_id is not null) then
     raise exception 'PAYMENT_IMMUTABLE' using errcode = '42501';
@@ -235,8 +258,47 @@ create trigger payment_events_append_only
   before update or delete on public.payment_events
   for each row execute function public.payment_events_append_only();
 
+create or replace function public.claim_evidence_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' or (new.id, new.claim_id, new.path, new.sha256, new.created_at)
+     is distinct from (old.id, old.claim_id, old.path, old.sha256, old.created_at) then
+    raise exception 'APPEND_ONLY' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger claim_evidence_guard
+  before update or delete on public.claim_evidence
+  for each row execute function public.claim_evidence_guard();
+
+create or replace function public.money_no_truncate()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  raise exception 'APPEND_ONLY' using errcode = '42501';
+end;
+$$;
+
+create trigger payment_events_no_truncate before truncate on public.payment_events
+  for each statement execute function public.money_no_truncate();
+create trigger payments_no_truncate before truncate on public.payments
+  for each statement execute function public.money_no_truncate();
+create trigger claim_evidence_no_truncate before truncate on public.claim_evidence
+  for each statement execute function public.money_no_truncate();
+
 -- §6 rule 11: mobile money access is created only inside approve_payment_claim(), which sets this
 -- transaction-local flag around its single insert.
+-- Card rows come only from the card event function (Phase 7b), which sets wk.card_event. Updates:
+-- only the expiry tidy (status → EXPIRED) or a future audited admin function (wk.subscription_admin).
 create or replace function public.subscriptions_insert_guard()
 returns trigger
 language plpgsql
@@ -244,15 +306,39 @@ security definer
 set search_path = ''
 as $$
 begin
-  if new.source = 'MOBILE_MONEY' and coalesce(current_setting('wk.claim_approval', true), '') <> 'on' then
-    raise exception 'ACCESS_ONLY_BY_CLAIM_APPROVAL' using errcode = '42501';
+  if tg_op = 'INSERT' then
+    if new.source = 'MOBILE_MONEY' and coalesce(current_setting('wk.claim_approval', true), '') <> 'on' then
+      raise exception 'ACCESS_ONLY_BY_CLAIM_APPROVAL' using errcode = '42501';
+    end if;
+    if new.source = 'CARD' and coalesce(current_setting('wk.card_event', true), '') <> 'on' then
+      raise exception 'ACCESS_ONLY_BY_CARD_EVENT' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    -- Only as part of purging the member's account (OD-7, on delete cascade).
+    if exists (select 1 from public.users where id = old.user_id) then
+      raise exception 'SUBSCRIPTION_IMMUTABLE' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if coalesce(current_setting('wk.subscription_admin', true), '') = 'on' then
+    return new;
+  end if;
+  if (new.id, new.user_id, new.plan_id, new.source, new.starts_at, new.expires_at, new.source_payment_id,
+      new.auto_renew, new.cancel_at_period_end, new.processor_subscription_id, new.created_at)
+     is distinct from
+     (old.id, old.user_id, old.plan_id, old.source, old.starts_at, old.expires_at, old.source_payment_id,
+      old.auto_renew, old.cancel_at_period_end, old.processor_subscription_id, old.created_at)
+     or not (new.status = 'EXPIRED' and old.expires_at <= now()) then
+    raise exception 'SUBSCRIPTION_IMMUTABLE' using errcode = '42501';
   end if;
   return new;
 end;
 $$;
 
 create trigger subscriptions_insert_guard
-  before insert on public.subscriptions
+  before insert or update or delete on public.subscriptions
   for each row execute function public.subscriptions_insert_guard();
 
 -- ---------------------------------------------------------------------------
@@ -315,6 +401,17 @@ $$;
 -- Member side (service_role; the member id comes from the session)
 -- ---------------------------------------------------------------------------
 
+-- BR-35 comparison key: letters and digits only; leading zeros dropped from all-digit IDs.
+create or replace function public.transaction_key(p_txn text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select case when k ~ '^[0-9]+$' then coalesce(nullif(ltrim(k, '0'), ''), '0') else k end
+  from (select upper(regexp_replace(coalesce(p_txn, ''), '[^A-Za-z0-9]', '', 'g')) as k) x;
+$$;
+
 -- Who may buy: a verified ACTIVE member account, not hidden by reports (§16 validation).
 create or replace function public.assert_can_pay(p_user uuid)
 returns void
@@ -355,7 +452,8 @@ as $$
     'access_until', public.casual_access_until(p_user),
     'card_active', public.has_active_card_subscription(p_user),
     'pending_claims', (select count(*) from public.payment_claims c
-                       where c.user_id = p_user and c.status in ('PENDING_REVIEW', 'NEEDS_INFO'))
+                       where c.user_id = p_user and c.status in ('PENDING_REVIEW', 'NEEDS_INFO')),
+    'max_pending', (public.get_setting('claims.max_pending'))::int
   );
 $$;
 
@@ -393,6 +491,7 @@ declare
   v_plan     public.subscription_plans;
   v_wallet   uuid;
   v_txn      text := upper(regexp_replace(coalesce(p_transaction_id, ''), '\s', '', 'g'));
+  v_key      text := public.transaction_key(p_transaction_id);
   v_pattern  text;
   v_id       uuid;
 begin
@@ -421,7 +520,8 @@ begin
   if v_pattern is null then
     raise exception 'setting claims.transaction_id_patterns has no pattern for %', p_provider using errcode = '22023';
   end if;
-  if v_txn !~ v_pattern then
+  -- Anchored here, so a pattern written without ^…$ can't match part of an ID.
+  if v_txn !~ ('^(?:' || v_pattern || ')$') or v_key = '' then
     raise exception 'INVALID_TRANSACTION_ID' using errcode = '22023';
   end if;
   if p_sender_phone is null or p_sender_phone !~ '^\+231[0-9]{7,9}$' then
@@ -437,19 +537,22 @@ begin
 
   begin
     insert into public.payment_claims (user_id, plan_id, provider, merchant_account_id, reference_code, transaction_id,
-                                       sender_phone, amount, currency, paid_at, evidence_path, evidence_sha256)
-    values (p_user, v_plan.id, p_provider, v_wallet, public.member_reference_code(p_user), v_txn,
+                                       transaction_key, sender_phone, amount, currency, paid_at, evidence_path,
+                                       evidence_sha256)
+    values (p_user, v_plan.id, p_provider, v_wallet, public.member_reference_code(p_user), v_txn, v_key,
             p_sender_phone, v_plan.price, v_plan.currency, p_paid_at, p_evidence_path, p_evidence_sha256)
     returning id into v_id;
   exception when unique_violation then
     raise exception 'TRANSACTION_ALREADY_CLAIMED' using errcode = '22023';
   end;
 
-  -- §17 payment fraud signals: the same screenshot or a rejected transaction ID used again.
-  if exists (select 1 from public.payment_claims where evidence_sha256 = p_evidence_sha256 and id <> v_id) then
+  insert into public.claim_evidence (claim_id, path, sha256) values (v_id, p_evidence_path, p_evidence_sha256);
+
+  -- §17 payment fraud signals: the same screenshot (any claim, any time) or a transaction used before.
+  if exists (select 1 from public.claim_evidence where sha256 = p_evidence_sha256 and claim_id <> v_id) then
     perform public.raise_flag('CLAIM', v_id, 'DUPLICATE_EVIDENCE', jsonb_build_object('user_id', p_user));
   end if;
-  if exists (select 1 from public.payment_claims where provider = p_provider and transaction_id = v_txn and id <> v_id) then
+  if exists (select 1 from public.payment_claims where transaction_key = v_key and id <> v_id) then
     perform public.raise_flag('CLAIM', v_id, 'REUSED_TRANSACTION', jsonb_build_object('user_id', p_user));
   end if;
   return v_id;
@@ -471,8 +574,7 @@ begin
 end;
 $$;
 
--- Answer an admin's question (NEEDS_INFO → PENDING_REVIEW), optionally with a new screenshot. Returns
--- the replaced screenshot's path so the server can delete it.
+-- Answer an admin's question (NEEDS_INFO → PENDING_REVIEW), optionally with a new screenshot.
 create or replace function public.reply_payment_claim(
   p_user            uuid,
   p_claim           uuid,
@@ -480,7 +582,7 @@ create or replace function public.reply_payment_claim(
   p_evidence_path   text default null,
   p_evidence_sha256 text default null
 )
-returns text
+returns void
 language plpgsql
 security definer
 set search_path = ''
@@ -509,11 +611,13 @@ begin
          evidence_sha256 = coalesce(p_evidence_sha256, evidence_sha256),
          updated_at = now()
    where id = p_claim;
-  if p_evidence_path is not null
-     and exists (select 1 from public.payment_claims where evidence_sha256 = p_evidence_sha256 and id <> p_claim) then
-    perform public.raise_flag('CLAIM', p_claim, 'DUPLICATE_EVIDENCE', jsonb_build_object('user_id', p_user));
+  if p_evidence_path is not null then
+    -- The earlier screenshot stays in the history (evidence); retention deletes it later (OD-18).
+    insert into public.claim_evidence (claim_id, path, sha256) values (p_claim, p_evidence_path, p_evidence_sha256);
+    if exists (select 1 from public.claim_evidence where sha256 = p_evidence_sha256 and claim_id <> p_claim) then
+      perform public.raise_flag('CLAIM', p_claim, 'DUPLICATE_EVIDENCE', jsonb_build_object('user_id', p_user));
+    end if;
   end if;
-  return case when p_evidence_path is not null then v_old end;
 end;
 $$;
 
@@ -623,12 +727,13 @@ begin
     'staff_question', c.staff_question,
     'member_note', c.member_note,
     'has_evidence', c.evidence_path is not null,
-    'evidence_viewed', exists (select 1 from public.audit_logs a where a.action = 'EVIDENCE_VIEWED'
-                               and a.entity_id = c.id::text and a.actor_id = auth.uid()),
+    'evidence_viewed', public.viewed_current_evidence(c.id),
+    'earlier_screenshots', (select count(*) from public.claim_evidence e where e.claim_id = c.id) - 1,
     'created_at', c.created_at,
     'access_until', case when c.user_id is not null then public.casual_access_until(c.user_id) end,
+    -- Every flag the claim ever had (open or closed): the approver always sees them.
     'flags', coalesce((select jsonb_agg(f.reason order by f.created_at) from public.moderation_flags f
-                       where f.entity_type = 'CLAIM' and f.entity_id = c.id and f.status = 'OPEN'), '[]'::jsonb),
+                       where f.entity_type = 'CLAIM' and f.entity_id = c.id), '[]'::jsonb),
     'earlier_claims', coalesce((select jsonb_agg(jsonb_build_object('status', o.status, 'amount', o.amount,
                                                                     'rejection_reason', o.rejection_reason,
                                                                     'created_at', o.created_at) order by o.created_at desc)
@@ -643,7 +748,34 @@ begin
 end;
 $$;
 
--- Every view of a screenshot is audited before it is signed (§16, BR-34).
+-- The screenshot a claim shows now (its row in the evidence history).
+create or replace function public.current_evidence_id(p_claim uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select e.id from public.claim_evidence e
+  join public.payment_claims c on c.id = e.claim_id and c.evidence_path = e.path
+  where e.claim_id = p_claim;
+$$;
+
+-- Did this admin open the claim's current screenshot? (BR-38; a view of a replaced one doesn't count.)
+create or replace function public.viewed_current_evidence(p_claim uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.audit_logs a
+                 where a.action = 'EVIDENCE_VIEWED' and a.entity_id = p_claim::text and a.actor_id = auth.uid()
+                   and a.metadata ->> 'evidence_id' = public.current_evidence_id(p_claim)::text);
+$$;
+
+-- Every view of a screenshot is audited before it is signed (§16, BR-34). The row names which
+-- screenshot was shown by its evidence id (never a storage path, §6 rule 7).
 create or replace function public.log_evidence_view(p_claim uuid)
 returns void
 language plpgsql
@@ -661,7 +793,8 @@ begin
   if v_user = auth.uid() then
     raise exception 'OWN_CONTENT' using errcode = '42501';
   end if;
-  perform public.audit('EVIDENCE_VIEWED', 'payment_claim', p_claim::text, jsonb_build_object('user_id', v_user));
+  perform public.audit('EVIDENCE_VIEWED', 'payment_claim', p_claim::text,
+    jsonb_build_object('user_id', v_user, 'evidence_id', public.current_evidence_id(p_claim)));
 end;
 $$;
 
@@ -704,7 +837,7 @@ $$;
 -- §16 step 8: the ONLY way mobile money access is created (§6 rule 11). One transaction: claim
 -- APPROVED, payment SUCCEEDED (+ event), access created or extended from the current expiry (BR-28),
 -- audit row, member notified.
-create or replace function public.approve_payment_claim(p_claim uuid)
+create or replace function public.approve_payment_claim(p_claim uuid, p_wallet_amount numeric)
 returns jsonb
 language plpgsql
 security definer
@@ -722,20 +855,20 @@ begin
      or not exists (select 1 from public.users where id = v_claim.user_id and status not in ('BANNED', 'DELETED')) then
     raise exception 'MEMBER_NOT_AVAILABLE' using errcode = '22023';
   end if;
-  -- BR-38: the reviewer looked at the evidence (and the checklist in the console covers the wallet record).
-  if v_claim.evidence_path is not null and not exists (
-       select 1 from public.audit_logs a where a.action = 'EVIDENCE_VIEWED'
-       and a.entity_id = v_claim.id::text and a.actor_id = auth.uid()) then
+  -- BR-38: the reviewer opened the current screenshot (a view of a replaced one doesn't count) and read
+  -- the amount from the wallet's own record.
+  if v_claim.evidence_path is not null and not public.viewed_current_evidence(v_claim.id) then
     raise exception 'EVIDENCE_NOT_VIEWED' using errcode = '22023';
   end if;
   select * into v_plan from public.subscription_plans where id = v_claim.plan_id;
-  -- BR-36: amount equals the plan price exactly (OD-17: otherwise reject and refund manually).
-  if v_plan.source <> 'MOBILE_MONEY' or v_claim.amount <> v_plan.price or v_claim.currency <> v_plan.currency then
+  -- BR-36: the amount in the wallet record equals the price the member was shown (locked on the claim)
+  -- exactly. OD-17: otherwise reject and refund manually. A later price edit doesn't penalise the member.
+  if p_wallet_amount is null or p_wallet_amount <> v_claim.amount or v_plan.source <> 'MOBILE_MONEY'
+     or v_claim.currency <> 'USD' then
     raise exception 'AMOUNT_MISMATCH' using errcode = '22023';
   end if;
-  -- BR-35: a transaction is approved once per provider.
-  if exists (select 1 from public.payments where provider = v_claim.provider
-             and provider_transaction_id = v_claim.transaction_id) then
+  -- BR-35: a transaction is approved once, whatever the spelling or provider.
+  if exists (select 1 from public.payments where transaction_key = v_claim.transaction_key) then
     raise exception 'TRANSACTION_ALREADY_APPROVED' using errcode = '22023';
   end if;
   -- BR-41
@@ -750,10 +883,10 @@ begin
                                          and s.status = 'ACTIVE' and s.expires_at > now()), now()));
   v_expires := v_start + make_interval(hours => v_plan.duration_hours);
 
-  insert into public.payments (user_id, plan_id, source, provider, provider_transaction_id, claim_id, amount, currency,
-                               status, paid_at)
-  values (v_claim.user_id, v_plan.id, 'MOBILE_MONEY', v_claim.provider, v_claim.transaction_id, v_claim.id,
-          v_claim.amount, v_claim.currency, 'SUCCEEDED', v_claim.paid_at)
+  insert into public.payments (user_id, plan_id, source, provider, provider_transaction_id, transaction_key, claim_id,
+                               amount, currency, status, paid_at)
+  values (v_claim.user_id, v_plan.id, 'MOBILE_MONEY', v_claim.provider, v_claim.transaction_id, v_claim.transaction_key,
+          v_claim.id, v_claim.amount, v_claim.currency, 'SUCCEEDED', v_claim.paid_at)
   returning id into v_payment;
   insert into public.payment_events (payment_id, claim_id, type, raw_payload, actor_id)
   values (v_payment, v_claim.id, 'CLAIM_APPROVED',
@@ -798,10 +931,14 @@ begin
   perform public.audit('PAYMENT_CLAIM_REJECTED', 'payment_claim', v_claim.id::text,
     jsonb_build_object('user_id', v_claim.user_id, 'reason', p_reason));
   if v_claim.user_id is not null then
-    perform public.notify(v_claim.user_id, 'PAYMENT_REJECTED', jsonb_build_object('claim_id', v_claim.id, 'reason', p_reason));
-    -- §17: repeated rejected claims flag the member for review (Payments-only flag, admins see it).
+    -- §17: never which check failed. The member's notification says only whether a refund is coming.
+    perform public.notify(v_claim.user_id, 'PAYMENT_REJECTED',
+      jsonb_build_object('claim_id', v_claim.id, 'refund', p_reason = 'AMOUNT_MISMATCH'));
+    -- §17: repeated rejected claims flag the member for review (a payment flag: admins only), once, when
+    -- the threshold is reached. Skipped while T-19 has no value, so rejecting never depends on it.
     select count(*) into v_count from public.payment_claims where user_id = v_claim.user_id and status = 'REJECTED';
-    if v_count >= (public.get_setting('claims.rejections_before_flag'))::int then
+    if v_count = (select (value #>> '{}')::int from public.app_settings
+                  where key = 'claims.rejections_before_flag' and value is not null) then
       perform public.raise_flag('CLAIM', v_claim.id, 'REPEATED_REJECTED_CLAIMS',
         jsonb_build_object('user_id', v_claim.user_id, 'rejected', v_count));
     end if;
@@ -896,6 +1033,11 @@ begin
   if v_type = 'CLAIM' and not public.is_staff('ADMIN') then
     raise exception 'ADMIN_REQUIRED' using errcode = '42501';
   end if;
+  -- A payment flag is settled by deciding the claim, never dismissed while the claim waits.
+  if v_type = 'CLAIM' and exists (select 1 from public.payment_claims where id = v_entity
+                                  and status in ('PENDING_REVIEW', 'NEEDS_INFO')) then
+    raise exception 'CLAIM_PENDING' using errcode = '22023';
+  end if;
   if (v_type = 'USER' and v_entity = auth.uid())
      or (v_type = 'MESSAGE' and (v_details ->> 'sender_id')::uuid = auth.uid())
      or (v_type = 'CLAIM' and exists (select 1 from public.payment_claims where id = v_entity and user_id = auth.uid())) then
@@ -960,33 +1102,43 @@ as $$
 $$;
 
 -- OD-18 retention: screenshots of decided claims past the retention period. Records stay.
+-- Nothing is due while OD-18 has no value (the job then only records expiries).
 create or replace function public.evidence_due_for_deletion(p_limit integer default 200)
-returns table (claim_id uuid, evidence_path text)
+returns table (evidence_id uuid, evidence_path text)
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select c.id, c.evidence_path from public.payment_claims c
-  where c.evidence_path is not null and c.status in ('APPROVED', 'REJECTED', 'CANCELLED')
-    and coalesce(c.reviewed_at, c.updated_at)
-        < now() - make_interval(days => (public.get_setting('claims.evidence_retention_days'))::int)
-  order by c.updated_at
+  select e.id, e.path
+  from public.claim_evidence e
+  join public.payment_claims c on c.id = e.claim_id
+  cross join (select (value #>> '{}')::int as days from public.app_settings
+              where key = 'claims.evidence_retention_days' and value is not null) r
+  where e.deleted_at is null and c.status in ('APPROVED', 'REJECTED', 'CANCELLED')
+    and coalesce(c.reviewed_at, c.updated_at) < now() - make_interval(days => r.days)
+  order by e.created_at
   limit least(greatest(coalesce(p_limit, 200), 1), 500);
 $$;
 
-create or replace function public.mark_evidence_deleted(p_claim_ids uuid[])
+create or replace function public.mark_evidence_deleted(p_evidence_ids uuid[])
 returns integer
-language sql
+language plpgsql
 security definer
 set search_path = ''
 as $$
-  with done as (
-    update public.payment_claims set evidence_path = null, evidence_deleted_at = now()
-    where id = any (p_claim_ids) and evidence_path is not null and status in ('APPROVED', 'REJECTED', 'CANCELLED')
-    returning 1
-  )
-  select count(*)::int from done;
+declare
+  v_count integer;
+begin
+  update public.claim_evidence set deleted_at = now()
+  where id = any (p_evidence_ids) and deleted_at is null;
+  get diagnostics v_count = row_count;
+  update public.payment_claims c set evidence_path = null, evidence_deleted_at = now()
+  where c.evidence_path is not null
+    and exists (select 1 from public.claim_evidence e where e.claim_id = c.id and e.path = c.evidence_path
+                and e.id = any (p_evidence_ids));
+  return v_count;
+end;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -995,6 +1147,11 @@ $$;
 revoke all on function public.payments_guard() from public, anon, authenticated, service_role;
 revoke all on function public.payment_events_append_only() from public, anon, authenticated, service_role;
 revoke all on function public.subscriptions_insert_guard() from public, anon, authenticated, service_role;
+revoke all on function public.claim_evidence_guard() from public, anon, authenticated, service_role;
+revoke all on function public.money_no_truncate() from public, anon, authenticated, service_role;
+revoke all on function public.transaction_key(text) from public, anon, authenticated, service_role;
+revoke all on function public.current_evidence_id(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.viewed_current_evidence(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.casual_access_until(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.has_casual_access(uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.has_active_card_subscription(uuid) from public, anon, authenticated, service_role;
@@ -1016,7 +1173,7 @@ revoke all on function public.mark_evidence_deleted(uuid[]) from public, anon, a
 revoke all on function public.staff_claims_queue(integer) from public, anon;
 revoke all on function public.staff_claim_detail(uuid) from public, anon;
 revoke all on function public.log_evidence_view(uuid) from public, anon;
-revoke all on function public.approve_payment_claim(uuid) from public, anon, service_role;
+revoke all on function public.approve_payment_claim(uuid, numeric) from public, anon, service_role;
 revoke all on function public.reject_payment_claim(uuid, public.claim_rejection_reason) from public, anon, service_role;
 revoke all on function public.request_claim_info(uuid, text) from public, anon, service_role;
 revoke all on function public.staff_flags_queue(integer) from public, anon;
@@ -1039,7 +1196,7 @@ grant execute on function public.mark_evidence_deleted(uuid[]) to service_role;
 grant execute on function public.staff_claims_queue(integer) to authenticated;
 grant execute on function public.staff_claim_detail(uuid) to authenticated;
 grant execute on function public.log_evidence_view(uuid) to authenticated;
-grant execute on function public.approve_payment_claim(uuid) to authenticated;
+grant execute on function public.approve_payment_claim(uuid, numeric) to authenticated;
 grant execute on function public.reject_payment_claim(uuid, public.claim_rejection_reason) to authenticated;
 grant execute on function public.request_claim_info(uuid, text) to authenticated;
 grant execute on function public.staff_flags_queue(integer) to authenticated;

@@ -6,7 +6,7 @@ import { ImagePlus } from "lucide-react";
 import { FormError } from "@/components/layout/mobile-screen";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { prepareForUpload, putToSignedUrl } from "@/lib/images/prepare-upload";
+import { putToSignedUrl } from "@/lib/images/prepare-upload";
 import type { ClaimFormState } from "@/lib/payments/claims/actions";
 
 type Submit = (input: {
@@ -55,7 +55,7 @@ function ClaimForm({
           setState({ error: slot.error ?? "Something went wrong. Try again." });
           return;
         }
-        const outcome = await putToSignedUrl(slot.uploadUrl, await prepareForUpload(file));
+        const outcome = await putToSignedUrl(slot.uploadUrl, file);
         if (outcome !== "ok") {
           setState({
             error:
@@ -121,12 +121,17 @@ function ClaimForm({
       </div>
       <div className="flex flex-col gap-2">
         <span className="text-[13px] font-semibold text-muted-foreground">Screenshot of the payment</span>
+        <span id="evidence-help" className="text-sm text-muted-foreground">
+          The confirmation message or wallet screen, showing the transaction ID and amount.
+        </span>
         <input
           ref={fileInput}
           id="evidence"
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          accept="image/jpeg,image/png,image/webp"
           className="sr-only"
+          aria-invalid={invalid("evidenceId")}
+          aria-describedby="evidence-help"
           data-testid="evidence-input"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;

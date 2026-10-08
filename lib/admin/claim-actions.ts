@@ -28,7 +28,7 @@ const DB_MESSAGES: Record<string, string> = {
   CLAIM_NOT_FOUND: "This claim doesn’t exist.",
   CLAIM_NOT_PENDING: "This claim was already decided or is waiting for the member.",
   EVIDENCE_NOT_VIEWED: "Open the screenshot before approving.",
-  AMOUNT_MISMATCH: "The amount doesn’t match the plan price. Reject it (refund manually).",
+  AMOUNT_MISMATCH: "The wallet amount doesn’t equal the price the member was shown. Reject it (refund manually).",
   TRANSACTION_ALREADY_APPROVED: "This transaction ID was already approved.",
   CARD_SUBSCRIPTION_ACTIVE: "The member has an active card subscription.",
   MEMBER_NOT_AVAILABLE: "The member’s account is banned or deleted. Reject and refund.",
@@ -61,13 +61,17 @@ const CHECKS = ["foundInWallet", "amountMatches", "senderMatches", "timeMatches"
 
 export async function approveClaimAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
   await requireStaff("ADMIN");
-  const parsed = z.uuid().safeParse(formData.get("claimId"));
-  if (!parsed.success) return { error: "Something went wrong." };
+  const parsed = z
+    .object({ claimId: z.uuid(), walletAmount: z.coerce.number().positive().multipleOf(0.01) })
+    .safeParse({ claimId: formData.get("claimId"), walletAmount: formData.get("walletAmount") });
   // BR-38: approve only after finding the transaction in the merchant wallet's own records.
   if (!CHECKS.every((c) => formData.get(c) === "on")) {
     return { error: "Tick every check — approve only after finding the payment in the wallet records." };
   }
-  const { error } = await (await createClient()).rpc("approve_payment_claim", { p_claim: parsed.data });
+  if (!parsed.success) return { error: "Enter the amount shown in the wallet record." };
+  const { error } = await (
+    await createClient()
+  ).rpc("approve_payment_claim", { p_claim: parsed.data.claimId, p_wallet_amount: parsed.data.walletAmount });
   return error ? fail(error.message) : done("Approved. The member’s pass has started.");
 }
 

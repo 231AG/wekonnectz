@@ -119,6 +119,25 @@ isOneToOne: true
       referencedColumns: ["id"]
     }
                   ]
+                },"claim_evidence": {
+                  Row: {
+                    "claim_id": string,"created_at": string,"deleted_at": string | null,"id": string,"path": string,"sha256": string
+                  }
+                  Insert: {
+                    "claim_id": string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"path": string,"sha256": string
+                  }
+                  Update: {
+                    "claim_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"path"?: string,"sha256"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "claim_evidence_claim_id_fkey"
+      columns: ["claim_id"]
+isOneToOne: false
+      referencedRelation: "payment_claims"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"consents": {
                   Row: {
                     "accepted_at": string,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"id": string,"user_id": string,"version": string
@@ -405,13 +424,13 @@ isOneToOne: false
                   ]
                 },"payment_claims": {
                   Row: {
-                    "amount": number,"created_at": string,"currency": string,"evidence_deleted_at": string | null,"evidence_path": string | null,"evidence_sha256": string,"id": string,"member_note": string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at": string | null,"reviewed_by": string | null,"sender_phone": string,"staff_question": string | null,"status": Database["public"]['Enums']["claim_status"],"transaction_id": string,"updated_at": string,"user_id": string | null
+                    "amount": number,"created_at": string,"currency": string,"evidence_deleted_at": string | null,"evidence_path": string | null,"evidence_sha256": string,"id": string,"member_note": string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at": string | null,"reviewed_by": string | null,"sender_phone": string,"staff_question": string | null,"status": Database["public"]['Enums']["claim_status"],"transaction_id": string,"transaction_key": string,"updated_at": string,"user_id": string | null
                   }
                   Insert: {
-                    "amount": number,"created_at"?: string,"currency": string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256": string,"id"?: string,"member_note"?: string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone": string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id": string,"updated_at"?: string,"user_id"?: string | null
+                    "amount": number,"created_at"?: string,"currency": string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256": string,"id"?: string,"member_note"?: string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone": string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id": string,"transaction_key": string,"updated_at"?: string,"user_id"?: string | null
                   }
                   Update: {
-                    "amount"?: number,"created_at"?: string,"currency"?: string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256"?: string,"id"?: string,"member_note"?: string | null,"merchant_account_id"?: string,"paid_at"?: string,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"reference_code"?: string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone"?: string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id"?: string,"updated_at"?: string,"user_id"?: string | null
+                    "amount"?: number,"created_at"?: string,"currency"?: string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256"?: string,"id"?: string,"member_note"?: string | null,"merchant_account_id"?: string,"paid_at"?: string,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"reference_code"?: string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone"?: string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id"?: string,"transaction_key"?: string,"updated_at"?: string,"user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -473,13 +492,13 @@ isOneToOne: false
                   ]
                 },"payments": {
                   Row: {
-                    "amount": number,"claim_id": string | null,"created_at": string,"currency": string,"id": string,"paid_at": string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"user_id": string | null
+                    "amount": number,"claim_id": string | null,"created_at": string,"currency": string,"id": string,"paid_at": string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id": string | null
                   }
                   Insert: {
-                    "amount": number,"claim_id"?: string | null,"created_at"?: string,"currency": string,"id"?: string,"paid_at"?: string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"user_id"?: string | null
+                    "amount": number,"claim_id"?: string | null,"created_at"?: string,"currency": string,"id"?: string,"paid_at"?: string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id"?: string | null
                   }
                   Update: {
-                    "amount"?: number,"claim_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"paid_at"?: string | null,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"provider_transaction_id"?: string,"source"?: Database["public"]['Enums']["payment_source"],"status"?: Database["public"]['Enums']["payment_status"],"user_id"?: string | null
+                    "amount"?: number,"claim_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"paid_at"?: string | null,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"provider_transaction_id"?: string,"source"?: Database["public"]['Enums']["payment_source"],"status"?: Database["public"]['Enums']["payment_status"],"transaction_key"?: string,"user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -828,7 +847,7 @@ isOneToOne: false
 { Args: { "p_dob": string,"p_on"?: string }; Returns: number
                            },
 "approve_payment_claim":
-{ Args: { "p_claim": string }; Returns: Json
+{ Args: { "p_claim": string,"p_wallet_amount": number }; Returns: Json
                            },
 "assert_can_edit_profile":
 { Args: { "p_user_id": string }; Returns: undefined
@@ -916,6 +935,9 @@ isOneToOne: false
               "card": Json,"conversation_id": string,"last_body": string,"last_message_at": string,"last_mine": boolean,"photo_path": string,"type": Database["public"]['Enums']["conversation_type"],"unread": number
             }[]
                            },
+"current_evidence_id":
+{ Args: { "p_claim": string }; Returns: string
+                           },
 "current_staff_role":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["user_role"]
                            },
@@ -938,7 +960,7 @@ isOneToOne: false
                            },
 "evidence_due_for_deletion":
 { Args: { "p_limit"?: number }; Returns: {
-              "claim_id": string,"evidence_path": string
+              "evidence_id": string,"evidence_path": string
             }[]
                            },
 "expire_subscriptions":
@@ -1010,6 +1032,7 @@ isOneToOne: false
 "staff_question": string | null,
 "status": Database["public"]['Enums']["claim_status"],
 "transaction_id": string,
+"transaction_key": string,
 "updated_at": string,
 "user_id": string | null
             }
@@ -1029,7 +1052,7 @@ isOneToOne: false
 { Args: { "p_conversation": string,"p_viewer": string }; Returns: undefined
                            },
 "mark_evidence_deleted":
-{ Args: { "p_claim_ids": (string)[] }; Returns: number
+{ Args: { "p_evidence_ids": (string)[] }; Returns: number
                            },
 "mark_notifications_read":
 { Args: Record<PropertyKey, never>; Returns: undefined
@@ -1151,7 +1174,7 @@ isOneToOne: false
 { Args: { "p_user_id": string }; Returns: string
                            },
 "reply_payment_claim":
-{ Args: { "p_claim": string,"p_evidence_path"?: string,"p_evidence_sha256"?: string,"p_note": string,"p_user": string }; Returns: string
+{ Args: { "p_claim": string,"p_evidence_path"?: string,"p_evidence_sha256"?: string,"p_note": string,"p_user": string }; Returns: undefined
                            },
 "report_about":
 { Args: { "p_report_id": string,"p_target": string }; Returns: string
@@ -1272,6 +1295,9 @@ isOneToOne: false
 "suspend_user":
 { Args: { "p_report_id"?: string,"p_target": string,"p_until": string }; Returns: undefined
                            },
+"transaction_key":
+{ Args: { "p_txn": string }; Returns: string
+                           },
 "unblock_user":
 { Args: { "p_target": string,"p_user_id": string }; Returns: undefined
                            },
@@ -1285,6 +1311,9 @@ isOneToOne: false
 { Args: { "p_verification_id": string }; Returns: {
               "id": string,"is_primary": boolean,"kind": string,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
+                           },
+"viewed_current_evidence":
+{ Args: { "p_claim": string }; Returns: boolean
                            }
           }
           Enums: {

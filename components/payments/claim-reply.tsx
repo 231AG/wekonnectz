@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { FormError } from "@/components/layout/mobile-screen";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { prepareForUpload, putToSignedUrl } from "@/lib/images/prepare-upload";
+import { putToSignedUrl } from "@/lib/images/prepare-upload";
 import type { ClaimFormState } from "@/lib/payments/claims/actions";
 
 /** Answer an admin's question about a payment, with an optional new screenshot (§16 NEEDS_INFO). */
@@ -42,7 +42,7 @@ function ClaimReply({
           if (file) {
             const slot = await prepare();
             if (!slot.uploadUrl || !slot.evidenceId) return setError(slot.error ?? "Something went wrong. Try again.");
-            if ((await putToSignedUrl(slot.uploadUrl, await prepareForUpload(file))) !== "ok") {
+            if ((await putToSignedUrl(slot.uploadUrl, file)) !== "ok") {
               return setError("The screenshot didn’t upload. Check your connection and try again.");
             }
             evidenceId = slot.evidenceId;
@@ -66,7 +66,7 @@ function ClaimReply({
       <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          accept="image/jpeg,image/png,image/webp"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="text-sm"
           aria-label="New screenshot (optional)"

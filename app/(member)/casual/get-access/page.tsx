@@ -20,7 +20,7 @@ export default async function GetAccessPage() {
   if (member.status === "SUSPENDED") redirect(MEMBER_HOME);
   if (member.status !== "ACTIVE") redirect(nextStepFor(member));
   const options = await paymentOptions(member.id);
-  const blocked = options.cardActive || options.pendingClaims >= 2;
+  const blocked = options.cardActive || options.pendingClaims >= options.maxPending || options.wallets.length === 0;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col gap-5 px-5 pt-5 pb-8">
@@ -39,7 +39,9 @@ export default async function GetAccessPage() {
 
       {options.cardActive ? (
         <Card role="status">You already have an active card subscription.</Card>
-      ) : options.pendingClaims >= 2 ? (
+      ) : options.wallets.length === 0 ? (
+        <Card role="status">Mobile money payments aren’t available right now. Please try again later.</Card>
+      ) : options.pendingClaims >= options.maxPending ? (
         <Card role="status" className="flex flex-col gap-2">
           <p>You already have payments waiting for review.</p>
           <Link href="/me/payments" className="font-bold text-pending underline underline-offset-4">
