@@ -86,7 +86,12 @@ export async function sweepQuarantine(userId: string): Promise<void> {
     admin.from("verifications").select("id").eq("user_id", userId).eq("status", "AWAITING_SELFIE"),
   ]);
   const keep = new Set([...(open ?? []).map((r) => r.id), ...(capture ?? []).map((r) => `v-${r.id}`)]);
-  const stale = (files ?? []).filter((f) => !keep.has(f.name)).map((f) => `${userId}/${f.name}`);
+  // Payment screenshots ("e-<id>", Phase 7) waiting to be submitted keep their file for an hour.
+  const recent = (name: string, created?: string | null) =>
+    name.startsWith("e-") && Boolean(created) && Date.now() - Date.parse(created!) < 60 * 60 * 1000;
+  const stale = (files ?? [])
+    .filter((f) => !keep.has(f.name) && !recent(f.name, f.created_at))
+    .map((f) => `${userId}/${f.name}`);
   if (stale.length) await admin.storage.from(QUARANTINE).remove(stale);
 }
 

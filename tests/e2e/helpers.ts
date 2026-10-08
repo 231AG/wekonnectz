@@ -7,6 +7,7 @@ export const SHOTS_P3 = "docs/progress/phase-03/screenshots";
 export const SHOTS_P4 = "docs/progress/phase-04/screenshots";
 export const SHOTS_P5 = "docs/progress/phase-05/screenshots";
 export const SHOTS_P6 = "docs/progress/phase-06/screenshots";
+export const SHOTS_P7 = "docs/progress/phase-07/screenshots";
 
 /**
  * Collects console errors (including CSP violations) and failed requests.

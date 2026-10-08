@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BadgeCheck, ChevronRight, Images, Pencil, ShieldCheck, Sparkles, UserX } from "lucide-react";
+import { BadgeCheck, ChevronRight, Images, Pencil, Receipt, ShieldCheck, Sparkles, UserX } from "lucide-react";
 
 import { MemberShell } from "@/components/layout/member-shell";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const LINKS = [
   { href: "/onboarding/about", label: "Name, area and what you’re looking for", icon: Pencil },
   { href: "/onboarding/interests", label: "Interests and bio", icon: Sparkles },
   { href: "/onboarding/photos", label: "Photos", icon: Images },
+  { href: "/me/payments", label: "Subscription & payments", icon: Receipt },
   { href: "/account/blocked", label: "Blocked members", icon: UserX },
   { href: "/safety", label: "Staying safe", icon: ShieldCheck },
 ];

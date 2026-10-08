@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions/login";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
+import { formatLiberiaTime } from "@/lib/domain/money";
+import { paymentOptions } from "@/lib/storage/payments";
 import { relationshipSummary } from "@/lib/storage/relationship";
 import { createClient } from "@/lib/supabase/server";
 
@@ -53,8 +55,9 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
     );
   }
 
-  const [summary, { data: profile }] = await Promise.all([
+  const [summary, payments, { data: profile }] = await Promise.all([
     relationshipSummary(member.id),
+    paymentOptions(member.id),
     (await createClient()).from("profiles").select("display_name").eq("user_id", member.id).single(),
   ]);
   const verified = member.onboarding.verification === "VERIFIED";
@@ -108,9 +111,15 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
         <span className="flex items-center gap-3">
           <Flame className="size-7 text-casual" strokeWidth={1.8} aria-hidden />
           <span className="flex-1 font-display text-[22px] font-bold">Casual Connection</span>
-          <Badge tone="casual">Get access</Badge>
+          <Badge tone="casual">{payments.accessUntil ? "Pass active" : "Get access"}</Badge>
         </span>
-        <span className="text-[16px] text-muted-foreground">Passes open in the next release.</span>
+        <span className="text-[16px] text-muted-foreground">
+          {payments.accessUntil
+            ? `Until ${formatLiberiaTime(payments.accessUntil)}`
+            : payments.pendingClaims
+              ? "Payment being verified"
+              : "Get a pass to meet people available now"}
+        </span>
       </Link>
 
       {summary.unread ? (

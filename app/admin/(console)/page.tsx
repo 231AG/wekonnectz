@@ -20,6 +20,8 @@ export default async function AdminDashboardPage() {
     reports_open?: number;
     reports_high?: number;
     flags_open?: number;
+    claims_pending?: number;
+    claims_oldest?: string | null;
   };
   return (
     <div className="flex flex-col gap-8">
@@ -71,6 +73,19 @@ export default async function AdminDashboardPage() {
             <span className="text-sm text-muted-foreground">Automatic signals to check</span>
           </Card>
         </Link>
+        {counts.claims_pending !== undefined ? (
+          <Link href="/admin/payments" className="rounded-card focus-visible:outline-2 focus-visible:outline-ring">
+            <Card className="flex flex-col gap-1 hover:bg-surface-2">
+              <span className="text-sm font-semibold text-muted-foreground">Payment claims waiting</span>
+              <span className="font-display text-[32px] font-bold" data-testid="claims-pending">
+                {counts.claims_pending}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {counts.claims_oldest ? `Oldest ${timeAgo(counts.claims_oldest)}` : "Nothing waiting"}
+              </span>
+            </Card>
+          </Link>
+        ) : null}
       </div>
     </div>
   );
