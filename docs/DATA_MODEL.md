@@ -191,6 +191,31 @@ Settings: `reports.auto_hide_threshold`, `reports.per_user_per_day` (T-19) — n
 
 Settings: `relationship.daily_like_cap` = 50 and `relationship.pass_cooldown_days` = 7 (owner, 2026-10-08); `messages.max_per_minute`, `reports.messages_captured` (T-19, no value in the migration).
 
+### Phase 7 ✅ (`20261012000000_mobile_money.sql`)
+
+| Table                | Key columns                                                                                                                                                                | Client access | Notes                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| `subscription_plans` | code, name, source (MOBILE_MONEY · CARD), duration_hours, price, currency (USD only, OD-2), renews, active                                                                 | none          | Mobile money never renews (check). Prices: OD-1 (DEV-ONLY in seed)                             |
+| `merchant_accounts`  | provider (ORANGE_MONEY · MTN_MOMO), display_name, number_or_code, active                                                                                                   | none          | One active wallet per provider                                                                 |
+| `payment_claims`     | user, plan, provider, wallet, reference_code, transaction_id, sender_phone, amount (locked), paid_at, evidence path + SHA-256, status, reason, staff_question, member_note | none          | Partial unique (provider, transaction_id) while PENDING_REVIEW · NEEDS_INFO · APPROVED (BR-35) |
+| `payments`           | user, plan, source, provider, provider_transaction_id (unique per provider), claim_id, amount, currency, status, paid_at                                                   | read: service | Money fields immutable; status changes appended to `payment_events` (BR-29)                    |
+| `payment_events`     | payment_id, claim_id, type, raw_payload, signature_valid, actor_id                                                                                                         | read: service | Append-only                                                                                    |
+| `subscriptions`      | user, plan, source, status, starts_at, expires_at, auto_renew, cancel_at_period_end, source_payment_id                                                                     | read: service | Mobile money rows only inside `approve_payment_claim()` (insert guard)                         |
+| `card_customers`     | user_id, processor, customer_ref                                                                                                                                           | none          | Phase 7b                                                                                       |
+
+No role can write the money tables directly (grants revoked from anon, authenticated and service_role). Access is `has_casual_access(user)`: a subscription with `starts_at <= now() < expires_at` (BR-27, BR-30).
+
+| Function                                                                       | Callable by                        | Purpose                                                                                                                                  |
+| ------------------------------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `submit_payment_claim` / `cancel_payment_claim` / `reply_payment_claim`        | service_role                       | §16 validation (format per provider from `claims.transaction_id_patterns`, pending limit, BR-41); duplicate screenshot / reused ID flags |
+| `member_payment_options` / `member_claims` / `member_passes` / `public_plans`  | service_role                       | Get access, Subscription & payments, Pricing                                                                                             |
+| `staff_claims_queue` / `staff_claim_detail` / `log_evidence_view`              | authenticated, `is_staff('ADMIN')` | Queue oldest first; every screenshot view audited (`EVIDENCE_VIEWED`)                                                                    |
+| `approve_payment_claim(claim)`                                                 | authenticated, `is_staff('ADMIN')` | The only path to mobile money access: claim, payment, event, stacked subscription (BR-28), audit, notify                                 |
+| `reject_payment_claim` / `request_claim_info`                                  | authenticated, `is_staff('ADMIN')` | Audited; repeated rejections flag the member (`claims.rejections_before_flag`)                                                           |
+| `expire_subscriptions` / `evidence_due_for_deletion` / `mark_evidence_deleted` | service_role                       | Daily `/api/cron/payments`                                                                                                               |
+
+Settings: `claims.max_pending` = 2 (OD-21, owner); `claims.transaction_id_patterns` (T-14), `claims.rejections_before_flag` (T-19), `claims.evidence_retention_days` (OD-18) — no values in the migration.
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |

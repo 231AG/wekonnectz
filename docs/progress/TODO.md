@@ -15,18 +15,18 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Safety              | 9       | 3              | 0              | 0          |
 | Relationship mode   | 7       | 0              | 0              | 0          |
 | Messaging           | 5       | 1              | 1              | 0          |
-| Mobile money access | 0       | 0              | 11             | 1          |
+| Mobile money access | 11      | 0              | 0              | 1          |
 | Card subscriptions  | 0       | 0              | 4              | 1          |
 | Availability        | 0       | 0              | 6              | 1          |
 | Casual discovery    | 0       | 0              | 6              | 1          |
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **61**  | **16**         | **49**         | **9**      |
+| **Total**           | **72**  | **16**         | **38**         | **9**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29).
 
 ## Planning
 
@@ -136,18 +136,18 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Mobile money access
 
-- ⬜ Plans, subscriptions, payments, payment_events, payment_claims, merchant_accounts tables — P7 — BR-29
-- ⬜ Choose plan → instructions → submit claim → claim status screens — P7
-- ⬜ Evidence pipeline + SHA-256 duplicate flag — P7
-- ⬜ Server validation: plan, txn format, uniqueness, pending limit, BR-41, active+verified — P7 — BR-35, BR-39, BR-41
-- ⬜ Payment claims queue with checklist — P7 — BR-37, BR-38
-- ⬜ `approve_payment_claim()` (single path to access) — P7 — BR-26, BR-36
-- ⬜ Reject / needs info flows, neutral reasons — P7
-- ⬜ Stacking from current expiry — P7 — BR-28
-- ⬜ Query-time expiry + cron tidy — P7 — BR-27, BR-30
-- ⬜ Subscription & payments page (claims, receipts) — P7
-- ⬜ Pricing page — P7
-- ⬜ Prices, currency, policies — P7 ⛔ until OD-1, 2, 13, 16, 17, 18, 21, 22, T-14
+- ✅ Plans, subscriptions, payments, payment_events, payment_claims, merchant_accounts tables — P7 — BR-29
+- ✅ Choose plan → instructions → submit claim → claim status screens — P7
+- ✅ Evidence pipeline + SHA-256 duplicate flag — P7
+- ✅ Server validation: plan, txn format, uniqueness, pending limit (2, OD-21), BR-41, active+verified — P7 — BR-35, BR-39, BR-41
+- ✅ Payment claims queue with checklist, audited screenshot views — P7 — BR-37, BR-38
+- ✅ `approve_payment_claim()` (single path to access) — P7 — BR-26, BR-36
+- ✅ Reject / needs info flows, neutral reasons (OD-17 refund text) — P7
+- ✅ Stacking from current expiry — P7 — BR-28
+- ✅ Query-time expiry + cron tidy — P7 — BR-27, BR-30
+- ✅ Subscription & payments page (claims, receipts) — P7
+- ✅ Pricing page — P7
+- ⛔ Production prices, screenshot retention, transaction-ID formats, reference-note check — P7 until OD-1, OD-18, OD-22, T-14 (T-29)
 
 ## Card subscriptions
 

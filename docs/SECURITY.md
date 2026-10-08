@@ -22,7 +22,7 @@ with a valid member JWT cannot skip them (plan §1.2).
 | Storage          | Private buckets, short-TTL signed URLs, paths never sent to clients                                              | Phase 3                                                                                                                                                   |
 | Uploads          | Magic bytes, size limits, re-encode, EXIF strip, rate limit                                                      | Phase 3 / 7                                                                                                                                               |
 | Webhooks         | Signature, raw-body log, idempotent on event id, replay protection                                               | Phase 7b                                                                                                                                                  |
-| Payment evidence | Private bucket, reviewer-only signed URLs, every view audited, SHA-256                                           | Phase 7                                                                                                                                                   |
+| Payment evidence | Private bucket, reviewer-only signed URLs, every view audited, SHA-256                                           | Phase 7 ✅                                                                                                                                                |
 | Rate limits      | OTP per phone and per IP; requests, likes, reports, uploads per user per day                                     | OTP (P1), uploads (P3), reports (P5); requests and likes later                                                                                            |
 | Staff            | Separate accounts, MFA (aal2 checked in the DB), role checks on every admin route/action, audited                | Phase 3                                                                                                                                                   |
 | Privacy          | No precise location; PII out of logs/analytics; export + deletion                                                | Sentry scrubber (Phase 0); export/deletion Phase 10                                                                                                       |
@@ -137,6 +137,15 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Messages:** text only, 1–1000 characters, links refused at send, rate-limited per minute. Detection runs in conversation mode (OD-31): money terms are delivered and flagged, contact details are not. Flags hold no text.
 - **Staff and message text (OD-26, OD-33):** a report from a chat copies its recent messages; staff can read only those, and each view writes `REPORTED_MESSAGES_VIEWED` before the text is returned. Message text is never logged or put in audit rows.
 - **Suspended members** read but can't send, browse or like (BR-5); members hidden by reports can't browse or send (Q26).
+
+## Mobile money claims (Phase 7)
+
+- **One path to access** (§6 rule 11): `approve_payment_claim()` is the only code that creates mobile money access. No role has write grants on the money tables — not members, not an admin's session, not the server key; an insert guard trigger refuses mobile money subscriptions outside the approval even for the database owner; the approval function is granted only to `authenticated` and checks `is_staff('ADMIN')` (role + password + TOTP), so the server key can't approve either.
+- **Approval rules:** ADMIN+ only, never the reviewer's own account (BR-37); the reviewer must have opened the screenshot (audited `EVIDENCE_VIEWED`) and ticked the wallet-record checks (BR-38); amount equals the plan price exactly (BR-36); a transaction is approved once per provider (unique index + check, BR-35); no purchase during a card subscription (BR-41). Claim, payment, event, access, audit and notification are written in one transaction.
+- **Money records:** payments' money fields are immutable and status changes are appended to `payment_events`, which is append-only (BR-29).
+- **Screenshots:** uploaded to quarantine through a one-off signed URL, then magic-byte checked, size-capped, re-encoded to WebP without metadata and stored in the private `payment-evidence` bucket; the SHA-256 of the uploaded file flags reuse on another claim. Staff see a 120-second signed URL only after the audited view. Retention: OD-18 job.
+- **Moderators** never see claims, payment flags or payment counts (Q9).
+- Sender phone numbers and transaction IDs are stored for the reviewer but never logged or put in audit rows.
 
 ## Logging rule (§6 rule 7)
 
