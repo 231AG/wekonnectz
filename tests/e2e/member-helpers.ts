@@ -60,3 +60,59 @@ export async function uploadPhotos(page: Page, files: string[]) {
   await page.getByTestId("photo-input").setInputFiles(files);
   await expect(page.getByRole("button", { name: /^Photo \d/ })).toHaveCount(before + files.length, { timeout: 30_000 });
 }
+
+/**
+ * A fictional ACTIVE member (verified, 3 approved photos), set up through the service role the way
+ * finished onboarding and staff approvals would leave it. Used by the safety tests (Phase 5).
+ */
+export async function activeMember(name: string, files: string[]) {
+  const { seedPendingPhotos, seedPendingVerification } = await import("./staff-helpers");
+  const phone = randomLiberianPhone();
+  const userId = await createMember(phone.e164);
+  const admin = adminClient();
+  const { data: area } = await admin.from("areas").select("id").eq("name", "Congo Town").single();
+  expect(
+    (
+      await admin.from("profiles").upsert({
+        user_id: userId,
+        date_of_birth: `${adultYear}-03-14`,
+        display_name: name,
+        gender: "MAN",
+        seeking_genders: ["WOMAN"],
+        area_id: area!.id,
+        intent_relationship: false,
+        intent_casual: true,
+        bio: "Graphic designer. Good food, Afrobeats and long talks. Let’s chat first.",
+        is_profile_complete: true,
+      })
+    ).error,
+  ).toBeNull();
+  const { data: docs } = await admin.from("legal_documents").select("document, version").eq("is_current", true);
+  const versions = Object.fromEntries((docs ?? []).map((d) => [d.document, d.version]));
+  expect((await admin.rpc("accept_current_documents", { p_user_id: userId, p_versions: versions })).error).toBeNull();
+  const { data: interests } = await admin.from("interests").select("id").limit(4);
+  expect(
+    (await admin.from("user_interests").insert((interests ?? []).map((i) => ({ user_id: userId, interest_id: i.id }))))
+      .error,
+  ).toBeNull();
+  const photoIds = await seedPendingPhotos(userId, files);
+  const verificationId = await seedPendingVerification(userId);
+  expect(
+    (
+      await admin
+        .from("verifications")
+        .update({ status: "VERIFIED", reviewed_at: new Date().toISOString() })
+        .eq("id", verificationId)
+    ).error,
+  ).toBeNull();
+  expect(
+    (
+      await admin
+        .from("profile_photos")
+        .update({ status: "APPROVED", reviewed_at: new Date().toISOString(), reviewed_as_primary: true })
+        .in("id", photoIds)
+    ).error,
+  ).toBeNull();
+  expect((await admin.from("users").update({ status: "ACTIVE" }).eq("id", userId)).error).toBeNull();
+  return { phone, userId, photoIds };
+}

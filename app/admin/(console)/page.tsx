@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Dashboard" };
 
-/** Phase 3: queue sizes that exist so far. The full dashboard (spec §21) arrives in Phase 10. */
+/** Queue sizes that exist so far (photos, verification, reports, flags). The full dashboard (spec §21) arrives in Phase 10. */
 export default async function AdminDashboardPage() {
   await requireStaff();
   const { data } = await (await createClient()).rpc("staff_queue_counts");
@@ -17,6 +17,9 @@ export default async function AdminDashboardPage() {
     verifications_pending?: number;
     verifications_escalated?: number;
     verifications_oldest?: string | null;
+    reports_open?: number;
+    reports_high?: number;
+    flags_open?: number;
   };
   return (
     <div className="flex flex-col gap-8">
@@ -46,6 +49,26 @@ export default async function AdminDashboardPage() {
             <span className="text-sm text-muted-foreground">
               {counts.photos_oldest ? `Oldest ${timeAgo(counts.photos_oldest)}` : "Nothing waiting"}
             </span>
+          </Card>
+        </Link>
+        <Link href="/admin/reports" className="rounded-card focus-visible:outline-2 focus-visible:outline-ring">
+          <Card className="flex flex-col gap-1 hover:bg-surface-2">
+            <span className="text-sm font-semibold text-muted-foreground">Open reports</span>
+            <span className="font-display text-[32px] font-bold" data-testid="reports-open">
+              {counts.reports_open ?? 0}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {counts.reports_high ? `${counts.reports_high} high priority` : "None high priority"}
+            </span>
+          </Card>
+        </Link>
+        <Link href="/admin/flags" className="rounded-card focus-visible:outline-2 focus-visible:outline-ring">
+          <Card className="flex flex-col gap-1 hover:bg-surface-2">
+            <span className="text-sm font-semibold text-muted-foreground">Open flags</span>
+            <span className="font-display text-[32px] font-bold" data-testid="flags-open">
+              {counts.flags_open ?? 0}
+            </span>
+            <span className="text-sm text-muted-foreground">Automatic signals to check</span>
           </Card>
         </Link>
       </div>
