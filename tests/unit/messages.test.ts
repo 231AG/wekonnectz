@@ -45,5 +45,10 @@ describe("links in chat (§14 send rule, OD-31)", () => {
     expect(containsLink("https://kofi.example")).toBe(true);
     expect(containsLink("My email is kofi@gmail.com")).toBe(false);
     expect(containsLink("kofi at gmail")).toBe(false);
+    // An "@" never smuggles a link through.
+    expect(containsLink("a@bit.ly/3xYz")).toBe(true);
+    expect(containsLink("me@wa.me/231770123456")).toBe(true);
+    expect(containsLink("x@www.evil.com")).toBe(true);
+    expect(containsLink("x@site.com/path")).toBe(true);
   });
 });

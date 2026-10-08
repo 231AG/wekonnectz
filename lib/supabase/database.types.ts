@@ -511,13 +511,13 @@ isOneToOne: false
                   ]
                 },"reports": {
                   Row: {
-                    "category": Database["public"]['Enums']["report_category"],"conversation_id": string | null,"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string | null,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
+                    "auto_actions": boolean,"category": Database["public"]['Enums']["report_category"],"conversation_id": string | null,"created_at": string,"description": string | null,"id": string,"photo_id": string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id": string | null,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["report_status"]
                   }
                   Insert: {
-                    "category": Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "auto_actions"?: boolean,"category": Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority": Database["public"]['Enums']["report_priority"],"reported_user_id": string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Update: {
-                    "category"?: Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
+                    "auto_actions"?: boolean,"category"?: Database["public"]['Enums']["report_category"],"conversation_id"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"photo_id"?: string | null,"priority"?: Database["public"]['Enums']["report_priority"],"reported_user_id"?: string,"reporter_id"?: string | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["report_status"]
                   }
                   Relationships: [
                     {
@@ -744,7 +744,7 @@ isOneToOne: false
 { Args: { "p_status": Database["public"]['Enums']["account_status"],"p_suspended_until": string }; Returns: Database["public"]['Enums']["account_status"]
                            },
 "file_report":
-{ Args: { "p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description": string,"p_photo_id": string,"p_reporter": string,"p_target": string }; Returns: string
+{ Args: { "p_auto_actions"?: boolean,"p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description": string,"p_photo_id": string,"p_reporter": string,"p_target": string }; Returns: string
                            },
 "get_setting":
 { Args: { "p_key": string }; Returns: Json

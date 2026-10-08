@@ -243,7 +243,19 @@ const STRICT_TLD = "(?:c[o0]m|n[e3]t|[o0]rg|(?:c[o0]|edu|gov)\\s*(?:\\.|。|,|\\
 const EMAIL_LIKE =
   /(?<![a-z0-9])[a-z0-9._-]{2,64}\s*(?:@|\sat\s)\s*(?:gmail|yahoo|hotmail|outlook|icloud|proton|ymail)(?![a-z])/;
 /** A written email address ("kofi@gmail.com"): contact details, not a link, in a conversation (OD-31). */
-const EMAIL_ADDRESS = /[a-z0-9._-]{1,64}\s*@\s*[a-z0-9-]{1,63}(?:\s*\.\s*[a-z0-9-]{1,63})*/g;
+const EMAIL_ADDRESS =
+  /[a-z0-9._-]{1,64}\s*@\s*([a-z0-9-]{1,63}(?:\s*\.\s*[a-z0-9-]{1,63})*)(?![a-z0-9.-]*\s*[/?#])/g;
+/** Domains that are links even when written after an "@" (shorteners, wa.me, t.me, www.). */
+const LINK_DOMAIN = /^(?:www\.|(?:wa|t)\.me$|bit\.ly$|tinyurl\.|linktr\.ee$)/;
+
+/** Blanks complete email addresses (final label of 2+ letters, nothing link-like after them). */
+function blankEmails(text: string): string {
+  return text.replace(EMAIL_ADDRESS, (m, domain: string) => {
+    const d = domain.replace(/\s+/g, "");
+    if (!/\.[a-z]{2,}$/.test(d) || LINK_DOMAIN.test(d)) return m;
+    return " ".repeat(m.length);
+  });
+}
 
 const LINK = [
   /(?<![a-z])https?:\/\//,
@@ -518,7 +530,7 @@ export function detect(text: string, mode: DetectionMode, terms: DetectionTerms)
  * contact details, which OD-31 allows in an accepted conversation, so they are not links here.
  */
 export function containsLink(text: string): boolean {
-  const base = normalizeForDetection(text).replace(EMAIL_ADDRESS, (m) => " ".repeat(m.length));
+  const base = blankEmails(normalizeForDetection(text));
   const spaced = collapseSpacedLetters(base);
   const joined = joinWords(spaced);
   return [base, spaced, joined].some((v) => LINK.some((re) => re !== EMAIL_LIKE && re.test(v)));

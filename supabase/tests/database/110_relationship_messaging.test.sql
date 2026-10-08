@@ -2,7 +2,7 @@
 -- (spec §14, §15, §17; BR-5, 8, 13, 23, 24, 34; OD-10, OD-26, OD-33).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(83);
+select plan(86);
 
 -- Fixtures (all fictional): Musu and Fatu (women seeking men); Prince and Joseph (men seeking women);
 -- Kemah (Casual only); Varney (never verified); a moderator.
@@ -270,6 +270,8 @@ select ok(not public.can_view_profile('aaaaaaaa-6000-0000-0000-000000000001', 'a
   'BR-24: after an unmatch the profiles are gone too, exactly as after a block');
 select throws_ok($$ select public.like_user('aaaaaaaa-6000-0000-0000-000000000001', 'aaaaaaaa-6000-0000-0000-000000000002') $$,
   'P0002', 'MEMBER_NOT_FOUND', 'an unmatched pair cannot match again');
+select lives_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv'), 'MONEY_SCAM') $$,
+  'BR-24 / §17: a member who was unmatched can still report from the closed chat');
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'musu'), true);
 select ok(not public.can_join_conversation_topic('conversation:' || (select id from ids where n = 'conv')),
@@ -288,8 +290,12 @@ select throws_ok($$ select public.send_message('aaaaaaaa-6000-0000-0000-00000000
   '42501', 'CANNOT_SEND', 'BR-24: no messages after a block');
 select lives_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000003', (select id from ids where n = 'conv2'), 'SPAM') $$,
   'the blocker can still report from the closed conversation');
-select throws_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv2'), 'UNDER_18') $$,
-  'P0002', 'CONVERSATION_NOT_FOUND', 'BR-24: the blocked member cannot report from it (same answer as after an unmatch)');
+select lives_ok($$ select public.submit_conversation_report('aaaaaaaa-6000-0000-0000-000000000001', (select id from ids where n = 'conv2'), 'UNDER_18') $$,
+  'BR-24 / §17: the blocked member can still report (same answer as any report, so the block is not revealed)');
+select is((select hidden_reason from public.users where id = 'aaaaaaaa-6000-0000-0000-000000000003'), null,
+  'but a report from someone the member blocked hides nobody automatically (no retaliation)');
+select is((select auto_actions from public.reports where reporter_id = 'aaaaaaaa-6000-0000-0000-000000000001'
+  and reported_user_id = 'aaaaaaaa-6000-0000-0000-000000000003'), false, 'it waits for a moderator');
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'musu'), true);
 select ok(not public.can_join_conversation_topic('conversation:' || (select id from ids where n = 'conv2')),

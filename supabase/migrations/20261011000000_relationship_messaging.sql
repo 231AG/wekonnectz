@@ -143,6 +143,9 @@ create index messages_conversation_idx on public.messages (conversation_id, crea
 -- A report made from a conversation keeps a copy of its recent messages (OD-26): only these are ever
 -- shown to staff, and each view is audited (OD-33).
 alter table public.reports add column conversation_id uuid references public.conversations (id) on delete set null;
+-- False for a report from someone the reported member had blocked: a moderator reviews it, but it
+-- never hides anyone automatically or counts toward the threshold (no retaliation by report).
+alter table public.reports add column auto_actions boolean not null default true;
 
 create table public.report_messages (
   id         uuid primary key default gen_random_uuid(),
@@ -715,7 +718,8 @@ create or replace function public.file_report(
   p_category     public.report_category,
   p_description  text,
   p_photo_id     uuid,
-  p_conversation uuid
+  p_conversation uuid,
+  p_auto_actions boolean default true
 )
 returns uuid
 language plpgsql
@@ -749,11 +753,12 @@ begin
     raise exception 'ALREADY_REPORTED' using errcode = '22023';
   end if;
 
-  insert into public.reports (reporter_id, reported_user_id, category, priority, description, photo_id, conversation_id)
+  insert into public.reports (reporter_id, reported_user_id, category, priority, description, photo_id,
+                              conversation_id, auto_actions)
   values (p_reporter, p_target, p_category, public.report_priority_for(p_category),
           nullif(btrim(coalesce(p_description, '')), ''),
           case when p_category = 'INAPPROPRIATE_PHOTO' then p_photo_id end,
-          p_conversation)
+          p_conversation, coalesce(p_auto_actions, true))
   returning id into v_id;
 
   if p_conversation is not null then
@@ -761,6 +766,10 @@ begin
     select v_id, x.id, x.sender_id, x.body, x.created_at
     from (select * from public.messages where conversation_id = p_conversation
           order by created_at desc limit (public.get_setting('reports.messages_captured'))::int) x;
+  end if;
+
+  if not coalesce(p_auto_actions, true) then
+    return v_id;
   end if;
 
   if p_category = 'UNDER_18' then
@@ -776,7 +785,8 @@ begin
   select count(distinct reporter_id) filter (where priority = 'HIGH'), count(distinct reporter_id)
     into v_high, v_any
   from public.reports
-  where reported_user_id = p_target and status = 'OPEN' and created_at > now() - interval '24 hours';
+  where reported_user_id = p_target and status = 'OPEN' and auto_actions
+    and created_at > now() - interval '24 hours';
 
   if public.report_priority_for(p_category) = 'HIGH' and v_high >= v_threshold then
     update public.users set hidden_reason = 'REPORT_THRESHOLD', hidden_at = now()
@@ -830,12 +840,14 @@ begin
                      and target_visible)) then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
-  return public.file_report(p_reporter, p_target, p_category, p_description, p_photo_id, null);
+  return public.file_report(p_reporter, p_target, p_category, p_description, p_photo_id, null, true);
 end;
 $$;
 
--- From a conversation the reporter belongs to (open, or closed by their own block or unmatch): the
--- recent messages are captured for the moderator. Photo reports are made from the profile.
+-- From a conversation the reporter belongs to, open or closed (a member unmatched or blocked by a
+-- scammer can still report them; every case answers the same way, so a block is never revealed).
+-- When the other member had blocked the reporter, the report is filed for review without automatic
+-- actions. Recent messages are captured for the moderator. Photo reports are made from the profile.
 create or replace function public.submit_conversation_report(
   p_reporter     uuid,
   p_conversation uuid,
@@ -848,21 +860,18 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_target uuid := public.conversation_other(p_reporter, p_conversation);
+  v_target  uuid := public.conversation_other(p_reporter, p_conversation);
+  v_blocked boolean;
 begin
   perform public.assert_can_report(p_reporter);
-  -- An open conversation, or one the reporter closed (block first, report after). A conversation the
-  -- other member closed reads as not found, the same for a block as for an unmatch (BR-24).
-  if v_target is null
-     or not exists (select 1 from public.users where id = v_target and role = 'USER')
-     or not exists (select 1 from public.conversations c where c.id = p_conversation
-                    and (c.status = 'OPEN' or c.closed_by = p_reporter)) then
+  if v_target is null or not exists (select 1 from public.users where id = v_target and role = 'USER') then
     raise exception 'CONVERSATION_NOT_FOUND' using errcode = 'P0002';
   end if;
   if p_category = 'INAPPROPRIATE_PHOTO' then
     raise exception 'PHOTO_REQUIRED' using errcode = '22023';
   end if;
-  return public.file_report(p_reporter, v_target, p_category, p_description, null, p_conversation);
+  v_blocked := exists (select 1 from public.blocks where blocker_id = v_target and blocked_id = p_reporter);
+  return public.file_report(p_reporter, v_target, p_category, p_description, null, p_conversation, not v_blocked);
 end;
 $$;
 
@@ -1088,7 +1097,7 @@ revoke all on function public.close_pair(uuid, uuid, text) from public, anon, au
 revoke all on function public.messages_broadcast() from public, anon, authenticated, service_role;
 revoke all on function public.conversation_other(uuid, uuid) from public, anon, authenticated, service_role;
 revoke all on function public.can_send_in(uuid, uuid) from public, anon, authenticated, service_role;
-revoke all on function public.file_report(uuid, uuid, public.report_category, text, uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.file_report(uuid, uuid, public.report_category, text, uuid, uuid, boolean) from public, anon, authenticated, service_role;
 revoke all on function public.assert_can_report(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.can_join_conversation_topic(text) from public, anon;
 
