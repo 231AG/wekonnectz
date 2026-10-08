@@ -604,7 +604,8 @@ begin
     'type', v_type,
     'match_id', v_match,
     'other', public.member_card(v_other),
-    'other_visible', public.can_view_profile(p_viewer, v_other),
+    -- Server-only: signed before anything reaches the member, and only while the other member is visible.
+    'photo_path', case when public.can_view_profile(p_viewer, v_other) then public.primary_photo_path(v_other) end,
     'can_send', public.can_send_in(p_viewer, p_conversation),
     'messages', coalesce((
       select jsonb_agg(jsonb_build_object('id', x.id, 'mine', x.sender_id = p_viewer, 'body', x.body,

@@ -17,6 +17,10 @@ const REASONS: Record<string, { label: string; hint: string }> = {
     label: "Many reports",
     hint: "Several members reported this account within 24 hours. Check the Reports queue.",
   },
+  MONEY_TERMS: {
+    label: "Money terms in a message",
+    hint: "A message mentioned prices, payment or a money request. It was delivered. Message text is shown only through a member's report.",
+  },
   AGE_DOUBT: {
     label: "Doubt about age",
     hint: "A selfie was rejected because the member may be under 18. Check the profile and photos.",
@@ -52,7 +56,7 @@ export default async function FlagsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge tone={f.reason === "AGE_DOUBT" ? "danger" : "pending"}>{reason.label}</Badge>
                   <span className="font-bold">
-                    {f.entity_type === "USER" ? accountRef(f.entity_id) : f.entity_type.toLowerCase()}
+                    {f.account_id ? accountRef(f.account_id) : f.entity_type.toLowerCase()}
                   </span>
                   {f.display_name ? <span className="text-muted-foreground">{f.display_name}</span> : null}
                   {f.account_status ? (
@@ -63,10 +67,10 @@ export default async function FlagsPage() {
                 <p className="text-sm text-muted-foreground">
                   {reason.hint} Raised {timeAgo(f.created_at)}.
                 </p>
-                {f.entity_type === "USER" ? (
+                {f.account_id ? (
                   <>
                     <Link
-                      href={`/admin/reports?member=${f.entity_id}&closed=1`}
+                      href={`/admin/reports?member=${f.account_id}&closed=1`}
                       prefetch={false}
                       className="inline-flex min-h-11 items-center self-start text-sm font-semibold underline underline-offset-4"
                     >
@@ -75,7 +79,7 @@ export default async function FlagsPage() {
                     {f.stored_status ? (
                       <div className="max-w-md">
                         <MemberActions
-                          userId={f.entity_id}
+                          userId={f.account_id}
                           storedStatus={f.stored_status}
                           suspendedUntil={f.suspended_until}
                           hiddenReason={f.hidden_reason}

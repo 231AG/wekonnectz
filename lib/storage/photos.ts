@@ -43,7 +43,8 @@ function dbError(message: string): PhotoError {
   return { kind: "db", code: DB_CODES.find((c) => message.includes(c)) ?? "UNKNOWN" };
 }
 
-async function signPaths(paths: string[]): Promise<Map<string, string>> {
+/** Signs photo paths for the server to hand out as URLs; callers must have checked access first (BR-11). */
+export async function signPaths(paths: string[]): Promise<Map<string, string>> {
   const signed = new Map<string, string>();
   if (paths.length === 0) return signed;
   const { data, error } = await createAdminClient().storage.from(PHOTOS).createSignedUrls(paths, SIGNED_URL_SECONDS);

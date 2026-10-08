@@ -1,87 +1,130 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { BadgeCheck, ChevronRight, ShieldCheck, UserX } from "lucide-react";
+import { redirect } from "next/navigation";
+import { BadgeCheck, ChevronRight, Flame, Heart, ShieldCheck } from "lucide-react";
 
+import { Logo } from "@/components/brand/logo";
+import { MemberShell } from "@/components/layout/member-shell";
 import { MobileScreen, ScreenLead, ScreenTitle } from "@/components/layout/mobile-screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { signOut } from "@/lib/auth/actions/login";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
+import { relationshipSummary } from "@/lib/storage/relationship";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Home" };
 
-/** Placeholder for ACTIVE members until Home and discovery arrive (Phase 6). */
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Home (member mock-up 01): Relationship card, Casual card (passes arrive in Phase 7), safety note. */
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const member = await requireMember();
   const { blocked } = await searchParams;
   if (member.status !== "ACTIVE" && member.status !== "SUSPENDED") redirect(nextStepFor(member));
-  const verified = member.onboarding.verification === "VERIFIED";
   if (member.status === "SUSPENDED") {
     return (
       <MobileScreen
         footer={
-          <form action={signOut}>
-            <Button type="submit" variant="outline">
-              Log out
+          <>
+            <Button asChild variant="secondary">
+              <Link href="/messages">Read your messages</Link>
             </Button>
-          </form>
+            <form action={signOut}>
+              <Button type="submit" variant="outline">
+                Log out
+              </Button>
+            </form>
+          </>
         }
       >
         <ScreenTitle>Your account is restricted</ScreenTitle>
         <ScreenLead>
-          Your account is temporarily restricted, so you can’t be seen or send messages right now. It will be lifted
-          automatically at the end of the restriction.
+          Your account is temporarily restricted, so you can’t be seen or send messages right now. You can still read
+          your messages. It will be lifted automatically at the end of the restriction.
         </ScreenLead>
       </MobileScreen>
     );
   }
+
+  const [summary, { data: profile }] = await Promise.all([
+    relationshipSummary(member.id),
+    (await createClient()).from("profiles").select("display_name").eq("user_id", member.id).single(),
+  ]);
+  const verified = member.onboarding.verification === "VERIFIED";
+  const relationshipLine = !summary.intentRelationship
+    ? "Turned off in your profile"
+    : !summary.eligible
+      ? "You’ll appear once your profile has 3 approved photos"
+      : summary.likesReceived || summary.newMatches
+        ? `${plural(summary.likesReceived, "new like", "new likes")} · ${plural(summary.newMatches, "new match", "new matches")}`
+        : "See who’s new today";
+
   return (
-    <MobileScreen
-      footer={
-        <form action={signOut}>
-          <Button type="submit" variant="outline">
-            Log out
-          </Button>
-        </form>
-      }
-    >
-      <ScreenTitle>You’re in</ScreenTitle>
-      <ScreenLead>Your profile is verified and live.</ScreenLead>
+    <MemberShell>
+      <header className="flex items-center justify-between">
+        <Logo className="h-7 w-auto" />
+      </header>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="font-display text-[34px] leading-tight font-bold">Hi, {profile?.display_name ?? "there"}</h1>
+        {/* BR-14: verification status shown as a badge. */}
+        {verified ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-verified/15 px-3 py-1 text-sm font-bold text-verified">
+            <BadgeCheck className="size-4" strokeWidth={2} aria-hidden />
+            Verified
+          </span>
+        ) : null}
+      </div>
       {blocked === "1" ? (
         <p role="status" className="rounded-control bg-surface-2 px-4 py-3 text-[15px]">
           Blocked. They won’t be told.
         </p>
       ) : null}
-      <Card className="flex items-center gap-3.5">
-        <BadgeCheck className="size-6 shrink-0 text-verified" strokeWidth={1.8} aria-hidden />
-        <p className="flex-1 font-bold">Verification</p>
-        {/* BR-14: verification status is shown as a badge. */}
-        {verified ? (
-          <Badge tone="relationship" className="bg-verified">
-            Verified
-          </Badge>
-        ) : null}
-      </Card>
-      <Card tone="dashed">
-        <p className="text-[15px] text-muted-foreground">Discovery and messages open in the next release.</p>
-      </Card>
-      <nav aria-label="Safety" className="flex flex-col gap-3">
-        <Link href="/safety" className="rounded-card focus-visible:outline-2 focus-visible:outline-ring">
-          <Card className="flex items-center gap-3.5 hover:bg-surface-2">
-            <ShieldCheck className="size-6 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
-            <span className="flex-1 font-bold">Staying safe</span>
-            <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
-          </Card>
+
+      <Link
+        href="/relationship"
+        className="flex flex-col gap-2 rounded-card border border-verified/30 bg-verified/10 p-5 hover:bg-verified/15 focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <span className="flex items-center gap-3">
+          <Heart className="size-7 text-verified" strokeWidth={1.8} aria-hidden />
+          <span className="flex-1 font-display text-[22px] font-bold">Relationship</span>
+          <Badge className="bg-verified text-on-accent">Free</Badge>
+        </span>
+        <span className="text-[16px] text-muted-foreground" data-testid="relationship-summary">
+          {relationshipLine}
+        </span>
+      </Link>
+
+      <Link
+        href="/casual"
+        className="flex flex-col gap-2 rounded-card border border-casual/30 bg-casual/10 p-5 hover:bg-casual/15 focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <span className="flex items-center gap-3">
+          <Flame className="size-7 text-casual" strokeWidth={1.8} aria-hidden />
+          <span className="flex-1 font-display text-[22px] font-bold">Casual Connection</span>
+          <Badge tone="casual">Get access</Badge>
+        </span>
+        <span className="text-[16px] text-muted-foreground">Passes open in the next release.</span>
+      </Link>
+
+      {summary.unread ? (
+        <Link
+          href="/messages"
+          className="flex items-center gap-3 rounded-card border border-border bg-surface-1 p-5 hover:bg-surface-2"
+        >
+          <span className="flex-1 font-bold">{plural(summary.unread, "unread message", "unread messages")}</span>
+          <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
         </Link>
-        <Link href="/account/blocked" className="rounded-card focus-visible:outline-2 focus-visible:outline-ring">
-          <Card className="flex items-center gap-3.5 hover:bg-surface-2">
-            <UserX className="size-6 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
-            <span className="flex-1 font-bold">Blocked members</span>
-            <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
-          </Card>
-        </Link>
-      </nav>
-    </MobileScreen>
+      ) : null}
+
+      <Link
+        href="/safety"
+        className="flex items-center gap-3 rounded-card border border-dashed border-border p-5 text-[15px] text-muted-foreground hover:bg-surface-1"
+      >
+        <ShieldCheck className="size-6 shrink-0" strokeWidth={1.6} aria-hidden />
+        Never send money to someone you haven’t met.
+      </Link>
+    </MemberShell>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, BadgeCheck, Flame, Heart, MapPin } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Flame, Heart, MapPin, MessageCircle } from "lucide-react";
 
 import { ProfileSafety } from "@/components/member/profile-safety";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,13 @@ export default async function MemberProfilePage({ params }: PageProps<"/m/[id]">
               </li>
             ))}
           </ul>
+        ) : null}
+        {profile.conversationId ? (
+          <Button asChild>
+            <Link href={`/messages/${profile.conversationId}`}>
+              <MessageCircle className="size-5" strokeWidth={1.8} aria-hidden /> Message
+            </Link>
+          </Button>
         ) : null}
         {more.length ? (
           <div className="grid grid-cols-2 gap-3">

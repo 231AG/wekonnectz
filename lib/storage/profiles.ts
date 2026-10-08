@@ -20,6 +20,8 @@ export type ProfileView = {
   verified: boolean;
   interests: string[];
   photos: { id: string; url: string }[];
+  /** The open conversation with this member when you are matched. */
+  conversationId: string | null;
 };
 
 export async function viewProfile(viewerId: string, ownerId: string): Promise<ProfileView | null> {
@@ -48,6 +50,7 @@ export async function viewProfile(viewerId: string, ownerId: string): Promise<Pr
     intentCasual: p.intent_casual === true,
     verified: p.verified === true,
     interests: Array.isArray(p.interests) ? (p.interests as string[]) : [],
+    conversationId: (p.conversation_id as string | null) ?? null,
     photos: rows.flatMap((r) => (byPath.get(r.storage_path) ? [{ id: r.id, url: byPath.get(r.storage_path)! }] : [])),
   };
 }

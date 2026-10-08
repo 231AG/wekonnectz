@@ -2,9 +2,10 @@ import Link from "next/link";
 
 import { MemberActions } from "@/components/admin/member-actions";
 import { NoteField } from "@/components/admin/note-field";
+import { ReportMessages } from "@/components/admin/report-messages";
 import { StaffForm, StaffSubmit } from "@/components/admin/staff-form";
 import { Badge } from "@/components/ui/badge";
-import { addReportNoteAction, resolveReportAction } from "@/lib/admin/report-actions";
+import { addReportNoteAction, openReportMessages, resolveReportAction } from "@/lib/admin/report-actions";
 import { requireStaff } from "@/lib/auth/staff";
 import { timeAgo } from "@/lib/domain/time";
 import { REJECTION_REASON_KEYS, REJECTION_REASONS } from "@/lib/photos/reasons";
@@ -28,6 +29,8 @@ type Detail = {
   description: string | null;
   photo_id: string | null;
   created_at: string;
+  from_conversation: boolean;
+  captured_messages: number;
   reported_user_id: string;
   display_name: string | null;
   age: number | null;
@@ -237,6 +240,15 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
                   <p className="text-[13px] font-semibold text-pending uppercase">Reporter’s details</p>
                   <p className="mt-1 text-[15px] break-words whitespace-pre-wrap">{detail.description}</p>
                 </div>
+              ) : null}
+
+              {detail.from_conversation ? (
+                <ReportMessages
+                  key={detail.report_id}
+                  reportId={detail.report_id}
+                  count={detail.captured_messages}
+                  open={openReportMessages}
+                />
               ) : null}
 
               {photos.length ? (

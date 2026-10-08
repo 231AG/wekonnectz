@@ -135,3 +135,18 @@ export async function resolveFlagAction(_prev: StaffActionState, formData: FormD
   ).rpc("resolve_flag", { p_flag_id: parsed.data.flagId, p_dismiss: parsed.data.outcome === "dismiss" });
   return error ? fail(error.message) : done(parsed.data.outcome === "dismiss" ? "Flag dismissed." : "Flag resolved.");
 }
+
+export type CapturedMessages = { messages?: { fromReported: boolean; body: string; sentAt: string }[]; error?: string };
+
+/**
+ * Opens the messages captured with a report (OD-26). The database writes a REPORTED_MESSAGES_VIEWED
+ * audit row before returning them (OD-33, BR-34), so every view is recorded. Text is never logged.
+ */
+export async function openReportMessages(reportId: string): Promise<CapturedMessages> {
+  await requireStaff();
+  const parsed = z.uuid().safeParse(reportId);
+  if (!parsed.success) return { error: "Not found." };
+  const { data, error } = await (await createClient()).rpc("staff_report_messages", { p_report_id: parsed.data });
+  if (error) return fail(error.message);
+  return { messages: (data ?? []).map((m) => ({ fromReported: m.from_reported, body: m.body, sentAt: m.sent_at })) };
+}

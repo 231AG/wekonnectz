@@ -65,23 +65,32 @@ export async function uploadPhotos(page: Page, files: string[]) {
  * A fictional ACTIVE member (verified, 3 approved photos), set up through the service role the way
  * finished onboarding and staff approvals would leave it. Used by the safety tests (Phase 5).
  */
-export async function activeMember(name: string, files: string[]) {
+export async function activeMember(
+  name: string,
+  files: string[],
+  opts: { gender?: "MAN" | "WOMAN"; relationship?: boolean; area?: string } = {},
+) {
+  const gender = opts.gender ?? "MAN";
   const { seedPendingPhotos, seedPendingVerification } = await import("./staff-helpers");
   const phone = randomLiberianPhone();
   const userId = await createMember(phone.e164);
   const admin = adminClient();
-  const { data: area } = await admin.from("areas").select("id").eq("name", "Congo Town").single();
+  const { data: area } = await admin
+    .from("areas")
+    .select("id")
+    .eq("name", opts.area ?? "Congo Town")
+    .single();
   expect(
     (
       await admin.from("profiles").upsert({
         user_id: userId,
         date_of_birth: `${adultYear}-03-14`,
         display_name: name,
-        gender: "MAN",
-        seeking_genders: ["WOMAN"],
+        gender,
+        seeking_genders: [gender === "MAN" ? "WOMAN" : "MAN"],
         area_id: area!.id,
-        intent_relationship: false,
-        intent_casual: true,
+        intent_relationship: opts.relationship ?? false,
+        intent_casual: !(opts.relationship ?? false),
         bio: "Graphic designer. Good food, Afrobeats and long talks. Let’s chat first.",
         is_profile_complete: true,
       })
