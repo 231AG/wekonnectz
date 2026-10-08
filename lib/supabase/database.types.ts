@@ -100,6 +100,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"card_customers": {
+                  Row: {
+                    "created_at": string,"customer_ref": string,"processor": string,"user_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"customer_ref": string,"processor": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"customer_ref"?: string,"processor"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "card_customers_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"consents": {
                   Row: {
                     "accepted_at": string,"created_at": string,"document": Database["public"]['Enums']["consent_document"],"id": string,"user_id": string,"version": string
@@ -283,6 +302,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"merchant_accounts": {
+                  Row: {
+                    "active": boolean,"created_at": string,"display_name": string,"id": string,"number_or_code": string,"provider": Database["public"]['Enums']["payment_provider"],"updated_at": string
+                  }
+                  Insert: {
+                    "active"?: boolean,"created_at"?: string,"display_name": string,"id"?: string,"number_or_code": string,"provider": Database["public"]['Enums']["payment_provider"],"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"created_at"?: string,"display_name"?: string,"id"?: string,"number_or_code"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"messages": {
                   Row: {
                     "body": string,"conversation_id": string,"created_at": string,"flagged": boolean,"id": string,"read_at": string | null,"sender_id": string | null
@@ -366,6 +398,105 @@ isOneToOne: false
     },{
       foreignKeyName: "passes_sender_id_fkey"
       columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"payment_claims": {
+                  Row: {
+                    "amount": number,"created_at": string,"currency": string,"evidence_deleted_at": string | null,"evidence_path": string | null,"evidence_sha256": string,"id": string,"member_note": string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at": string | null,"reviewed_by": string | null,"sender_phone": string,"staff_question": string | null,"status": Database["public"]['Enums']["claim_status"],"transaction_id": string,"updated_at": string,"user_id": string | null
+                  }
+                  Insert: {
+                    "amount": number,"created_at"?: string,"currency": string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256": string,"id"?: string,"member_note"?: string | null,"merchant_account_id": string,"paid_at": string,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"reference_code": string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone": string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id": string,"updated_at"?: string,"user_id"?: string | null
+                  }
+                  Update: {
+                    "amount"?: number,"created_at"?: string,"currency"?: string,"evidence_deleted_at"?: string | null,"evidence_path"?: string | null,"evidence_sha256"?: string,"id"?: string,"member_note"?: string | null,"merchant_account_id"?: string,"paid_at"?: string,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"reference_code"?: string,"rejection_reason"?: Database["public"]['Enums']["claim_rejection_reason"] | null,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"sender_phone"?: string,"staff_question"?: string | null,"status"?: Database["public"]['Enums']["claim_status"],"transaction_id"?: string,"updated_at"?: string,"user_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payment_claims_merchant_account_id_fkey"
+      columns: ["merchant_account_id"]
+isOneToOne: false
+      referencedRelation: "merchant_accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_claims_plan_id_fkey"
+      columns: ["plan_id"]
+isOneToOne: false
+      referencedRelation: "subscription_plans"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_claims_reviewed_by_fkey"
+      columns: ["reviewed_by"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_claims_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"payment_events": {
+                  Row: {
+                    "actor_id": string | null,"claim_id": string | null,"id": string,"payment_id": string | null,"raw_payload": NonNullable<Json>,"received_at": string,"signature_valid": boolean | null,"type": string
+                  }
+                  Insert: {
+                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type": string
+                  }
+                  Update: {
+                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payment_events_actor_id_fkey"
+      columns: ["actor_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_events_claim_id_fkey"
+      columns: ["claim_id"]
+isOneToOne: false
+      referencedRelation: "payment_claims"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_events_payment_id_fkey"
+      columns: ["payment_id"]
+isOneToOne: false
+      referencedRelation: "payments"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"payments": {
+                  Row: {
+                    "amount": number,"claim_id": string | null,"created_at": string,"currency": string,"id": string,"paid_at": string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"user_id": string | null
+                  }
+                  Insert: {
+                    "amount": number,"claim_id"?: string | null,"created_at"?: string,"currency": string,"id"?: string,"paid_at"?: string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"user_id"?: string | null
+                  }
+                  Update: {
+                    "amount"?: number,"claim_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"paid_at"?: string | null,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"provider_transaction_id"?: string,"source"?: Database["public"]['Enums']["payment_source"],"status"?: Database["public"]['Enums']["payment_status"],"user_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payments_claim_id_fkey"
+      columns: ["claim_id"]
+isOneToOne: true
+      referencedRelation: "payment_claims"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payments_plan_id_fkey"
+      columns: ["plan_id"]
+isOneToOne: false
+      referencedRelation: "subscription_plans"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payments_user_id_fkey"
+      columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "users"
       referencedColumns: ["id"]
@@ -552,6 +683,50 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"subscription_plans": {
+                  Row: {
+                    "active": boolean,"code": string,"created_at": string,"currency": string,"duration_hours": number,"id": string,"name": string,"price": number,"processor_price_id": string | null,"renews": boolean,"sort_order": number,"source": Database["public"]['Enums']["payment_source"],"updated_at": string
+                  }
+                  Insert: {
+                    "active"?: boolean,"code": string,"created_at"?: string,"currency"?: string,"duration_hours": number,"id"?: string,"name": string,"price": number,"processor_price_id"?: string | null,"renews"?: boolean,"sort_order"?: number,"source": Database["public"]['Enums']["payment_source"],"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"code"?: string,"created_at"?: string,"currency"?: string,"duration_hours"?: number,"id"?: string,"name"?: string,"price"?: number,"processor_price_id"?: string | null,"renews"?: boolean,"sort_order"?: number,"source"?: Database["public"]['Enums']["payment_source"],"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"subscriptions": {
+                  Row: {
+                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"id": string,"plan_id": string,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
+                  }
+                  Insert: {
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"id"?: string,"plan_id": string,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"id"?: string,"plan_id"?: string,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "subscriptions_plan_id_fkey"
+      columns: ["plan_id"]
+isOneToOne: false
+      referencedRelation: "subscription_plans"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "subscriptions_source_payment_id_fkey"
+      columns: ["source_payment_id"]
+isOneToOne: true
+      referencedRelation: "payments"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "subscriptions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"user_interests": {
                   Row: {
                     "created_at": string,"interest_id": string,"user_id": string
@@ -652,14 +827,23 @@ isOneToOne: false
 "age_in_years":
 { Args: { "p_dob": string,"p_on"?: string }; Returns: number
                            },
+"approve_payment_claim":
+{ Args: { "p_claim": string }; Returns: Json
+                           },
 "assert_can_edit_profile":
 { Args: { "p_user_id": string }; Returns: undefined
+                           },
+"assert_can_pay":
+{ Args: { "p_user": string }; Returns: undefined
                            },
 "assert_can_report":
 { Args: { "p_reporter": string }; Returns: undefined
                            },
 "assert_can_verify":
 { Args: { "p_user_id": string }; Returns: undefined
+                           },
+"assert_claim_reviewer":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "assert_member_can_act":
 { Args: { "p_user_id": string }; Returns: undefined
@@ -696,6 +880,15 @@ isOneToOne: false
                            },
 "can_view_profile":
 { Args: { "p_owner": string,"p_viewer": string }; Returns: boolean
+                           },
+"cancel_payment_claim":
+{ Args: { "p_claim": string,"p_user": string }; Returns: undefined
+                           },
+"casual_access_until":
+{ Args: { "p_user": string }; Returns: string
+                           },
+"claim_evidence_path":
+{ Args: { "p_claim": string }; Returns: string
                            },
 "claim_hook_receipt":
 { Args: { "p_message_id": string }; Returns: boolean
@@ -743,6 +936,14 @@ isOneToOne: false
 "effective_account_status":
 { Args: { "p_status": Database["public"]['Enums']["account_status"],"p_suspended_until": string }; Returns: Database["public"]['Enums']["account_status"]
                            },
+"evidence_due_for_deletion":
+{ Args: { "p_limit"?: number }; Returns: {
+              "claim_id": string,"evidence_path": string
+            }[]
+                           },
+"expire_subscriptions":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "file_report":
 { Args: { "p_auto_actions"?: boolean,"p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description": string,"p_photo_id": string,"p_reporter": string,"p_target": string }; Returns: string
                            },
@@ -751,6 +952,12 @@ isOneToOne: false
                            },
 "has_accepted_current_documents":
 { Args: { "p_user_id": string }; Returns: boolean
+                           },
+"has_active_card_subscription":
+{ Args: { "p_user": string }; Returns: boolean
+                           },
+"has_casual_access":
+{ Args: { "p_at"?: string,"p_user": string }; Returns: boolean
                            },
 "hmac_with_pepper":
 { Args: { "p_value": string }; Returns: string
@@ -781,11 +988,48 @@ isOneToOne: false
               "card": Json,"liked_at": string,"photo_path": string
             }[]
                            },
+"lock_claim_for_decision":
+{ Args: { "p_claim": string,"p_statuses": (Database["public"]['Enums']["claim_status"])[] }; Returns: {
+              "amount": number,
+"created_at": string,
+"currency": string,
+"evidence_deleted_at": string | null,
+"evidence_path": string | null,
+"evidence_sha256": string,
+"id": string,
+"member_note": string | null,
+"merchant_account_id": string,
+"paid_at": string,
+"plan_id": string,
+"provider": Database["public"]['Enums']["payment_provider"],
+"reference_code": string,
+"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"] | null,
+"reviewed_at": string | null,
+"reviewed_by": string | null,
+"sender_phone": string,
+"staff_question": string | null,
+"status": Database["public"]['Enums']["claim_status"],
+"transaction_id": string,
+"updated_at": string,
+"user_id": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "payment_claims"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"log_evidence_view":
+{ Args: { "p_claim": string }; Returns: undefined
+                           },
 "log_selfie_view":
 { Args: { "p_verification_id": string }; Returns: undefined
                            },
 "mark_conversation_read":
 { Args: { "p_conversation": string,"p_viewer": string }; Returns: undefined
+                           },
+"mark_evidence_deleted":
+{ Args: { "p_claim_ids": (string)[] }; Returns: number
                            },
 "mark_notifications_read":
 { Args: Record<PropertyKey, never>; Returns: undefined
@@ -806,6 +1050,19 @@ isOneToOne: false
 "member_card":
 { Args: { "p_user": string }; Returns: Json
                            },
+"member_claims":
+{ Args: { "p_user": string }; Returns: {
+              "amount": number,"claim_id": string,"created_at": string,"currency": string,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"],"reviewed_at": string,"staff_question": string,"status": Database["public"]['Enums']["claim_status"],"transaction_id": string
+            }[]
+                           },
+"member_passes":
+{ Args: { "p_user": string }; Returns: {
+              "amount": number,"currency": string,"expires_at": string,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"source": Database["public"]['Enums']["payment_source"],"starts_at": string,"transaction_id": string
+            }[]
+                           },
+"member_payment_options":
+{ Args: { "p_user": string }; Returns: Json
+                           },
 "member_photos":
 { Args: { "p_user_id": string }; Returns: {
               "id": string,"is_primary": boolean,"rejection_reason": Database["public"]['Enums']["photo_rejection_reason"],"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
@@ -813,6 +1070,9 @@ isOneToOne: false
                            },
 "member_profile_for_viewer":
 { Args: { "p_owner": string,"p_viewer": string }; Returns: Json
+                           },
+"member_reference_code":
+{ Args: { "p_user": string }; Returns: string
                            },
 "member_review_status":
 { Args: { "p_user_id": string }; Returns: Json
@@ -849,6 +1109,11 @@ isOneToOne: false
 "primary_photo_path":
 { Args: { "p_user": string }; Returns: string
                            },
+"public_plans":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "code": string,"currency": string,"duration_hours": number,"name": string,"price": number,"source": Database["public"]['Enums']["payment_source"]
+            }[]
+                           },
 "raise_flag":
 { Args: { "p_details"?: Json,"p_entity_id": string,"p_entity_type": string,"p_reason": string }; Returns: undefined
                            },
@@ -863,6 +1128,9 @@ isOneToOne: false
                            },
 "record_staff_sign_in_failure":
 { Args: { "p_account": string,"p_ip": string }; Returns: undefined
+                           },
+"reject_payment_claim":
+{ Args: { "p_claim": string,"p_reason": Database["public"]['Enums']["claim_rejection_reason"] }; Returns: undefined
                            },
 "relationship_compatible":
 { Args: { "p_a": string,"p_b": string }; Returns: boolean
@@ -882,6 +1150,9 @@ isOneToOne: false
 "renumber_photos":
 { Args: { "p_user_id": string }; Returns: string
                            },
+"reply_payment_claim":
+{ Args: { "p_claim": string,"p_evidence_path"?: string,"p_evidence_sha256"?: string,"p_note": string,"p_user": string }; Returns: string
+                           },
 "report_about":
 { Args: { "p_report_id": string,"p_target": string }; Returns: string
                            },
@@ -892,6 +1163,9 @@ isOneToOne: false
 { Args: { "p_report_id": string }; Returns: {
               "id": string,"is_reported": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
+                           },
+"request_claim_info":
+{ Args: { "p_claim": string,"p_question": string }; Returns: undefined
                            },
 "resolve_flag":
 { Args: { "p_dismiss": boolean,"p_flag_id": string }; Returns: undefined
@@ -932,6 +1206,14 @@ isOneToOne: false
                            },
 "set_primary_photo":
 { Args: { "p_photo_id": string,"p_user_id": string }; Returns: undefined
+                           },
+"staff_claim_detail":
+{ Args: { "p_claim": string }; Returns: Json
+                           },
+"staff_claims_queue":
+{ Args: { "p_limit"?: number }; Returns: {
+              "amount": number,"claim_id": string,"created_at": string,"currency": string,"flags": number,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"status": Database["public"]['Enums']["claim_status"],"user_id": string
+            }[]
                            },
 "staff_flags_queue":
 { Args: { "p_limit"?: number }; Returns: {
@@ -978,6 +1260,9 @@ isOneToOne: false
 "submit_conversation_report":
 { Args: { "p_category": Database["public"]['Enums']["report_category"],"p_conversation": string,"p_description"?: string,"p_reporter": string }; Returns: string
                            },
+"submit_payment_claim":
+{ Args: { "p_evidence_path": string,"p_evidence_sha256": string,"p_paid_at": string,"p_plan_id": string,"p_provider": Database["public"]['Enums']["payment_provider"],"p_sender_phone": string,"p_transaction_id": string,"p_user": string }; Returns: string
+                           },
 "submit_report":
 { Args: { "p_category": Database["public"]['Enums']["report_category"],"p_description"?: string,"p_photo_id"?: string,"p_reporter": string,"p_target": string }; Returns: string
                            },
@@ -1003,7 +1288,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"|"REPORTED_MESSAGES_VIEWED","consent_document": "TERMS"|"PRIVACY"|"RULES","conversation_status": "OPEN"|"CLOSED","conversation_type": "RELATIONSHIP"|"CASUAL","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","match_status": "ACTIVE"|"UNMATCHED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"|"REPORTED_MESSAGES_VIEWED","claim_rejection_reason": "TRANSACTION_NOT_FOUND"|"AMOUNT_MISMATCH"|"ALREADY_USED"|"DETAILS_DO_NOT_MATCH"|"EVIDENCE_UNCLEAR","claim_status": "PENDING_REVIEW"|"NEEDS_INFO"|"APPROVED"|"REJECTED"|"CANCELLED","consent_document": "TERMS"|"PRIVACY"|"RULES","conversation_status": "OPEN"|"CLOSED","conversation_type": "RELATIONSHIP"|"CASUAL","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","match_status": "ACTIVE"|"UNMATCHED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE"|"PAYMENT_APPROVED"|"PAYMENT_REJECTED"|"PAYMENT_NEEDS_INFO","payment_provider": "ORANGE_MONEY"|"MTN_MOMO"|"CARD","payment_source": "MOBILE_MONEY"|"CARD","payment_status": "PENDING"|"SUCCEEDED"|"FAILED"|"REFUNDED","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","subscription_status": "PENDING"|"ACTIVE"|"CANCELLED"|"PAYMENT_FAILED"|"EXPIRED"|"SUSPENDED"|"REFUNDED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1123,7 +1408,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED", "REPORTED_MESSAGES_VIEWED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"conversation_status": ["OPEN", "CLOSED"],"conversation_type": ["RELATIONSHIP", "CASUAL"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"match_status": ["ACTIVE", "UNMATCHED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED", "REPORTED_MESSAGES_VIEWED"],"claim_rejection_reason": ["TRANSACTION_NOT_FOUND", "AMOUNT_MISMATCH", "ALREADY_USED", "DETAILS_DO_NOT_MATCH", "EVIDENCE_UNCLEAR"],"claim_status": ["PENDING_REVIEW", "NEEDS_INFO", "APPROVED", "REJECTED", "CANCELLED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"conversation_status": ["OPEN", "CLOSED"],"conversation_type": ["RELATIONSHIP", "CASUAL"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"match_status": ["ACTIVE", "UNMATCHED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE", "PAYMENT_APPROVED", "PAYMENT_REJECTED", "PAYMENT_NEEDS_INFO"],"payment_provider": ["ORANGE_MONEY", "MTN_MOMO", "CARD"],"payment_source": ["MOBILE_MONEY", "CARD"],"payment_status": ["PENDING", "SUCCEEDED", "FAILED", "REFUNDED"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"subscription_status": ["PENDING", "ACTIVE", "CANCELLED", "PAYMENT_FAILED", "EXPIRED", "SUSPENDED", "REFUNDED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
           }
         }
 } as const

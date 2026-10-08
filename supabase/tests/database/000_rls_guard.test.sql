@@ -91,7 +91,13 @@ select is_empty(
           'resolve_flag',             -- Phase 5: raises unless is_staff(); audited
           'unhide_member',            -- Phase 5: raises unless is_staff(); audited
           'can_join_conversation_topic', -- Phase 6: Realtime join check; answers only for auth.uid()
-          'staff_report_messages'     -- Phase 6: raises unless is_staff(); audited per view (OD-33)
+          'staff_report_messages',    -- Phase 6: raises unless is_staff(); audited per view (OD-33)
+          'staff_claims_queue',       -- Phase 7: raises unless is_staff('ADMIN')
+          'staff_claim_detail',       -- Phase 7: raises unless is_staff('ADMIN')
+          'log_evidence_view',        -- Phase 7: raises unless is_staff('ADMIN'); audited
+          'approve_payment_claim',    -- Phase 7: is_staff('ADMIN'), not own claim; audited; the only access path
+          'reject_payment_claim',     -- Phase 7: is_staff('ADMIN'); audited
+          'request_claim_info'        -- Phase 7: is_staff('ADMIN'); audited
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );

@@ -76,3 +76,18 @@ update public.app_settings set value = '30'::jsonb where key = 'reports.per_user
 -- DEV-ONLY messaging limits until the owner approves T-19.
 update public.app_settings set value = '60'::jsonb where key = 'messages.max_per_minute';  -- DEV-ONLY
 update public.app_settings set value = '20'::jsonb where key = 'reports.messages_captured'; -- DEV-ONLY
+
+-- DEV-ONLY mobile money set-up until the owner decides OD-1 (prices), T-13 (merchant wallets) and
+-- T-14 (transaction-ID formats). Fictional wallet numbers. Never copy into production.
+insert into public.subscription_plans (code, name, source, duration_hours, price, sort_order) values
+  ('MM_DAY', 'Day Pass', 'MOBILE_MONEY', 24, 1.00, 1),          -- DEV-ONLY price
+  ('MM_7DAY', '7-Day Pass', 'MOBILE_MONEY', 168, 5.00, 2),      -- DEV-ONLY price
+  ('MM_MONTH', 'Monthly', 'MOBILE_MONEY', 720, 15.00, 3)        -- DEV-ONLY price
+on conflict (code) do nothing;
+insert into public.merchant_accounts (provider, display_name, number_or_code) values
+  ('ORANGE_MONEY', 'DEV-ONLY WK Services', '0770000001'),        -- DEV-ONLY fictional
+  ('MTN_MOMO', 'DEV-ONLY WK Services', '0880000001');           -- DEV-ONLY fictional
+update public.app_settings set value = '{"ORANGE_MONEY": "^[A-Z0-9.]{6,30}$", "MTN_MOMO": "^[0-9]{6,20}$"}'::jsonb
+  where key = 'claims.transaction_id_patterns';                  -- DEV-ONLY
+update public.app_settings set value = '3'::jsonb where key = 'claims.rejections_before_flag';     -- DEV-ONLY
+update public.app_settings set value = '90'::jsonb where key = 'claims.evidence_retention_days';  -- DEV-ONLY
