@@ -29,7 +29,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-18 | Research and choose a card processor (OD-4, 15, 19, 20)                                                                                                | Phase 7c only (not launch)                               | OPEN                                                                                |
 | T-19 | Approve threshold and limit values                                                                                                                     | **Phase 1 sign-off** (OTP limits), then per row below    | OPEN                                                                                |
 | T-20 | Web push keys (OD-25 = in-app + web push)                                                                                                              | Phase 11                                                 | OPEN                                                                                |
-| T-21 | Remaining product decisions: OD-5, 6 (Phase 4), OD-10 (Phase 6), OD-8 (Phase 8), OD-9 (Phase 9), OD-7 (Phase 10), OD-33 (Phase 6)                      | Per row below                                            | OPEN                                                                                |
+| T-21 | Remaining product decisions: OD-5, 6 (Phase 4), OD-8 (Phase 8), OD-9 (Phase 9), OD-7 (Phase 10)                                                        | Per row below                                            | OPEN                                                                                |
 | T-22 | Create the `main` branch on GitHub                                                                                                                     | **Phase 0 PR and CI** (a PR needs a base branch)         | OPEN                                                                                |
 | T-24 | Create the phone-hashing secret in each hosted Supabase project (Vault)                                                                                | Phase 1 hosted verification (T-06); launch               | OPEN                                                                                |
 | T-25 | Decide on CAPTCHA (Cloudflare Turnstile) for sign-in and create the keys                                                                               | Recommended before launch (Phase 12)                     | OPEN                                                                                |
@@ -236,8 +236,11 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `verification.selfie_retention_days`                              | OD-6: days after a decision           | 90 (DEV-ONLY 90 in seed)                                                   | Phase 4   |
 | `reports.auto_hide_threshold`                                     | Distinct reporters / 24 h             | 3 (spec) (DEV-ONLY 3 in seed)                                              | Phase 5   |
 | `reports.per_user_per_day`                                        | Reports one member may send per day   | 10 (DEV-ONLY 30 in seed)                                                   | Phase 5   |
-| `relationship.pass_cooldown_days`                                 | Passed profile returns after          | 30                                                                         | Phase 6   |
-| `relationship.daily_like_cap`                                     | OD-10                                 | — your call                                                                | Phase 6   |
+| `relationship.pass_cooldown_days`                                 | Passed profile returns after          | **7 days — approved 2026-10-08**                                           | Phase 6   |
+| `relationship.daily_like_cap`                                     | OD-10                                 | **50 per 24 h — approved 2026-10-08**                                      | Phase 6   |
+| `messages.max_per_minute`                                         | Messages one member may send a minute | 20 (DEV-ONLY 60 in seed)                                                   | Phase 6   |
+| `reports.messages_captured`                                       | Messages copied into a chat report    | 20 (DEV-ONLY 20 in seed)                                                   | Phase 6   |
+| Message length (code + database, not a setting)                   | Longest chat message                  | 1000 characters (built)                                                    | Phase 6   |
 | `claims.rejections_before_flag`                                   | Rejected claims → member flagged      | 3                                                                          | Phase 7   |
 | `claims.evidence_max_bytes`                                       | Screenshot size cap                   | 10 MB                                                                      | Phase 7   |
 | `availability.max_window_hours`                                   | OD-8                                  | 12 (spec)                                                                  | Phase 8   |
@@ -269,7 +272,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | OD-6 selfie retention (rec. delete 90 days after approval)        | Phase 4     |
 | Q1 review time text                                               | Phase 4     |
 | Q4 staff access to messages                                       | Phase 5     |
-| OD-10 like cap; Q6 Saved in Relationship                          | Phase 6     |
+| ~~OD-10 like cap; Q6 Saved in Relationship~~ (decided)            | Phase 6     |
 | Q10 "Get a pass" copy (follows OD-3)                              | Phase 7     |
 | OD-8 window caps                                                  | Phase 8     |
 | OD-9 request cap + cool-down; Q2 request expiry                   | Phase 9     |

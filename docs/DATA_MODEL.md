@@ -164,6 +164,33 @@ Settings: `verification.pose_prompts`, `verification.rejections_before_escalatio
 
 Settings: `reports.auto_hide_threshold`, `reports.per_user_per_day` (T-19) — no values in the migration.
 
+### Phase 6 ✅ (`20261011000000_relationship_messaging.sql`)
+
+| Table                  | Key columns                                                                                   | Client access | Notes                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------- |
+| `likes`                | sender_id, receiver_id (unique pair, not self)                                                | none          | Cap `relationship.daily_like_cap` (OD-10) over any 24 h               |
+| `passes`               | sender_id, receiver_id (unique; re-pass refreshes the time)                                   | none          | Back in Discover after `relationship.pass_cooldown_days`              |
+| `matches`              | user_a_id < user_b_id (unique pair), status ACTIVE · UNMATCHED, unmatched by/at               | none          | Created only inside `like_user()` under a pair lock                   |
+| `conversations`        | type RELATIONSHIP · CASUAL, match_id, status OPEN · CLOSED, closed_reason UNMATCHED · BLOCKED | none          | Closed for both by unmatch or block                                   |
+| `conversation_members` | conversation_id, user_id, last_read_at                                                        | none          | Strictly two members                                                  |
+| `messages`             | conversation_id, sender_id, body (1–1000), flagged, created_at, read_at                       | none          | Pushed to members as private Realtime broadcasts (no flag in payload) |
+| `report_messages`      | report_id, message_id, sender_id, body copy, sent_at                                          | none          | The only message text staff ever see (OD-26)                          |
+
+`reports` gains `conversation_id`. Audit enum gains `REPORTED_MESSAGES_VIEWED` (OD-33). Realtime: policy `wk_conversation_members_receive` on `realtime.messages` lets an authenticated member receive broadcasts on `conversation:<id>` only while they belong to that open conversation; there is no insert policy, so clients can't broadcast.
+
+| Function                                                                                  | Callable by                 | Purpose                                                                                               |
+| ----------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `relationship_eligible(user)` / `relationship_compatible(a, b)`                           | internal                    | §15 eligibility (ACTIVE, VERIFIED, 3 approved incl. main, intent, not hidden); mutual "interested in" |
+| `discover_candidates(viewer, area, min_age, max_age, interests, limit)`                   | service_role                | Cards + main photo path for signing; excludes liked, passed (cool-down), matched, blocked             |
+| `like_user(viewer, target)` / `pass_user` / `likes_received` / `matches_list` / `unmatch` | service_role                | Atomic match on mutual like; cap; unmatch closes the conversation                                     |
+| `conversations_list` / `conversation_view` / `send_message` / `mark_conversation_read`    | service_role                | BR-5, BR-23, BR-24 checks in `can_send_in()`; flagged messages raise `MONEY_TERMS` flags without text |
+| `relationship_summary(viewer)`                                                            | service_role                | Home counts                                                                                           |
+| `submit_report` / `submit_conversation_report`                                            | service_role                | Shared `file_report()`; chat reports copy the last `reports.messages_captured` messages               |
+| `staff_report_messages(report)`                                                           | authenticated, `is_staff()` | Audits `REPORTED_MESSAGES_VIEWED`, then returns captured messages                                     |
+| `can_join_conversation_topic(topic)`                                                      | authenticated               | Realtime join check for `auth.uid()` only                                                             |
+
+Settings: `relationship.daily_like_cap` = 50 and `relationship.pass_cooldown_days` = 7 (owner, 2026-10-08); `messages.max_per_minute`, `reports.messages_captured` (T-19, no value in the migration).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |

@@ -129,6 +129,15 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Staff powers by role** (§7): moderators dismiss, resolve, note and suspend (time-limited); only admins ban and restore (`is_staff('ADMIN')`). Staff can't act on their own account or on staff accounts. Every decision writes `audit_logs` in the same transaction (BR-34); member text (report details, notes) is never copied into the audit log.
 - **Ban** (BR-6): status BANNED ends sessions and sets `banned_until` in Supabase Auth (Phase 1 trigger), and the phone's keyed hash joins `phone_blocklist`, so the number can't sign up again (BR-3). Restoring removes both.
 
+## Relationship and messaging (Phase 6)
+
+- **No client reads any chat table.** Likes, matches, conversations and messages are closed to `anon` and `authenticated`; the server calls service-role functions with the member id from the session, and every function re-checks membership, eligibility and blocks.
+- **Realtime uses private broadcast channels**, not table subscriptions. A trigger sends each new message (id, sender, body, time — never the moderation flag) to `conversation:<id>`; the `realtime.messages` policy admits only a member of that open conversation (`can_join_conversation_topic`, which answers only for `auth.uid()`). Nobody can broadcast from a client. Unmatch and block close the conversation, so it can't be joined again.
+- **Matching is atomic:** `like_user()` takes a per-pair advisory lock; the match table stores each pair once (`user_a_id < user_b_id`, unique). Proven by a concurrency test firing both likes at once.
+- **Messages:** text only, 1–1000 characters, links refused at send, rate-limited per minute. Detection runs in conversation mode (OD-31): money terms are delivered and flagged, contact details are not. Flags hold no text.
+- **Staff and message text (OD-26, OD-33):** a report from a chat copies its recent messages; staff can read only those, and each view writes `REPORTED_MESSAGES_VIEWED` before the text is returned. Message text is never logged or put in audit rows.
+- **Suspended members** read but can't send, browse or like (BR-5); members hidden by reports can't browse or send (Q26).
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,

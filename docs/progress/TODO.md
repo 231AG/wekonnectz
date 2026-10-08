@@ -12,9 +12,9 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Onboarding          | 7       | 2              | 0              | 0          |
 | Photos              | 6       | 1              | 1              | 0          |
 | Verification        | 3       | 4              | 0              | 1          |
-| Safety              | 8       | 4              | 0              | 0          |
-| Relationship mode   | 0       | 0              | 6              | 1          |
-| Messaging           | 0       | 0              | 7              | 0          |
+| Safety              | 9       | 3              | 0              | 0          |
+| Relationship mode   | 7       | 0              | 0              | 0          |
+| Messaging           | 5       | 1              | 1              | 0          |
 | Mobile money access | 0       | 0              | 11             | 1          |
 | Card subscriptions  | 0       | 0              | 4              | 1          |
 | Availability        | 0       | 0              | 6              | 1          |
@@ -22,11 +22,11 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **48**  | **16**         | **61**         | **10**     |
+| **Total**           | **61**  | **16**         | **49**         | **9**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending.
 
 ## Planning
 
@@ -111,28 +111,28 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 - ✅ Moderation flags + Flags queue (MANY_REPORTS, AGE_DOUBT) — P5
 - ✅ Reports queue with internal notes, unhide, audited decisions — P5 — BR-34
 - ✅ Member profile view with report/block in two taps; blocked list — P5
-- 🔄 Safety page (done) and in-chat reminder (P6) — P5/P6
+- ✅ Safety page and in-chat reminder — P5/P6
 - 🔄 Behaviour signals: many reports (done); bursts, duplicate text, short windows — P8/P9
 
 ## Relationship mode
 
-- ⬜ Discover feed with filters — P6 — BR-8, BR-13
-- ⬜ Like / pass with cool-down — P6
-- ⬜ Atomic match creation (ordered pair) — P6 — BR-23
-- ⬜ Likes received, Matches screens — P6
-- ⬜ Unmatch closes conversation for both — P6
-- ⬜ Daily like cap — P6 ⛔ until OD-10
-- ⬜ Home screen — P6
+- ✅ Discover feed with filters (area, age, interests; gender from "interested in" both ways) — P6 — BR-8, BR-13
+- ✅ Like / pass with cool-down (7 days, owner) — P6
+- ✅ Atomic match creation (ordered pair, concurrency-tested) — P6 — BR-23
+- ✅ Likes received, Matches screens — P6
+- ✅ Unmatch closes conversation for both — P6
+- ✅ Daily like cap (OD-10: 50 per 24 h) — P6
+- ✅ Home screen (Casual card in "get access" state until P7) — P6
 
 ## Messaging
 
-- ⬜ Conversations, members, messages tables + RLS — P6 — BR-23, BR-24
-- ⬜ Realtime channels authorised by membership — P6
-- ⬜ Text only; price/payment/money-request patterns flagged, phone numbers not flagged (OD-31) — P6 (engine ready from P2)
-- ⬜ Read receipts — P6
-- ⬜ Suspended users cannot send — P6 — BR-5
+- ✅ Conversations, members, messages tables + RLS — P6 — BR-23, BR-24
+- ✅ Realtime private channels authorised by membership — P6
+- ✅ Text only, links refused; price/payment/money-request patterns flagged, phone numbers not flagged (OD-31) — P6
+- ✅ Read receipts — P6
+- ✅ Suspended users cannot send — P6 — BR-5
 - ⬜ CASUAL conversations read-only without access — P9 — BR-25
-- ⬜ Messages list (Chats / Requests tabs) — P6/P9
+- 🔄 Messages list: Chats done; Requests tab with Casual — P6/P9
 
 ## Mobile money access
 
