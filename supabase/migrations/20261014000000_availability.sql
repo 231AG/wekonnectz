@@ -41,6 +41,8 @@ create table public.availability_windows (
   start_at   timestamptz not null,
   end_at     timestamptz not null,
   ended_at   timestamptz,
+  -- Closed because the member set a new window (a change of plan, not a short window, §17).
+  replaced   boolean not null default false,
   created_at timestamptz not null default clock_timestamp(),
   constraint availability_windows_period check (end_at > start_at)
 );
@@ -134,6 +136,7 @@ begin
   end if;
   select count(*) into v_count from public.availability_windows w
   where w.user_id = p_user and w.created_at > now() - interval '24 hours'
+    and not w.replaced                                               -- a change of plan isn't a short window
     and (w.ended_at is null or w.ended_at > w.start_at)              -- a schedule changed before it began isn't a window
     and least(coalesce(w.ended_at, w.end_at), w.end_at) - w.start_at < make_interval(mins => v_minutes);
   if v_count >= v_limit then
@@ -143,13 +146,13 @@ end;
 $$;
 
 -- Ends the open history row (left the pool, replaced, or tidied).
-create or replace function public.close_availability_window(p_user uuid)
+create or replace function public.close_availability_window(p_user uuid, p_replaced boolean default false)
 returns void
 language sql
 security definer
 set search_path = ''
 as $$
-  update public.availability_windows set ended_at = now()
+  update public.availability_windows set ended_at = now(), replaced = p_replaced
   where user_id = p_user and ended_at is null and end_at > now();
 $$;
 
@@ -201,16 +204,11 @@ begin
   if v_start >= public.casual_access_until(p_user) then
     raise exception 'PASS_ENDS_FIRST' using errcode = '22023';
   end if;
-  select (value #>> '{}')::int into v_limit from public.app_settings
-  where key = 'availability.max_changes_per_hour' and value is not null;
-  if v_limit is not null and (select count(*) from public.availability_windows
-                              where user_id = p_user and created_at > now() - interval '1 hour') >= v_limit then
-    raise exception 'TOO_MANY_CHANGES' using errcode = '22023';
-  end if;
-
   select * into v_current from public.availability where user_id = p_user;
-  if v_start = now() and v_current.status = 'AVAILABLE' and v_current.start_at <= now() and v_current.end_at > now() then
-    -- Changing the end of a live window: still the same window (history row extended, start kept).
+  if v_start = now() and v_current.status in ('AVAILABLE', 'PAUSED') and v_current.start_at <= now()
+     and v_current.end_at > now() then
+    -- Changing the end of a live window: still the same window (history row extended, start kept, a
+    -- paused window stays paused).
     v_start := v_current.start_at;
     if p_end - v_start > make_interval(hours => v_hours) then
       raise exception 'WINDOW_TOO_LONG' using errcode = '22023';
@@ -219,7 +217,13 @@ begin
     update public.availability_windows set end_at = p_end
     where user_id = p_user and ended_at is null and start_at = v_current.start_at;
   else
-    perform public.close_availability_window(p_user);
+    select (value #>> '{}')::int into v_limit from public.app_settings
+    where key = 'availability.max_changes_per_hour' and value is not null;
+    if v_limit is not null and (select count(*) from public.availability_windows
+                                where user_id = p_user and created_at > now() - interval '1 hour') >= v_limit then
+      raise exception 'TOO_MANY_CHANGES' using errcode = '22023';
+    end if;
+    perform public.close_availability_window(p_user, true);
     insert into public.availability (user_id, status, start_at, end_at)
     values (p_user, 'AVAILABLE', v_start, p_end)
     on conflict (user_id) do update set status = 'AVAILABLE', start_at = excluded.start_at, end_at = excluded.end_at;
@@ -347,7 +351,7 @@ $$;
 revoke all on function public.casual_ineligibility(uuid, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.is_in_pool(uuid, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.check_short_windows(uuid) from public, anon, authenticated, service_role;
-revoke all on function public.close_availability_window(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.close_availability_window(uuid, boolean) from public, anon, authenticated, service_role;
 revoke all on function public.set_availability(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function public.pause_availability(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.leave_pool(uuid) from public, anon, authenticated;

@@ -49,6 +49,8 @@ export async function saveAvailability(
   const end =
     parsed.data.mode === "now" ? endFromClockTime(parsed.data.endTime, new Date()) : parseLiberiaLocal(parsed.data.end);
   const local = checkWindow(start, end, new Date(), { maxWindowHours: null, maxLeadDays: null });
+  if (!end && parsed.data.mode === "now" && parsed.data.endTime)
+    return { error: "That time has just passed. Choose a later time." };
   if (local || !end) return { error: MESSAGES[local ?? "END_REQUIRED"] };
   const error = await setWindow(member.id, start, end);
   if (error) return { error: MESSAGES[error] ?? GENERIC };

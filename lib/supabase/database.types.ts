@@ -96,13 +96,13 @@ isOneToOne: true
                   ]
                 },"availability_windows": {
                   Row: {
-                    "created_at": string,"end_at": string,"ended_at": string | null,"id": string,"start_at": string,"user_id": string
+                    "created_at": string,"end_at": string,"ended_at": string | null,"id": string,"replaced": boolean,"start_at": string,"user_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"end_at": string,"ended_at"?: string | null,"id"?: string,"start_at": string,"user_id": string
+                    "created_at"?: string,"end_at": string,"ended_at"?: string | null,"id"?: string,"replaced"?: boolean,"start_at": string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"end_at"?: string,"ended_at"?: string | null,"id"?: string,"start_at"?: string,"user_id"?: string
+                    "created_at"?: string,"end_at"?: string,"ended_at"?: string | null,"id"?: string,"replaced"?: boolean,"start_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -986,7 +986,7 @@ isOneToOne: false
 { Args: { "p_user_id": string,"p_verification_id": string }; Returns: boolean
                            },
 "close_availability_window":
-{ Args: { "p_user": string }; Returns: undefined
+{ Args: { "p_replaced"?: boolean,"p_user": string }; Returns: undefined
                            },
 "close_pair":
 { Args: { "p_actor": string,"p_other": string,"p_reason": string }; Returns: undefined
