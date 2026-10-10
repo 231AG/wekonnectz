@@ -11,6 +11,8 @@ import type { Database } from "@/lib/supabase/database.types";
 /** Largest webhook body accepted; processors send a few KB. */
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 
+let misconfigReported = false;
+
 /** The configured processor, or null when none is (OD-4). */
 export function getCardProcessor(): CardProcessor | null {
   const env = serverEnv();
@@ -20,7 +22,10 @@ export function getCardProcessor(): CardProcessor | null {
       // runs on any Vercel deployment (production or preview).
       if (env.VERCEL || env.ALLOW_FAKE_CARD_PROCESSOR !== "1") {
         // Misconfigured deployment: card payments stay off (fail closed) without taking pages down.
-        Sentry.captureMessage("The fake card processor runs only locally; card payments are off", { level: "error" });
+        if (!misconfigReported) {
+          misconfigReported = true;
+          Sentry.captureMessage("The fake card processor runs only locally; card payments are off", { level: "error" });
+        }
         return null;
       }
       if (!env.FAKE_CARD_WEBHOOK_SECRET) return null;
@@ -88,6 +93,7 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
   if (d.cancel_at_processor && event.subscriptionRef) {
     try {
       await processor.cancelAtPeriodEnd(event.subscriptionRef);
+      await admin.rpc("mark_processor_cancelled", { p_processor: processor.id, p_ref: event.subscriptionRef });
     } catch (e) {
       Sentry.captureException(e);
       return { status: 500 };

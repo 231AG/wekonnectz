@@ -18,6 +18,7 @@ export interface CardProcessor {
   }): Promise<{ url: string }>;
   /** Signature (and replay window) check first. Null when the delivery can't be trusted. */
   verifyWebhook(headers: Headers, rawBody: string): VerifiedEvent | null;
+  /** Stop renewals. Must succeed (not throw) when the subscription is already cancelled or ended. */
   cancelAtPeriodEnd(processorSubscriptionId: string): Promise<void>;
   getManageUrl?(customerRef: string): Promise<string>;
 }

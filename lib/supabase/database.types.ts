@@ -717,13 +717,13 @@ isOneToOne: false
                   ]
                 },"subscriptions": {
                   Row: {
-                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"grace_for_period_end": string | null,"id": string,"last_event_at": string | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
+                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"grace_for_period_end": string | null,"id": string,"last_dispute_event_at": string | null,"last_event_at": string | null,"locked_price": number | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_cancelled_at": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"grace_for_period_end"?: string | null,"id"?: string,"last_dispute_event_at"?: string | null,"last_event_at"?: string | null,"locked_price"?: number | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"grace_for_period_end"?: string | null,"id"?: string,"last_dispute_event_at"?: string | null,"last_event_at"?: string | null,"locked_price"?: number | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -906,6 +906,9 @@ isOneToOne: false
 "cancel_payment_claim":
 { Args: { "p_claim": string,"p_user": string }; Returns: undefined
                            },
+"card_cancel_needed":
+{ Args: { "p_processor": string,"p_ref": string }; Returns: boolean
+                           },
 "card_event_transition":
 { Args: { "p_at": string,"p_event": Json,"p_processor": string }; Returns: string
                            },
@@ -1079,6 +1082,9 @@ isOneToOne: false
                            },
 "mark_notifications_read":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"mark_processor_cancelled":
+{ Args: { "p_processor": string,"p_ref": string }; Returns: undefined
                            },
 "mark_selfies_deleted":
 { Args: { "p_verification_ids": (string)[] }; Returns: number

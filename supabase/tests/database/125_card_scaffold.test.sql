@@ -1,7 +1,7 @@
 -- Phase 7b: card subscriptions scaffold (spec §16, §22; BR-26 card, BR-29, BR-40, BR-41; OD-19, OD-20).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(97);
+select plan(104);
 
 -- Fixtures (fictional): Musu, Hawa, Kebeh verified ACTIVE members; Siah not verified.
 insert into auth.users (id, phone, email, aud, role) values
@@ -136,8 +136,8 @@ select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000001', n
   'BR-40: access ends when the grace period ends');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_5', 'RENEWAL_FAILED', now() - interval '5 minutes',
   '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_GRACE_USED', 'a failed retry does not extend the grace period');
-select is(public.apply_card_event('fake', pg_temp.ev('evt_old', 'CANCEL_SCHEDULED', now() - interval '20 minutes',
-  '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_STALE', 'an event older than the last one applied is stale');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_old', 'RENEWAL_FAILED', now() - interval '20 minutes',
+  '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_STALE', 'a failure older than the last event applied is stale');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_6', 'RENEWAL_SUCCEEDED', now() - interval '4 minutes',
   jsonb_build_object('subscription_ref', 'sub_musu', 'charge_id', 'ch_3', 'amount', 3.00, 'currency', 'USD',
                      'period_end', now() + interval '20 days 23 hours'))) ->> 'result', 'RENEWED', 'a successful retry recovers');
@@ -329,6 +329,23 @@ select is(public.apply_card_event('fake', pg_temp.ev('evt_m_closed', 'DISPUTE_CL
   'IGNORED_STATE', 'a dispute closed before it was opened (out of order) is ignored');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_m_opened', 'DISPUTE_OPENED', now() - interval '1 minute', '{"subscription_ref":"sub_hawa"}')) ->> 'result',
   'IGNORED_STALE', 'and the older "opened" arriving afterwards no longer suspends it');
+
+-- Self-audit round 3: a dispute opened before a later charge still applies; a lost dispute refunds
+-- whatever the state; the cancel request stops once the processor confirmed it.
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2won', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2","won":true}')) ->> 'result',
+  'RESTORED', 'dispute won');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d2', 'DISPUTE_OPENED', now() - interval '2 days', '{"subscription_ref":"sub_k2"}')) ->> 'result',
+  'IGNORED_STALE', 'dispute events are ordered among themselves');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(),
+  '{"subscription_ref":"sub_k2","won":false,"charge_id":"ch_k2r3"}')) ->> 'result', 'REFUNDED',
+  'a lost dispute ends access even if the "opened" event never suspended it');
+select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000004', now() + interval '8 days'),
+  'no card access after a lost dispute (the mobile money pass has ended by then)');
+select is((public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2"}')) ->> 'cancel_at_processor')::boolean, true,
+  'renewals must be stopped at the processor');
+select lives_ok($$ select public.mark_processor_cancelled('fake', 'sub_k2') $$, 'the server records the processor confirmed');
+select is((public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2"}')) ->> 'cancel_at_processor')::boolean, false,
+  'and stops asking (no endless retries)');
 
 -- ---------------------------------------------------------------------------
 -- Invalid signatures, renewal reminders, tidy job, account purge
