@@ -1,7 +1,7 @@
 -- Phase 8: availability (spec §12, §13 exclusions, §17 signals; BR-15, BR-17, BR-18, BR-19, BR-20; OD-8).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(68);
+select plan(70);
 
 -- Fixtures (fictional): Musu (Casual, will hold a pass), Hawa (Casual, no pass), Kemah (Relationship only),
 -- Siah (Casual, not verified).
@@ -217,6 +217,18 @@ select lives_ok($$ select public.pause_availability('cccccccc-8000-0000-0000-000
 select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '3 hours') $$, 'end changed while paused');
 select is(public.member_availability('cccccccc-8000-0000-0000-000000000001') ->> 'status', 'PAUSED', 'still paused, hidden from the pool');
 reset role;
+
+-- Round 3: going available, then switching to a schedule after a few minutes, counts as a short stint.
+reset role;
+delete from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001' and reason = 'SHORT_WINDOWS';
+update public.availability_windows set start_at = start_at - interval '1 minute'
+where user_id = 'cccccccc-8000-0000-0000-000000000001' and ended_at is null;
+set local role service_role;
+select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', now() + interval '1 hour', now() + interval '2 hours') $$,
+  'live window replaced by a schedule');
+reset role;
+select is((select count(*)::int from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001'
+           and reason = 'SHORT_WINDOWS' and status = 'OPEN'), 1, '§17: a started window replaced early still counts as short');
 
 -- Tidy job records what the query already enforces.
 select pg_temp.give_pass('cccccccc-8000-0000-0000-000000000002', 6);

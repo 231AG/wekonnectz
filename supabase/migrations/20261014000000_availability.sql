@@ -41,8 +41,6 @@ create table public.availability_windows (
   start_at   timestamptz not null,
   end_at     timestamptz not null,
   ended_at   timestamptz,
-  -- Closed because the member set a new window (a change of plan, not a short window, §17).
-  replaced   boolean not null default false,
   created_at timestamptz not null default clock_timestamp(),
   constraint availability_windows_period check (end_at > start_at)
 );
@@ -113,9 +111,9 @@ as $$
      and cardinality(public.casual_ineligibility(p_user, p_at)) = 0;
 $$;
 
--- §17 behaviour signal: many short windows in 24 hours, by the time actually spent in the pool (leaving
--- early counts; changing a schedule before it starts doesn't, and extending a live window keeps one
--- window). Skipped while T-19 has no values.
+-- §17 behaviour signal: many short windows in 24 hours, by the time actually spent in the pool. Leaving
+-- or replacing a started window early counts; a schedule changed before it starts doesn't; changing the
+-- end of a live window keeps one window. Skipped while T-19 has no values.
 create or replace function public.check_short_windows(p_user uuid)
 returns void
 language plpgsql
@@ -136,7 +134,6 @@ begin
   end if;
   select count(*) into v_count from public.availability_windows w
   where w.user_id = p_user and w.created_at > now() - interval '24 hours'
-    and not w.replaced                                               -- a change of plan isn't a short window
     and (w.ended_at is null or w.ended_at > w.start_at)              -- a schedule changed before it began isn't a window
     and least(coalesce(w.ended_at, w.end_at), w.end_at) - w.start_at < make_interval(mins => v_minutes);
   if v_count >= v_limit then
@@ -146,13 +143,13 @@ end;
 $$;
 
 -- Ends the open history row (left the pool, replaced, or tidied).
-create or replace function public.close_availability_window(p_user uuid, p_replaced boolean default false)
+create or replace function public.close_availability_window(p_user uuid)
 returns void
 language sql
 security definer
 set search_path = ''
 as $$
-  update public.availability_windows set ended_at = now(), replaced = p_replaced
+  update public.availability_windows set ended_at = now()
   where user_id = p_user and ended_at is null and end_at > now();
 $$;
 
@@ -223,7 +220,7 @@ begin
                                 where user_id = p_user and created_at > now() - interval '1 hour') >= v_limit then
       raise exception 'TOO_MANY_CHANGES' using errcode = '22023';
     end if;
-    perform public.close_availability_window(p_user, true);
+    perform public.close_availability_window(p_user);
     insert into public.availability (user_id, status, start_at, end_at)
     values (p_user, 'AVAILABLE', v_start, p_end)
     on conflict (user_id) do update set status = 'AVAILABLE', start_at = excluded.start_at, end_at = excluded.end_at;
@@ -351,7 +348,7 @@ $$;
 revoke all on function public.casual_ineligibility(uuid, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.is_in_pool(uuid, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.check_short_windows(uuid) from public, anon, authenticated, service_role;
-revoke all on function public.close_availability_window(uuid, boolean) from public, anon, authenticated, service_role;
+revoke all on function public.close_availability_window(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.set_availability(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function public.pause_availability(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.leave_pool(uuid) from public, anon, authenticated;
