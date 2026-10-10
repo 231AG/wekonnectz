@@ -16,7 +16,10 @@ on conflict (key) do nothing;
 alter table public.app_settings
   add column kind text not null default 'int' check (kind in ('int', 'bool', 'object', 'array', 'enum')),
   add column allowed jsonb,
-  add column super_admin_only boolean not null default false;
+  add column super_admin_only boolean not null default false,
+  add column min_value integer,
+  add column max_value integer;
+alter type public.audit_action add value if not exists 'STAFF_PASSWORD_CHANGED';
 update public.app_settings set kind = 'bool' where key in ('card.allow_during_mobile_money_pass');
 update public.app_settings set kind = 'object' where key in ('claims.transaction_id_patterns', 'detection.terms');
 update public.app_settings set kind = 'array' where key in ('verification.pose_prompts');
@@ -24,7 +27,14 @@ update public.app_settings set kind = 'enum', allowed = '["SIGNUP_ONLY", "EVERY_
 update public.app_settings set super_admin_only = true
 where key in ('geo.enforcement_mode', 'photos.min_required', 'otp.max_per_phone_per_hour', 'otp.max_per_ip_per_hour',
               'staff_login.max_per_ip_per_hour', 'staff_login.max_per_account_per_hour',
-              'staff_login.max_per_account_all_ips_per_hour', 'account.deletion_purge_days');
+              'staff_login.max_per_account_all_ips_per_hour', 'account.deletion_purge_days',
+              -- Access-granting limits: an ADMIN can't widen their own extension cap or the card grace.
+              'subscriptions.manual_extension_max_days', 'card.grace_hours');
+-- Every number setting is a count, length or limit: 0 would switch a feature off for everyone.
+update public.app_settings set min_value = 1 where kind = 'int';
+update public.app_settings set max_value = 30 where key = 'subscriptions.manual_extension_max_days';
+update public.app_settings set max_value = 168 where key = 'card.grace_hours';
+update public.app_settings set min_value = 3, max_value = 12 where key in ('photos.min_required', 'photos.max_per_user');
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -218,7 +228,7 @@ begin
     raise exception 'REASON_REQUIRED' using errcode = '22023';
   end if;
   if not exists (select 1 from public.profiles p join public.users u on u.id = p.user_id
-                 where p.user_id = p_user and u.role = 'USER') then
+                 where p.user_id = p_user and u.role = 'USER' and u.status <> 'DELETED') then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
   perform set_config('app.dob_correction', 'on', true);
@@ -230,9 +240,10 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- Subscriptions (§21; OD-30): list, and extend an existing subscription with a reason. Never creates
--- access: only a subscription that is still running can be extended, capped per extension.
+-- access: only a running mobile money pass can be extended, capped in total per subscription.
 -- ---------------------------------------------------------------------------
-create or replace function public.staff_subscriptions(p_status public.subscription_status default null, p_limit integer default 100)
+create or replace function public.staff_subscriptions(p_status public.subscription_status default null, p_limit integer default 100,
+                                                      p_id uuid default null)
 returns table (subscription_id uuid, user_id uuid, display_name text, plan text, source public.payment_source,
                status public.subscription_status, starts_at timestamptz, expires_at timestamptz, cancel_at_period_end boolean)
 language plpgsql
@@ -247,7 +258,7 @@ begin
     from public.subscriptions s
     join public.subscription_plans pl on pl.id = s.plan_id
     left join public.profiles p on p.user_id = s.user_id
-    where (p_status is null or s.status = p_status) and s.status <> 'PENDING'
+    where (p_status is null or s.status = p_status) and s.status <> 'PENDING' and (p_id is null or s.id = p_id)
     order by s.created_at desc
     limit least(greatest(coalesce(p_limit, 100), 1), 500);
 end;
@@ -275,6 +286,24 @@ begin
      or v_sub.starts_at > now() then
     raise exception 'NOT_EXTENDABLE' using errcode = '22023';
   end if;
+  -- A card period belongs to the processor: its next renewal or failure would undo the change.
+  if v_sub.source = 'CARD' then
+    raise exception 'CARD_EXTEND_AT_PROCESSOR' using errcode = '22023';
+  end if;
+  if (select status from public.users where id = v_sub.user_id) in ('BANNED', 'DELETED') then
+    raise exception 'MEMBER_NOT_AVAILABLE' using errcode = '22023';
+  end if;
+  -- BR-28: with a pass stacked behind this one the added days would overlap it; extend the last one.
+  if exists (select 1 from public.subscriptions s where s.user_id = v_sub.user_id and s.id <> v_sub.id
+             and s.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED') and s.expires_at > v_sub.expires_at) then
+    raise exception 'EXTEND_LAST_PASS' using errcode = '22023';
+  end if;
+  -- OD-30 caps the total added to one subscription, not each click.
+  if p_days + coalesce((select sum((l.metadata ->> 'days')::int) from public.audit_logs l
+                        where l.action = 'SUBSCRIPTION_MODIFIED' and l.entity_id = v_sub.id::text), 0)
+     > (public.get_setting('subscriptions.manual_extension_max_days'))::int then
+    raise exception 'EXTENSION_OUT_OF_RANGE' using errcode = '22023';
+  end if;
   v_to := v_sub.expires_at + make_interval(days => p_days);
   perform set_config('wk.subscription_admin', 'on', true);
   update public.subscriptions set expires_at = v_to, updated_at = now() where id = v_sub.id;
@@ -291,7 +320,8 @@ $$;
 create or replace function public.staff_payments(p_source public.payment_source default null,
                                                  p_status public.payment_status default null,
                                                  p_needs_refund boolean default false,
-                                                 p_limit integer default 100)
+                                                 p_limit integer default 100,
+                                                 p_id uuid default null)
 returns table (payment_id uuid, user_id uuid, display_name text, plan text, source public.payment_source,
                provider public.payment_provider, transaction_id text, amount numeric, currency text,
                status public.payment_status, paid_at timestamptz, needs_refund boolean)
@@ -312,6 +342,7 @@ begin
       join public.subscription_plans pl on pl.id = pay.plan_id
       left join public.profiles p on p.user_id = pay.user_id
       where (p_source is null or pay.source = p_source) and (p_status is null or pay.status = p_status)
+        and (p_id is null or pay.id = p_id)
       order by pay.created_at desc
     ) x
     where not coalesce(p_needs_refund, false) or x.nr
@@ -360,7 +391,7 @@ $$;
 
 -- A refund paid out (by wallet transfer or in the card processor's dashboard) is recorded here: the
 -- payment's status becomes REFUNDED (logged by its trigger, with the admin as actor) and the access it
--- paid for ends. Card renewals then stop at the processor (card_cancel_needed).
+-- paid for ends. For a card, the server then stops renewals at the processor (card_stops_due).
 create or replace function public.staff_record_refund(p_payment uuid, p_reason text)
 returns void
 language plpgsql
@@ -414,8 +445,8 @@ begin
     select d::date,
       (select count(*) from public.users u where u.role = 'USER' and u.created_at::date = d::date),
       (select count(*) from public.verifications v where v.status = 'VERIFIED' and v.reviewed_at::date = d::date),
-      (select count(*) from public.payments p where p.source = 'MOBILE_MONEY' and p.paid_at::date = d::date),
-      (select count(*) from public.payments p where p.source = 'CARD' and p.paid_at::date = d::date),
+      (select count(*) from public.payments p where p.source = 'MOBILE_MONEY' and p.status = 'SUCCEEDED' and p.paid_at::date = d::date),
+      (select count(*) from public.payments p where p.source = 'CARD' and p.status = 'SUCCEEDED' and p.paid_at::date = d::date),
       coalesce((select sum(p.amount) from public.payments p where p.status = 'SUCCEEDED' and p.paid_at::date = d::date), 0),
       (select count(*) from public.likes l where l.created_at::date = d::date),
       (select count(*) from public.matches m where m.created_at::date = d::date),
@@ -473,7 +504,7 @@ $$;
 -- ---------------------------------------------------------------------------
 create or replace function public.staff_settings()
 returns table (key text, value jsonb, description text, kind text, allowed jsonb, super_admin_only boolean,
-               updated_at timestamptz, updated_by text)
+               updated_at timestamptz, updated_by text, min_value integer, max_value integer)
 language plpgsql
 stable
 security definer
@@ -482,7 +513,8 @@ as $$
 begin
   perform public.require_staff('ADMIN');
   return query
-    select s.key, s.value, s.description, s.kind, s.allowed, s.super_admin_only, s.updated_at, au.email::text
+    select s.key, s.value, s.description, s.kind, s.allowed, s.super_admin_only, s.updated_at, au.email::text,
+           s.min_value, s.max_value
     from public.app_settings s
     left join auth.users au on au.id = s.updated_by
     order by s.key;
@@ -509,13 +541,37 @@ begin
   end if;
   v_ok := case v_row.kind
     when 'int' then jsonb_typeof(p_value) = 'number' and (p_value #>> '{}')::numeric = trunc((p_value #>> '{}')::numeric)
-                    and (p_value #>> '{}')::numeric between 0 and 1000000
+                    and (p_value #>> '{}')::numeric between coalesce(v_row.min_value, 0) and coalesce(v_row.max_value, 1000000)
     when 'bool' then jsonb_typeof(p_value) = 'boolean'
     when 'object' then jsonb_typeof(p_value) = 'object'
     when 'array' then jsonb_typeof(p_value) = 'array' and jsonb_array_length(p_value) > 0
     when 'enum' then jsonb_typeof(p_value) = 'string' and v_row.allowed ? (p_value #>> '{}')
     else false
   end;
+  -- Contents, not just shape, for the settings code depends on.
+  if coalesce(v_ok, false) and v_row.kind = 'array' then
+    v_ok := not exists (select 1 from jsonb_array_elements(p_value) e
+                        where jsonb_typeof(e) <> 'string' or length(btrim(e #>> '{}')) not between 3 and 200);
+  end if;
+  if coalesce(v_ok, false) and p_key = 'claims.transaction_id_patterns' then
+    v_ok := (select array_agg(k order by k) from jsonb_object_keys(p_value) k) = array['MTN_MOMO', 'ORANGE_MONEY']
+            and not exists (select 1 from jsonb_each(p_value) e
+                            where jsonb_typeof(e.value) <> 'string' or length(e.value #>> '{}') not between 2 and 200);
+    if v_ok then
+      begin
+        perform 'probe' ~ (e.value #>> '{}') from jsonb_each(p_value) e;
+      exception when others then
+        v_ok := false;
+      end;
+    end if;
+  end if;
+  if coalesce(v_ok, false) and p_key = 'detection.terms' then
+    v_ok := (v_row.value is null or (select array_agg(k order by k) from jsonb_object_keys(p_value) k)
+                                    = (select array_agg(k order by k) from jsonb_object_keys(v_row.value) k))
+            and not exists (select 1 from jsonb_each(p_value) e where jsonb_typeof(e.value) <> 'array')
+            and not exists (select 1 from jsonb_each(p_value) e, jsonb_array_elements(e.value) t
+                            where jsonb_typeof(t) <> 'string' or length(btrim(t #>> '{}')) not between 1 and 60);
+  end if;
   if not coalesce(v_ok, false) then
     raise exception 'INVALID_VALUE' using errcode = '22023';
   end if;
@@ -557,6 +613,11 @@ declare
   v_id  uuid;
 begin
   perform public.require_staff('ADMIN');
+  -- Card checkouts charge the processor's price: a card plan needs its price ID, and a new price needs a
+  -- new price ID (created at the processor first).
+  if p_source = 'CARD' and nullif(btrim(coalesce(p_processor_price_id, '')), '') is null then
+    raise exception 'PRICE_ID_REQUIRED' using errcode = '22023';
+  end if;
   if p_plan_id is null then
     insert into public.subscription_plans (code, name, source, duration_hours, price, renews, processor_price_id, active, sort_order)
     values (p_code, p_name, p_source, p_duration_hours, p_price, p_source = 'CARD', nullif(btrim(p_processor_price_id), ''),
@@ -566,6 +627,17 @@ begin
     select to_jsonb(p) into v_old from public.subscription_plans p where id = p_plan_id for update;
     if v_old is null then
       raise exception 'PLAN_NOT_FOUND' using errcode = 'P0002';
+    end if;
+    if v_old ->> 'source' = 'CARD' and (v_old ->> 'price')::numeric <> p_price
+       and coalesce(v_old ->> 'processor_price_id', '') = btrim(coalesce(p_processor_price_id, '')) then
+      raise exception 'PRICE_ID_REQUIRED' using errcode = '22023';
+    end if;
+    -- A plan's length is what members paid for (claims waiting and running card periods use it):
+    -- once used it doesn't change; add a new plan instead.
+    if (v_old ->> 'duration_hours')::int <> p_duration_hours
+       and (exists (select 1 from public.subscriptions where plan_id = p_plan_id)
+            or exists (select 1 from public.payment_claims where plan_id = p_plan_id)) then
+      raise exception 'PLAN_IN_USE' using errcode = '22023';
     end if;
     -- The code and source identify the plan everywhere; they don't change.
     update public.subscription_plans
@@ -828,6 +900,11 @@ begin
     raise exception 'CANNOT_DELETE' using errcode = '22023';
   end if;
   perform public.leave_pool(p_user);
+  -- A card checkout still open can't start a plan on a deleted account: if it is paid anyway, the
+  -- charge goes to the refund list and renewals are stopped (Phase 7b closed-checkout path).
+  perform set_config('wk.card_event', 'on', true);
+  update public.subscriptions set status = 'EXPIRED', updated_at = now() where user_id = p_user and status = 'PENDING';
+  perform set_config('wk.card_event', 'off', true);
   update public.message_requests set status = 'EXPIRED'
   where status = 'PENDING' and (sender_id = p_user or recipient_id = p_user);
   update public.matches set status = 'UNMATCHED', unmatched_by = p_user, unmatched_at = now()
@@ -869,9 +946,13 @@ as $$
                                                                    'reviewed_at', v.reviewed_at) order by v.created_at)
                                from public.verifications v where v.user_id = p_user), '[]'::jsonb),
     'likes_sent', (select count(*) from public.likes l where l.sender_id = p_user),
-    'matches', coalesce((select jsonb_agg(jsonb_build_object('with', public.member_card(case when m.user_a_id = p_user then m.user_b_id else m.user_a_id end) ->> 'display_name',
+    -- BR-7: no name for a member who has since been deleted or banned.
+    'matches', coalesce((select jsonb_agg(jsonb_build_object('with', case when o.status in ('DELETED', 'BANNED') then null else op.display_name end,
                                                              'status', m.status, 'created_at', m.created_at) order by m.created_at)
-                         from public.matches m where m.user_a_id = p_user or m.user_b_id = p_user), '[]'::jsonb),
+                         from public.matches m
+                         join public.users o on o.id = case when m.user_a_id = p_user then m.user_b_id else m.user_a_id end
+                         left join public.profiles op on op.user_id = o.id
+                         where m.user_a_id = p_user or m.user_b_id = p_user), '[]'::jsonb),
     'messages_sent', coalesce((select jsonb_agg(jsonb_build_object('conversation_id', x.conversation_id, 'body', x.body,
                                                                    'created_at', x.created_at) order by x.created_at)
                                from public.messages x where x.sender_id = p_user), '[]'::jsonb),
@@ -902,7 +983,8 @@ as $$
 $$;
 
 -- OD-7: deleted accounts past the retention period, with the files to remove before the account row
--- goes. Payments, claims, reports and audit rows stay (unlinked). Nothing is due while OD-7 is unset.
+-- goes. Payments, claims, payment events, reports (about and by the member) and audit rows stay,
+-- unlinked. Nothing is due while OD-7 is unset.
 create or replace function public.accounts_due_for_purge(p_limit integer default 50)
 returns table (user_id uuid, photo_paths text[], selfie_paths text[])
 language sql
@@ -919,6 +1001,8 @@ as $$
   cross join (select (value #>> '{}')::int as days from public.app_settings
               where key = 'account.deletion_purge_days' and value is not null) r
   where u.status = 'DELETED' and u.role = 'USER' and u.deleted_at < now() - make_interval(days => r.days)
+    -- Open reports against the member are decided first (staff may still ban the account).
+    and not exists (select 1 from public.reports rp where rp.reported_user_id = u.id and rp.status = 'OPEN')
   order by u.deleted_at
   limit least(greatest(coalesce(p_limit, 50), 1), 200);
 $$;
@@ -943,6 +1027,151 @@ begin
 end;
 $$;
 
+-- Reports outlive a purged account (unlinked), so the history and staff notes are kept.
+alter table public.reports alter column reported_user_id drop not null;
+alter table public.reports drop constraint reports_reported_user_id_fkey,
+  add constraint reports_reported_user_id_fkey foreign key (reported_user_id) references public.users(id) on delete set null;
+
+-- A ban also reaches an account its owner deleted before staff decided its reports (otherwise deleting
+-- would dodge the phone blocklist). Same as Phase 5 otherwise.
+create or replace function public.ban_user(p_target uuid, p_reason text, p_report_id uuid default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_phone text;
+begin
+  if not public.is_staff('ADMIN') then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+  perform public.assert_staff_target(p_target);
+  if p_reason is null or p_reason !~ '^[A-Z_]{3,40}$' then
+    raise exception 'REASON_REQUIRED' using errcode = '22023';
+  end if;
+  update public.users set status = 'BANNED', suspended_until = null
+  where id = p_target and status in ('PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED');
+  if not found then
+    raise exception 'ACCOUNT_NOT_BANNABLE' using errcode = '22023';
+  end if;
+  select nullif(phone, '') into v_phone from auth.users where id = p_target;
+  if v_phone is not null then
+    insert into public.phone_blocklist (phone_hash, reason, created_by)
+    values (public.phone_hash(v_phone), p_reason, auth.uid())
+    on conflict (phone_hash) do nothing;
+  end if;
+  perform public.audit('USER_BANNED', 'user', p_target::text,
+    jsonb_strip_nulls(jsonb_build_object('reason', p_reason, 'report_id', public.report_about(p_report_id, p_target))));
+end;
+$$;
+
+-- Lifting a ban on an account its owner had deleted returns it to DELETED (never back to life).
+create or replace function public.restore_user(p_target uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_was   public.account_status;
+  v_until timestamptz;
+  v_phone text;
+begin
+  if not public.is_staff('ADMIN') then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+  perform public.assert_staff_target(p_target);
+  select public.effective_account_status(status, suspended_until), suspended_until into v_was, v_until
+  from public.users where id = p_target for update;
+  if (select status from public.users where id = p_target) = 'BANNED' then
+    select nullif(phone, '') into v_phone from auth.users where id = p_target;
+    if v_phone is not null then
+      delete from public.phone_blocklist where phone_hash = public.phone_hash(v_phone);
+    end if;
+    if (select deleted_at from public.users where id = p_target) is not null then
+      update public.users set status = 'DELETED', suspended_until = null where id = p_target;
+    else
+      update public.users set status = 'PENDING', suspended_until = null where id = p_target;
+      perform public.recompute_account_state(p_target);
+    end if;
+  elsif exists (select 1 from public.users where id = p_target and suspended_until > now()) then
+    update public.users set suspended_until = null,
+                            status = case when status = 'SUSPENDED' then 'ACTIVE' else status end
+    where id = p_target;
+  else
+    raise exception 'NOTHING_TO_RESTORE' using errcode = '22023';
+  end if;
+  perform public.audit('USER_RESTORED', 'user', p_target::text,
+    jsonb_strip_nulls(jsonb_build_object('from', v_was, 'suspended_until', case when v_until > now() then v_until end)));
+end;
+$$;
+
+-- BR-7: a deleted member no longer appears in anyone's blocked list.
+create or replace function public.member_blocked_list(p_user_id uuid)
+returns table (user_id uuid, display_name text, blocked_at timestamptz)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select b.blocked_id, p.display_name, b.created_at
+  from public.blocks b
+  join public.users u on u.id = b.blocked_id and u.status <> 'DELETED'
+  left join public.profiles p on p.user_id = b.blocked_id
+  where b.blocker_id = p_user_id
+  order by b.created_at desc;
+$$;
+
+-- Card renewals must stop for an account that is deleted or banned, whatever the subscription's state.
+create or replace function public.card_cancel_needed(p_processor text, p_ref text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(p_ref, '') <> '' and exists (
+    select 1 from public.subscriptions s
+    where s.processor = p_processor and s.processor_subscription_id = p_ref
+      and s.processor_cancelled_at is null
+      and (s.status = 'REFUNDED'
+           or exists (select 1 from public.users u where u.id = s.user_id and u.status in ('DELETED', 'BANNED'))
+           or exists (select 1 from public.payment_events e
+                      where e.type = 'CARD_NEEDS_REFUND' and e.processor = p_processor
+                        and e.raw_payload ->> 'subscription_ref' = p_ref))
+  );
+$$;
+
+-- The member's processor subscriptions whose renewals we haven't stopped: all of them (before an
+-- account is deleted), or only those card_cancel_needed() asks for (after a refund is recorded).
+create or replace function public.card_stops_due(p_user uuid, p_all boolean default false)
+returns table (processor text, processor_subscription_id text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select distinct s.processor, s.processor_subscription_id
+  from public.subscriptions s
+  where s.user_id = p_user and s.source = 'CARD' and s.processor_subscription_id is not null
+    and s.processor_cancelled_at is null
+    and (p_all or public.card_cancel_needed(s.processor, s.processor_subscription_id));
+$$;
+
+-- Your account: a staff password change is recorded (§22: sensitive staff actions audited).
+create or replace function public.staff_log_password_change()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.require_staff('MODERATOR');
+  perform public.audit('STAFF_PASSWORD_CHANGED', 'user', auth.uid()::text, '{}'::jsonb);
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Privileges
 -- ---------------------------------------------------------------------------
@@ -951,9 +1180,9 @@ revoke all on function public.staff_dashboard() from public, anon;
 revoke all on function public.staff_users_search(text, public.account_status, text, boolean, boolean, text, integer) from public, anon;
 revoke all on function public.staff_user_detail(uuid) from public, anon;
 revoke all on function public.staff_correct_dob(uuid, date, text) from public, anon;
-revoke all on function public.staff_subscriptions(public.subscription_status, integer) from public, anon;
+revoke all on function public.staff_subscriptions(public.subscription_status, integer, uuid) from public, anon;
 revoke all on function public.staff_extend_subscription(uuid, integer, text) from public, anon;
-revoke all on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer) from public, anon;
+revoke all on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer, uuid) from public, anon;
 revoke all on function public.staff_payment_events(uuid) from public, anon;
 revoke all on function public.staff_webhook_log(integer) from public, anon;
 revoke all on function public.staff_record_refund(uuid, text) from public, anon;
@@ -976,6 +1205,10 @@ revoke all on function public.staff_set_enabled(uuid, boolean) from public, anon
 revoke all on function public.member_delete_account(uuid) from public, anon, authenticated;
 revoke all on function public.member_data_export(uuid) from public, anon, authenticated;
 revoke all on function public.accounts_due_for_purge(integer) from public, anon, authenticated;
+revoke all on function public.card_stops_due(uuid, boolean) from public, anon, authenticated;
+revoke all on function public.staff_log_password_change() from public, anon, service_role;
+grant execute on function public.staff_log_password_change() to authenticated;
+grant execute on function public.card_stops_due(uuid, boolean) to service_role;
 revoke all on function public.purge_account_content(uuid) from public, anon, authenticated;
 
 -- Staff functions: the staff member's own session (role + MFA checked inside). Not the server key.
@@ -983,9 +1216,9 @@ revoke all on function public.staff_dashboard() from service_role;
 revoke all on function public.staff_users_search(text, public.account_status, text, boolean, boolean, text, integer) from service_role;
 revoke all on function public.staff_user_detail(uuid) from service_role;
 revoke all on function public.staff_correct_dob(uuid, date, text) from service_role;
-revoke all on function public.staff_subscriptions(public.subscription_status, integer) from service_role;
+revoke all on function public.staff_subscriptions(public.subscription_status, integer, uuid) from service_role;
 revoke all on function public.staff_extend_subscription(uuid, integer, text) from service_role;
-revoke all on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer) from service_role;
+revoke all on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer, uuid) from service_role;
 revoke all on function public.staff_payment_events(uuid) from service_role;
 revoke all on function public.staff_webhook_log(integer) from service_role;
 revoke all on function public.staff_record_refund(uuid, text) from service_role;
@@ -1010,9 +1243,9 @@ grant execute on function public.staff_dashboard() to authenticated;
 grant execute on function public.staff_users_search(text, public.account_status, text, boolean, boolean, text, integer) to authenticated;
 grant execute on function public.staff_user_detail(uuid) to authenticated;
 grant execute on function public.staff_correct_dob(uuid, date, text) to authenticated;
-grant execute on function public.staff_subscriptions(public.subscription_status, integer) to authenticated;
+grant execute on function public.staff_subscriptions(public.subscription_status, integer, uuid) to authenticated;
 grant execute on function public.staff_extend_subscription(uuid, integer, text) to authenticated;
-grant execute on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer) to authenticated;
+grant execute on function public.staff_payments(public.payment_source, public.payment_status, boolean, integer, uuid) to authenticated;
 grant execute on function public.staff_payment_events(uuid) to authenticated;
 grant execute on function public.staff_webhook_log(integer) to authenticated;
 grant execute on function public.staff_record_refund(uuid, text) to authenticated;

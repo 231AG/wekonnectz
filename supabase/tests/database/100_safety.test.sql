@@ -1,7 +1,7 @@
 -- Phase 5: blocks, reports, flags, suspend / ban / restore (spec §7, §8, §17, §21; BR-5, 6, 24, 32, 33, 34).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(117);
+select plan(119);
 
 -- Fixtures: six ACTIVE members with 3 approved photos (Musu, Comfort, Hawa, Jartu, Fatu, Kemah), one PENDING
 -- member (Siah), a moderator and an admin. All fictional.
@@ -364,8 +364,16 @@ select ok(exists (select 1 from public.reports where reporter_id is null and rep
 update public.users set status = 'DELETED', deleted_at = now() where id = 'ffffffff-0000-0000-0000-000000000006';
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
-select throws_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000006', 'SELLING_SEX') $$, '22023', 'ACCOUNT_NOT_BANNABLE',
-  '§8: a deleted account cannot be banned (and so never restored)');
+-- Phase 10 (Q54): a ban still reaches an account deleted before its reports were decided, and lifting
+-- it returns the account to DELETED, never back to life.
+select lives_ok($$ select public.ban_user('ffffffff-0000-0000-0000-000000000006', 'SELLING_SEX') $$,
+  'a deleted account can still be banned (deleting doesn''t dodge the blocklist)');
+select lives_ok($$ select public.restore_user('ffffffff-0000-0000-0000-000000000006') $$, 'and the ban can be lifted');
+reset role;
+select is((select status::text from public.users where id = 'ffffffff-0000-0000-0000-000000000006'), 'DELETED',
+  '§8: lifting the ban returns a deleted account to DELETED');
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
 reset role;
 select set_config('request.jwt.claims', '', true);
 

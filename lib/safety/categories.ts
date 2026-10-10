@@ -21,7 +21,9 @@ export const REPORT_CATEGORIES: Record<ReportCategory, { member: string; staff: 
 export const REPORT_CATEGORY_KEYS = Object.keys(REPORT_CATEGORIES) as ReportCategory[];
 
 /** Staff-facing short reference for a member account, so lists don't lead with names (admin mock-up 03). */
-export function accountRef(userId: string): string {
+export function accountRef(userId: string | null): string {
+  // Reports outlive a purged account (Phase 10): the member is then gone.
+  if (!userId) return "Deleted account";
   return `Account #${userId.replace(/-/g, "").slice(0, 4).toUpperCase()}`;
 }
 

@@ -1,7 +1,7 @@
 -- Phase 10: admin console + account lifecycle (spec §7, §8, §21; BR-7, BR-34; OD-7, OD-13, OD-30).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(131);
+select plan(152);
 
 -- Fixtures (fictional). Members: Musu (deletes her account), Joseph, Prince, Hawa. Staff: a moderator,
 -- an admin, a super admin, a second admin, and a brand-new email account about to become staff.
@@ -197,6 +197,20 @@ select throws_ok($$ select public.staff_extend_subscription((select id from r wh
   'P0001', null, '§6 rule 9: no extension at all while OD-30 is unset');
 reset role;
 update public.app_settings set value = '7' where key = 'subscriptions.manual_extension_max_days';
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select throws_ok($$ select public.staff_extend_subscription((select id from r where n = 'sub_hawa'), 6, 'More outage time') $$,
+  '22023', 'EXTENSION_OUT_OF_RANGE', 'OD-30: the cap is a total per pass (2 + 6 > 7), not per click');
+select throws_ok($$ select public.staff_update_setting('subscriptions.manual_extension_max_days', '60') $$, '42501', 'SUPER_ADMIN_ONLY',
+  'an admin can''t raise their own extension cap');
+reset role;
+insert into r select 'sub_joseph', id from public.subscriptions where user_id = 'eeeeeeee-1000-0000-0000-000000000002';
+select pg_temp.give_pass('eeeeeeee-1000-0000-0000-000000000002', 48);
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select throws_ok($$ select public.staff_extend_subscription((select id from r where n = 'sub_joseph'), 1, 'Outage compensation') $$,
+  '22023', 'EXTEND_LAST_PASS', 'BR-28: with a pass stacked after it, only the last pass is extended');
+reset role;
 
 -- ---------------------------------------------------------------------------
 -- Refunds (§21; OD-13 decides when): recorded, access ends, audited
@@ -237,6 +251,21 @@ set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'super'), true);
 select throws_ok($$ select public.staff_update_setting('geo.enforcement_mode', '"ALWAYS"') $$, '22023', 'INVALID_VALUE', 'a choice setting refuses other values');
 select lives_ok($$ select public.staff_update_setting('geo.enforcement_mode', '"EVERY_SESSION"') $$, 'a super admin changes a feature flag');
+select throws_ok($$ select public.staff_update_setting('subscriptions.manual_extension_max_days', '31') $$, '22023', 'INVALID_VALUE',
+  'OD-30: the extension cap has an upper bound');
+select throws_ok($$ select public.staff_update_setting('claims.transaction_id_patterns', '{"ORANGE_MONEY": "(", "MTN_MOMO": "^[0-9]+$"}') $$,
+  '22023', 'INVALID_VALUE', 'a transaction-ID pattern that doesn''t compile is refused (claims would all fail)');
+select throws_ok($$ select public.staff_update_setting('claims.transaction_id_patterns', '{"ORANGE_MONEY": "^[0-9]+$"}') $$,
+  '22023', 'INVALID_VALUE', 'both providers need a pattern');
+select lives_ok($$ select public.staff_update_setting('claims.transaction_id_patterns', '{"ORANGE_MONEY": "^[A-Z0-9.]{6,30}$", "MTN_MOMO": "^[0-9]{6,20}$"}') $$,
+  'valid patterns are accepted');
+select throws_ok($$ select public.staff_update_setting('detection.terms', '{"price": ["usd"]}') $$, '22023', 'INVALID_VALUE',
+  'detection term groups can''t be dropped');
+select throws_ok($$ select public.staff_update_setting('verification.pose_prompts', '[1, 2]') $$, '22023', 'INVALID_VALUE',
+  'pose prompts must be text');
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select throws_ok($$ select public.staff_update_setting('messages.max_per_minute', '0') $$, '22023', 'INVALID_VALUE',
+  'a limit can''t be 0 (it would switch the feature off for everyone)');
 
 -- Plans, merchant accounts, interests, areas.
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
@@ -244,6 +273,13 @@ select lives_ok($$ select public.staff_save_plan((select plan_id from public.sta
   'OD-1: an admin changes a price');
 reset role;
 select is((select price from public.subscription_plans where code = 'MM_DAY'), 1.50::numeric, 'the price changed; the code did not');
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select throws_ok($$ select public.staff_save_plan((select plan_id from public.staff_plans() where code = 'MM_DAY'), '', 'Day Pass', 'MOBILE_MONEY', 48, 1.50, null, true, 1) $$,
+  '22023', 'PLAN_IN_USE', 'a used plan''s length can''t change (members paid for it)');
+select throws_ok($$ select public.staff_save_plan((select plan_id from public.staff_plans() where code = 'CARD_WEEKLY'), '', 'Weekly', 'CARD', 168, 4.00, 'CARD_WEEKLY', true, 1) $$,
+  '22023', 'PRICE_ID_REQUIRED', 'a new card price needs a new processor price ID');
+reset role;
 select ok(exists (select 1 from public.audit_logs where action = 'SETTING_CHANGED' and entity_type = 'subscription_plan'), 'BR-34: plan change audited');
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
@@ -307,6 +343,19 @@ select is((select jsonb_array_length(j -> 'requests_sent') from ex), 1, 'the exp
 select is((select jsonb_array_length(j -> 'photos') from ex), 3, 'the export lists photos');
 select ok((select j::text !~ 'photos/|selfies/|storage_path' from ex), '§6 rule 5: the export contains no storage paths');
 
+-- Before deleting: Musu has an open card checkout, Hawa blocked her, Joseph reported her; Prince pays by card.
+set local role service_role;
+select public.start_card_checkout('eeeeeeee-1000-0000-0000-000000000001', 'CARD_WEEKLY', 'fake');
+insert into r select 'prince_ref', (public.start_card_checkout('eeeeeeee-1000-0000-0000-000000000003', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
+select public.apply_card_event('fake', jsonb_build_object('id', 'evt_p10_1', 'type', 'CHECKOUT_COMPLETED', 'occurred_at', now(),
+  'reference', (select id from r where n = 'prince_ref'), 'subscription_ref', 'sub_prince_p10', 'customer_ref', 'cus_prince_p10',
+  'charge_id', 'ch_p10', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '7 days'));
+select is((select count(*)::int from public.card_stops_due('eeeeeeee-1000-0000-0000-000000000003')), 0, 'a card plan in good standing needs no stop');
+select is((select count(*)::int from public.card_stops_due('eeeeeeee-1000-0000-0000-000000000003', true)), 1, 'before an account is deleted, every card plan is stopped');
+select public.block_user('eeeeeeee-1000-0000-0000-000000000004', 'eeeeeeee-1000-0000-0000-000000000001');
+reset role;
+insert into public.reports (reporter_id, reported_user_id, category, priority) values ('eeeeeeee-1000-0000-0000-000000000002', 'eeeeeeee-1000-0000-0000-000000000001', 'SPAM', 'LOW');
+
 -- ---------------------------------------------------------------------------
 -- BR-7: a deleted account is hidden everywhere, at once
 -- ---------------------------------------------------------------------------
@@ -315,6 +364,11 @@ select lives_ok($$ select public.member_delete_account('eeeeeeee-1000-0000-0000-
 select throws_ok($$ select public.member_delete_account('eeeeeeee-1000-0000-0000-000000000001') $$, '22023', 'CANNOT_DELETE', 'only once');
 reset role;
 select is((select status::text from public.users where id = 'eeeeeeee-1000-0000-0000-000000000001'), 'DELETED', 'status DELETED');
+select is((select status::text from public.subscriptions where user_id = 'eeeeeeee-1000-0000-0000-000000000001' and source = 'CARD'), 'EXPIRED',
+  'an open card checkout is closed, so paying it can''t start a plan');
+set local role service_role;
+select is((select count(*)::int from public.member_blocked_list('eeeeeeee-1000-0000-0000-000000000004')), 0, 'BR-7: gone from the blocked list too');
+reset role;
 select ok((select banned_until > now() from auth.users where id = 'eeeeeeee-1000-0000-0000-000000000001'), 'BR-7: Auth refuses the account');
 select ok(not public.is_in_pool('eeeeeeee-1000-0000-0000-000000000001'), 'BR-7: out of the pool');
 set local role service_role;
@@ -340,6 +394,11 @@ select is((select count(*)::int from public.accounts_due_for_purge() where user_
 reset role;
 update public.users set deleted_at = now() - interval '31 days' where id = 'eeeeeeee-1000-0000-0000-000000000001';
 set local role service_role;
+select is((select count(*)::int from public.accounts_due_for_purge() where user_id = 'eeeeeeee-1000-0000-0000-000000000001'), 0,
+  'OD-7: an open report against the member is decided before the purge');
+reset role;
+update public.reports set status = 'RESOLVED', reviewed_at = now(), reviewed_by = 'eeeeeeee-1000-0000-0000-0000000000aa' where reported_user_id = 'eeeeeeee-1000-0000-0000-000000000001';
+set local role service_role;
 select is((select cardinality(photo_paths) + cardinality(selfie_paths) from public.accounts_due_for_purge()
            where user_id = 'eeeeeeee-1000-0000-0000-000000000001'), 4, 'OD-7: due after the period, with photos and selfie to delete');
 reset role;
@@ -353,10 +412,26 @@ select lives_ok($$ delete from auth.users where id = 'eeeeeeee-1000-0000-0000-00
 select is((select count(*)::int from public.profiles where user_id = 'eeeeeeee-1000-0000-0000-000000000001'), 0, 'OD-7: the profile is gone');
 select is((select count(*)::int from public.messages where body = 'Hello Prince'), 0, 'OD-7: their messages are gone');
 select ok(exists (select 1 from public.payments where user_id is null and amount = 1.00), 'OD-7: payment records are kept, unlinked');
+select is((select count(*)::int from public.reports where reported_user_id is null and category = 'SPAM'), 1,
+  'reports about a purged member are kept, unlinked');
 update public.app_settings set value = null where key = 'account.deletion_purge_days';
 set local role service_role;
 select is((select count(*)::int from public.accounts_due_for_purge()), 0, '§6 rule 9: nothing is purged while OD-7 is unset');
 reset role;
+
+-- A banned member's card plan must stop renewing.
+update public.users set status = 'BANNED' where id = 'eeeeeeee-1000-0000-0000-000000000003';
+set local role service_role;
+select is((select count(*)::int from public.card_stops_due('eeeeeeee-1000-0000-0000-000000000003')), 1, 'a banned member''s card plan is stopped at the processor');
+reset role;
+
+-- Your account: a staff password change is audited.
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'mod'), true);
+select lives_ok($$ select public.staff_log_password_change() $$, 'staff record their own password change');
+reset role;
+select ok(exists (select 1 from public.audit_logs where action = 'STAFF_PASSWORD_CHANGED' and actor_id = 'eeeeeeee-1000-0000-0000-0000000000aa'),
+  '§22: the change is in the audit log');
 
 select * from finish();
 rollback;

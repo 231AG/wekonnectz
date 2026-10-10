@@ -114,7 +114,10 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/adm
     p_limit: 200,
   });
   const rows = data ?? [];
-  const selected = rows.find((r) => r.payment_id === selectedId);
+  // Linked from a member's page: the payment may be outside this list's filter or page.
+  const selected =
+    rows.find((r) => r.payment_id === selectedId) ??
+    (selectedId ? (await supabase.rpc("staff_payments", { p_id: selectedId, p_limit: 1 })).data?.[0] : undefined);
   const events = selected
     ? ((await supabase.rpc("staff_payment_events", { p_payment: selected.payment_id })).data ?? [])
     : [];

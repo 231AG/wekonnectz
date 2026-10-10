@@ -20,7 +20,9 @@ export default async function DeleteAccountPage() {
           <li>Your profile disappears from everywhere straight away, and you’re logged out.</li>
           <li>Your matches, chats and requests end. Other members aren’t told why.</li>
           <li>A card plan is cancelled so it won’t renew.</li>
-          <li>After a retention period your photos, selfie and profile are permanently deleted. Payment records are kept.</li>
+          <li>
+            After a retention period your photos, selfie and profile are permanently deleted. Payment records are kept.
+          </li>
         </ul>
         <p className="text-muted-foreground">
           Want a copy first?{" "}

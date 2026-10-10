@@ -121,6 +121,11 @@ async function Limits({ supabase, isSuper }: { supabase: Supabase; isSuper: bool
                     <span className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {unset ? <Badge tone="pending">Not set — owner decision</Badge> : null}
                       {s.super_admin_only ? <Badge>Super admin</Badge> : null}
+                      {s.kind === "int" && (s.min_value != null || s.max_value != null) ? (
+                        <span>
+                          Allowed: {s.min_value ?? 0}–{s.max_value ?? "1,000,000"}
+                        </span>
+                      ) : null}
                       {s.updated_by ? (
                         <span>
                           Last changed by {s.updated_by} · {when(s.updated_at)}
@@ -135,7 +140,8 @@ async function Limits({ supabase, isSuper }: { supabase: Supabase; isSuper: bool
                       <input
                         type="number"
                         name="value"
-                        min={0}
+                        min={s.min_value ?? 0}
+                        max={s.max_value ?? undefined}
                         step={1}
                         defaultValue={current}
                         aria-label={s.key}

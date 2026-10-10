@@ -34,7 +34,7 @@ export default async function SubscriptionsPage({ searchParams }: PageProps<"/ad
   const supabase = await createClient();
   const sp = await searchParams;
   const status = STATUSES.find((s) => s === sp.status);
-  const selectedId = typeof sp.id === "string" ? sp.id : undefined;
+  const selectedId = typeof sp.id === "string" && /^[0-9a-f-]{36}$/i.test(sp.id) ? sp.id : undefined;
   const [{ data, error }, { data: settings }] = await Promise.all([
     supabase.rpc("staff_subscriptions", { p_status: status, p_limit: 200 }),
     supabase.rpc("staff_settings"),
@@ -42,9 +42,15 @@ export default async function SubscriptionsPage({ searchParams }: PageProps<"/ad
   const rows = data ?? [];
   const maxDays = settings?.find((s) => s.key === "subscriptions.manual_extension_max_days")?.value as
     number | null | undefined;
-  const selected = rows.find((r) => r.subscription_id === selectedId);
+  // Linked from a member's page: the subscription may be outside this list's filter or page.
+  const selected =
+    rows.find((r) => r.subscription_id === selectedId) ??
+    (selectedId ? (await supabase.rpc("staff_subscriptions", { p_id: selectedId, p_limit: 1 })).data?.[0] : undefined);
   const extendable =
-    selected && RUNNING.includes(selected.status) && isRunningNow(selected.starts_at, selected.expires_at);
+    selected &&
+    selected.source === "MOBILE_MONEY" &&
+    RUNNING.includes(selected.status) &&
+    isRunningNow(selected.starts_at, selected.expires_at);
   const href = (s?: SubStatus, id?: string) => {
     const q = new URLSearchParams();
     if (s) q.set("status", s);
@@ -114,7 +120,7 @@ export default async function SubscriptionsPage({ searchParams }: PageProps<"/ad
               <StaffForm action={extendSubscriptionAction} label="Extend subscription">
                 <input type="hidden" name="subscriptionId" value={selected.subscription_id} />
                 <label className="flex flex-col gap-1 text-sm text-muted-foreground">
-                  Days to add{maxDays ? ` (up to ${maxDays})` : ""}
+                  Days to add{maxDays ? ` (up to ${maxDays} in total per pass)` : ""}
                   <input
                     type="number"
                     name="days"
@@ -143,8 +149,10 @@ export default async function SubscriptionsPage({ searchParams }: PageProps<"/ad
                   </p>
                 ) : null}
               </StaffForm>
+            ) : selected.source === "CARD" ? (
+              <p className="text-sm text-muted-foreground">Card plans are extended at the card processor, not here.</p>
             ) : (
-              <p className="text-sm text-muted-foreground">Only a subscription that is running now can be extended.</p>
+              <p className="text-sm text-muted-foreground">Only a pass that is running now can be extended.</p>
             )}
           </Panel>
         ) : null}

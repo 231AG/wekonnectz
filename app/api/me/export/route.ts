@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { canHoldSession, getMember } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
  * the session; no storage paths, no other member's private data, no moderation notes. Limited per
  * day by export.max_per_day (T-19; no limit while unset). Nothing from the export is logged.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Only a click on our own page (or a typed URL): another site can't spend the member's daily quota.
+  const site = request.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") {
+    return NextResponse.json({ error: "Open Settings and tap Download my data." }, { status: 403 });
+  }
   const member = await getMember();
   if (!member || !canHoldSession(member.status) || member.role !== "USER") {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });

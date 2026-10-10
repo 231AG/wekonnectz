@@ -213,3 +213,35 @@ export async function cardRenewalsDue(): Promise<number> {
   if (error) throw new Error("renewal reminder query failed");
   return data?.length ?? 0;
 }
+
+/**
+ * Stops renewals at the processor for a member's card subscriptions: every one not yet stopped (before
+ * an account is deleted), or those card_cancel_needed() asks for (after a refund is recorded). Returns
+ * false if any couldn't be stopped, so the caller can refuse or retry.
+ */
+export async function stopCardRenewals(userId: string, all: boolean): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("card_stops_due", { p_user: userId, p_all: all });
+  if (error) return false;
+  if (!data?.length) return true;
+  const processor = getCardProcessor();
+  let ok = true;
+  for (const s of data) {
+    if (!processor || processor.id !== s.processor) {
+      ok = false;
+      continue;
+    }
+    try {
+      await processor.cancelAtPeriodEnd(s.processor_subscription_id);
+      const { error: markError } = await admin.rpc("mark_processor_cancelled", {
+        p_processor: s.processor,
+        p_ref: s.processor_subscription_id,
+      });
+      if (markError) ok = false;
+    } catch (e) {
+      Sentry.captureException(e);
+      ok = false;
+    }
+  }
+  return ok;
+}

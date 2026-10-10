@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { requireMember } from "@/lib/auth/session";
-import { cancelCardSubscription } from "@/lib/payments/card/server";
+import { stopCardRenewals } from "@/lib/payments/card/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,14 +23,12 @@ export async function deleteAccountAction(_prev: DeleteAccountState, formData: F
   ) {
     return { error: "Type DELETE to confirm." };
   }
-  const admin = createAdminClient();
-  const { data: card } = await admin.rpc("member_card_subscription", { p_user: member.id });
-  const live = card?.[0];
-  if (live && ["ACTIVE", "PAYMENT_FAILED", "CANCELLED"].includes(live.status) && !live.cancel_at_period_end) {
-    if (!(await cancelCardSubscription(member.id))) {
-      return { error: "We couldn’t stop your card plan renewing. Try again in a few minutes." };
-    }
+  // Every card subscription with the processor is stopped first, whatever its state, so nothing can
+  // renew on a deleted account. Open checkouts are closed by member_delete_account().
+  if (!(await stopCardRenewals(member.id, true))) {
+    return { error: "We couldn’t stop your card plan renewing. Try again in a few minutes." };
   }
+  const admin = createAdminClient();
   const { error } = await admin.rpc("member_delete_account", { p_user: member.id });
   if (error) return { error: "Couldn’t delete your account. Try again." };
   await (await createClient()).auth.signOut({ scope: "local" });

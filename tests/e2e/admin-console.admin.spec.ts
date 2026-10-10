@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { adminClient } from "./auth-helpers";
 import { SHOTS_P10, trackPageErrors } from "./helpers";
 import { activeMember, givePassViaCard } from "./member-helpers";
-import { createStaff, staffSignInViaUi, type TestStaff } from "./staff-helpers";
+import { createStaff, seedClaim, staffClientAal2, staffSignInViaUi, type TestStaff } from "./staff-helpers";
 
 const IMG = (f: string) => `docs/mockups/html/images/${f}`;
 
@@ -16,8 +16,19 @@ test("§21: an admin sees figures, finds a member, extends a subscription, recor
   const admin = adminClient();
   const musu = await activeMember("Musu", [IMG("musu1.jpg"), IMG("musu2.jpg"), IMG("musu3.jpg")], { gender: "WOMAN" });
   const pass = await givePassViaCard(request, musu.userId);
+  const hawa = await activeMember("Hawa", [IMG("musu2.jpg"), IMG("musu3.jpg"), IMG("musu1.jpg")], { gender: "WOMAN" });
   const staff = await createStaff("ADMIN");
-  await staffSignInViaUi(page, staff);
+  const secret = await staffSignInViaUi(page, staff);
+  // Hawa's Day Pass comes the only way mobile money access can: an admin approves her claim.
+  const claim = await seedClaim(hawa.userId, hawa.phone.e164, "MM_DAY", "ORANGE_MONEY");
+  const { data: dayPlan } = await admin.from("subscription_plans").select("price").eq("code", "MM_DAY").single();
+  const staffDb = await staffClientAal2(staff, secret);
+  expect((await staffDb.rpc("log_evidence_view", { p_claim: claim.claimId })).error).toBeNull();
+  expect(
+    (await staffDb.rpc("approve_payment_claim", { p_claim: claim.claimId, p_wallet_amount: Number(dayPlan!.price) }))
+      .error,
+  ).toBeNull();
+  await page.reload();
 
   // Dashboard (§21): members, access by plan, available now, revenue, queues.
   await expect(page.getByTestId("users-total")).toBeVisible();
@@ -46,12 +57,24 @@ test("§21: an admin sees figures, finds a member, extends a subscription, recor
   await dob.getByRole("button", { name: "Correct date of birth" }).click();
   await expect(dob.getByRole("status")).toHaveText("Date of birth corrected.");
 
-  // Subscriptions: manual extension with reason (OD-30 cap; audited).
+  // Subscriptions: a card period belongs to the processor; a mobile money pass is extended with a
+  // reason (OD-30 cap; audited).
   await page.getByRole("link", { name: "Subscriptions" }).first().click();
-  await page
-    .getByRole("link", { name: /Weekly · Card/ })
+  const musuCard = page
+    .getByRole("row")
+    .filter({ hasText: "Musu" })
     .first()
-    .click();
+    .getByRole("link", { name: /Weekly · Card/ });
+  await musuCard.click();
+  await expect(page.getByText("Card plans are extended at the card processor, not here.")).toBeVisible();
+  const hawaPass = page
+    .getByRole("row")
+    .filter({ hasText: "Hawa" })
+    .first()
+    .getByRole("link", { name: /Day Pass/ });
+  const hawaHref = (await hawaPass.getAttribute("href"))!;
+  await hawaPass.click();
+  await page.waitForURL((url) => url.href.endsWith(hawaHref));
   const extend = page.getByRole("form", { name: "Extend subscription" });
   await extend.getByLabel(/Days to add/).fill("2");
   await extend.getByLabel("Reason").fill("Outage compensation");

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomInt, randomUUID } from "node:crypto";
 
 import sharp from "sharp";
 import { createClient } from "@supabase/supabase-js";
@@ -120,4 +120,56 @@ export async function seedPendingVerification(userId: string, file = "docs/mocku
     (await admin.from("verifications").update({ submitted_at: submitted }).eq("id", verificationId)).error,
   ).toBeNull();
   return verificationId;
+}
+
+/** A claim as submit_payment_claim() stores it, with a processed screenshot in the private bucket. */
+export async function seedClaim(
+  userId: string,
+  phone: string,
+  planCode: string,
+  provider: "ORANGE_MONEY" | "MTN_MOMO",
+) {
+  const admin = adminClient();
+  const { data: plan } = await admin.from("subscription_plans").select("id").eq("code", planCode).single();
+  const path = `${randomUUID()}.webp`;
+  const image = await sharp({ create: { width: 720, height: 1280, channels: 3, background: "#ffffff" } })
+    .composite([
+      {
+        input: Buffer.from(
+          `<svg width="720" height="200"><text x="40" y="120" font-size="48">Paid ${randomInt(1e6)}</text></svg>`,
+        ),
+        top: 300,
+        left: 0,
+      },
+    ])
+    .webp()
+    .toBuffer();
+  expect(
+    (await admin.storage.from("payment-evidence").upload(path, image, { contentType: "image/webp" })).error,
+  ).toBeNull();
+  const txn =
+    provider === "ORANGE_MONEY" ? `OM${randomInt(10_000_000, 99_999_999)}` : String(randomInt(10_000_000, 99_999_999));
+  const { data, error } = await admin.rpc("submit_payment_claim", {
+    p_user: userId,
+    p_plan_id: plan!.id,
+    p_provider: provider,
+    p_transaction_id: txn,
+    p_sender_phone: phone,
+    p_paid_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    p_evidence_path: path,
+    p_evidence_sha256: randomUUID().replace(/-/g, "").padEnd(64, "0"),
+  });
+  expect(error).toBeNull();
+  // A week old, so it leads the oldest-first queue.
+  return { claimId: data as string, txn };
+}
+
+/** A staff member signed in through the Auth API with password + TOTP (aal2), as the console session is. */
+export async function staffClientAal2(staff: TestStaff, secret: string) {
+  const client = await staffClientAal1(staff);
+  const { data: factors } = await client.auth.mfa.listFactors();
+  const factorId = factors!.totp[0].id;
+  const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code: totp(secret) });
+  expect(error).toBeNull();
+  return client;
 }

@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 
 import type { StaffActionState } from "@/lib/admin/report-actions";
 import { requireStaff } from "@/lib/auth/staff";
+import { stopCardRenewals } from "@/lib/payments/card/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -37,9 +38,14 @@ const DB_MESSAGES: Record<string, string> = {
   MEMBER_NOT_FOUND: "This account isn’t a member account.",
   UNDER_18: "That date makes the member under 18. Ban the account instead of correcting it.",
   IMPLAUSIBLE_DOB: "That date of birth isn’t plausible.",
-  EXTENSION_OUT_OF_RANGE: "That is more days than one extension allows.",
+  EXTENSION_OUT_OF_RANGE: "That goes over the most days a pass can be extended in total.",
   "has no value": "This needs an owner decision first (the setting has no value yet).",
-  NOT_EXTENDABLE: "Only a subscription that is running now can be extended.",
+  NOT_EXTENDABLE: "Only a pass that is running now can be extended.",
+  CARD_EXTEND_AT_PROCESSOR: "Card plans are extended at the card processor, not here.",
+  EXTEND_LAST_PASS: "This member has another pass after this one. Extend the last one instead.",
+  MEMBER_NOT_AVAILABLE: "This member’s account is deleted or banned.",
+  PRICE_ID_REQUIRED: "Card plans need the processor’s price ID, and a new price needs a new price ID.",
+  PLAN_IN_USE: "Members have used this plan, so its length can’t change. Add a new plan instead.",
   NOT_REFUNDABLE: "Only a successful payment can be refunded, once.",
   UNKNOWN_SETTING: "That setting doesn’t exist.",
   INVALID_VALUE: "That value isn’t allowed for this setting.",
@@ -110,7 +116,21 @@ export async function recordRefundAction(_prev: StaffActionState, formData: Form
   const { error } = await (
     await createClient()
   ).rpc("staff_record_refund", { p_payment: parsed.data.paymentId, p_reason: parsed.data.reason });
-  return error ? fail(error.message) : done("Refund recorded. The access it paid for has ended.");
+  if (error) return fail(error.message);
+  // A refunded card plan must not renew: stop it at the processor now, not at its next event.
+  const { data: payment } = await createAdminClient()
+    .from("payments")
+    .select("user_id, source")
+    .eq("id", parsed.data.paymentId)
+    .single();
+  if (payment?.source === "CARD" && payment.user_id && !(await stopCardRenewals(payment.user_id, false))) {
+    revalidatePath("/admin", "layout");
+    return {
+      error:
+        "Refund recorded, but the card plan couldn’t be stopped at the processor. Cancel it in the processor’s dashboard.",
+    };
+  }
+  return done("Refund recorded. The access it paid for has ended.");
 }
 
 export async function updateSettingAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
@@ -320,7 +340,9 @@ export async function changeStaffPasswordAction(
     return { error: "Use at least 12 characters with upper and lower case letters and a digit." };
   }
   if (password !== str(formData.get("repeat"))) return { error: "The passwords don’t match." };
-  const { error } = await (await createClient()).auth.updateUser({ password });
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (!error) await supabase.rpc("staff_log_password_change");
   if (error) {
     return {
       error: /same|different/i.test(error.message)

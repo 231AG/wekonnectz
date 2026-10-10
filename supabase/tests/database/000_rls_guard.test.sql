@@ -123,7 +123,8 @@ select is_empty(
           'staff_list',               -- Phase 10: SUPER_ADMIN
           'staff_register_new',       -- Phase 10: SUPER_ADMIN; new email account only; audited
           'staff_set_role',           -- Phase 10: SUPER_ADMIN; not self; audited
-          'staff_set_enabled'         -- Phase 10: SUPER_ADMIN; not self; audited
+          'staff_set_enabled',        -- Phase 10: SUPER_ADMIN; not self; audited
+          'staff_log_password_change' -- Phase 10: staff only; records the caller's own password change
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
