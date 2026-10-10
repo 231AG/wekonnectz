@@ -71,3 +71,25 @@ export function endFromClockTime(value: string | null | undefined, now: Date): D
   if (end.getTime() <= now.getTime()) end.setUTCDate(end.getUTCDate() + 1);
   return end;
 }
+
+/** Available Now "window" filter (§13): members available until at least this time. */
+export function windowFilterUntil(choice: "any" | "2h" | "tonight" | undefined, now: Date): Date | undefined {
+  if (choice === "2h") return new Date(now.getTime() + 2 * 3_600_000);
+  if (choice === "tonight") {
+    const tonight = new Date(now);
+    tonight.setUTCHours(22, 0, 0, 0);
+    return tonight.getTime() > now.getTime() ? tonight : new Date(now.getTime() + 3_600_000);
+  }
+  return undefined;
+}
+
+/** "5d 4h left", "3h 20m left", "12m left". */
+export function formatTimeLeft(untilIso: string, now: Date): string {
+  const mins = Math.max(0, Math.floor((new Date(untilIso).getTime() - now.getTime()) / 60_000));
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  if (d > 0) return `${d}d ${h}h left`;
+  if (h > 0) return `${h}h ${m}m left`;
+  return `${m}m left`;
+}

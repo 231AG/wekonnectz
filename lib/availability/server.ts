@@ -1,6 +1,6 @@
 import "server-only";
 
-import { formatDayLabel, toLiberiaLocal } from "@/lib/domain/availability";
+import { formatDayLabel, formatTimeLeft, toLiberiaLocal } from "@/lib/domain/availability";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -26,6 +26,8 @@ export type MemberAvailability = {
   suggestedStart: string;
   suggestedEnd: string;
   todayLabel: string;
+  /** "5d 4h left" while a pass is active. */
+  passTimeLeft: string | null;
 };
 
 export async function memberAvailability(userId: string): Promise<MemberAvailability> {
@@ -49,6 +51,7 @@ export async function memberAvailability(userId: string): Promise<MemberAvailabi
     scheduled: !ended && d.start_at !== null && new Date(d.start_at).getTime() > now,
     suggestedStart: toLiberiaLocal(new Date(now + 3_600_000)),
     todayLabel: formatDayLabel(new Date(now)),
+    passTimeLeft: d.pass_until ? formatTimeLeft(d.pass_until, new Date(now)) : null,
     suggestedEnd: toLiberiaLocal(new Date(now + Math.min(3, d.max_window_hours ?? 3) * 3_600_000)),
     status: ended ? "UNAVAILABLE" : d.status,
     startAt: d.start_at,

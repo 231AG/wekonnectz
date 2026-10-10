@@ -372,6 +372,37 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"message_requests": {
+                  Row: {
+                    "body": string,"body_hash": string,"conversation_id": string | null,"created_at": string,"expires_at": string,"id": string,"recipient_id": string,"responded_at": string | null,"sender_id": string,"status": Database["public"]['Enums']["request_status"]
+                  }
+                  Insert: {
+                    "body": string,"body_hash": string,"conversation_id"?: string | null,"created_at"?: string,"expires_at": string,"id"?: string,"recipient_id": string,"responded_at"?: string | null,"sender_id": string,"status"?: Database["public"]['Enums']["request_status"]
+                  }
+                  Update: {
+                    "body"?: string,"body_hash"?: string,"conversation_id"?: string | null,"created_at"?: string,"expires_at"?: string,"id"?: string,"recipient_id"?: string,"responded_at"?: string | null,"sender_id"?: string,"status"?: Database["public"]['Enums']["request_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "message_requests_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "message_requests_recipient_id_fkey"
+      columns: ["recipient_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "message_requests_sender_id_fkey"
+      columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"messages": {
                   Row: {
                     "body": string,"conversation_id": string,"created_at": string,"flagged": boolean,"id": string,"read_at": string | null,"sender_id": string | null
@@ -740,6 +771,31 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"saved_profiles": {
+                  Row: {
+                    "created_at": string,"saved_user_id": string,"user_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"saved_user_id": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"saved_user_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "saved_profiles_saved_user_id_fkey"
+      columns: ["saved_user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "saved_profiles_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"subscription_plans": {
                   Row: {
                     "active": boolean,"code": string,"created_at": string,"currency": string,"duration_hours": number,"id": string,"name": string,"price": number,"processor_price_id": string | null,"renews": boolean,"sort_order": number,"source": Database["public"]['Enums']["payment_source"],"updated_at": string
@@ -967,8 +1023,17 @@ isOneToOne: false
 "casual_access_until":
 { Args: { "p_user": string }; Returns: string
                            },
+"casual_conversation_between":
+{ Args: { "p_a": string,"p_b": string }; Returns: string
+                           },
 "casual_ineligibility":
 { Args: { "p_at"?: string,"p_user": string }; Returns: (string)[]
+                           },
+"casual_profile":
+{ Args: { "p_owner": string,"p_viewer": string }; Returns: Json
+                           },
+"check_request_signals":
+{ Args: { "p_hash": string,"p_sender": string }; Returns: undefined
                            },
 "check_short_windows":
 { Args: { "p_user": string }; Returns: undefined
@@ -1016,6 +1081,9 @@ isOneToOne: false
                            },
 "current_user_status":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["account_status"]
+                           },
+"declined_recently":
+{ Args: { "p_recipient": string,"p_sender": string }; Returns: boolean
                            },
 "delete_photo":
 { Args: { "p_photo_id": string,"p_user_id": string }; Returns: string
@@ -1233,6 +1301,14 @@ isOneToOne: false
               "id": string,"is_primary": boolean,"sort_order": number,"status": Database["public"]['Enums']["photo_status"],"storage_path": string
             }[]
                            },
+"pool_candidates":
+{ Args: { "p_after_bucket"?: number,"p_after_hash"?: string,"p_area_id"?: string,"p_interest_ids"?: (string)[],"p_limit"?: number,"p_max_age"?: number,"p_min_age"?: number,"p_until"?: string,"p_viewer": string }; Returns: {
+              "available_until": string,"bucket": number,"card": Json,"photo_path": string,"saved": boolean,"sort_hash": string
+            }[]
+                           },
+"pool_visible":
+{ Args: { "p_owner": string,"p_viewer": string }; Returns: boolean
+                           },
 "primary_photo_path":
 { Args: { "p_user": string }; Returns: string
                            },
@@ -1297,11 +1373,19 @@ isOneToOne: false
 "request_claim_info":
 { Args: { "p_claim": string,"p_question": string }; Returns: undefined
                            },
+"requests_received":
+{ Args: { "p_viewer": string }; Returns: {
+              "body": string,"card": Json,"created_at": string,"expires_at": string,"photo_path": string,"request_id": string
+            }[]
+                           },
 "resolve_flag":
 { Args: { "p_dismiss": boolean,"p_flag_id": string }; Returns: undefined
                            },
 "resolve_report":
 { Args: { "p_dismiss": boolean,"p_photo_reason"?: Database["public"]['Enums']["photo_rejection_reason"],"p_report_id": string,"p_restore_visibility"?: boolean }; Returns: undefined
+                           },
+"respond_to_request":
+{ Args: { "p_action": string,"p_request": string,"p_viewer": string }; Returns: string
                            },
 "restore_user":
 { Args: { "p_target": string }; Returns: undefined
@@ -1320,8 +1404,16 @@ isOneToOne: false
 "save_interests_and_bio":
 { Args: { "p_bio": string,"p_interest_ids": (string)[],"p_user_id": string }; Returns: undefined
                            },
+"save_profile":
+{ Args: { "p_owner": string,"p_saved": boolean,"p_viewer": string }; Returns: undefined
+                           },
 "save_profile_basics":
 { Args: { "p_area_id": string,"p_display_name": string,"p_gender": Database["public"]['Enums']["gender"],"p_intent_casual": boolean,"p_intent_relationship": boolean,"p_seeking_genders": (Database["public"]['Enums']["gender"])[],"p_user_id": string }; Returns: undefined
+                           },
+"saved_list":
+{ Args: { "p_viewer": string }; Returns: {
+              "available_until": string,"card": Json,"photo_path": string
+            }[]
                            },
 "selfies_due_for_deletion":
 { Args: { "p_limit"?: number }; Returns: {
@@ -1330,6 +1422,9 @@ isOneToOne: false
                            },
 "send_message":
 { Args: { "p_body": string,"p_categories"?: (string)[],"p_conversation": string,"p_flagged"?: boolean,"p_viewer": string }; Returns: Json
+                           },
+"send_message_request":
+{ Args: { "p_body": string,"p_recipient": string,"p_viewer": string }; Returns: string
                            },
 "set_availability":
 { Args: { "p_end": string,"p_start": string,"p_user": string }; Returns: Json
@@ -1414,6 +1509,9 @@ isOneToOne: false
 "tidy_availability":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
+"tidy_requests":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "transaction_key":
 { Args: { "p_txn": string }; Returns: string
                            },
@@ -1436,7 +1534,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"|"REPORTED_MESSAGES_VIEWED","availability_status": "UNAVAILABLE"|"AVAILABLE"|"PAUSED","claim_rejection_reason": "TRANSACTION_NOT_FOUND"|"AMOUNT_MISMATCH"|"ALREADY_USED"|"DETAILS_DO_NOT_MATCH"|"EVIDENCE_UNCLEAR","claim_status": "PENDING_REVIEW"|"NEEDS_INFO"|"APPROVED"|"REJECTED"|"CANCELLED","consent_document": "TERMS"|"PRIVACY"|"RULES","conversation_status": "OPEN"|"CLOSED","conversation_type": "RELATIONSHIP"|"CASUAL","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","match_status": "ACTIVE"|"UNMATCHED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE"|"PAYMENT_APPROVED"|"PAYMENT_REJECTED"|"PAYMENT_NEEDS_INFO","payment_provider": "ORANGE_MONEY"|"MTN_MOMO"|"CARD","payment_source": "MOBILE_MONEY"|"CARD","payment_status": "PENDING"|"SUCCEEDED"|"FAILED"|"REFUNDED","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","subscription_status": "PENDING"|"ACTIVE"|"CANCELLED"|"PAYMENT_FAILED"|"EXPIRED"|"SUSPENDED"|"REFUNDED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
+            "account_status": "PENDING"|"ACTIVE"|"SUSPENDED"|"BANNED"|"DELETED","audit_action": "USER_SUSPENDED"|"USER_BANNED"|"USER_RESTORED"|"VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"SELFIE_VIEWED"|"PHOTO_APPROVED"|"PHOTO_REJECTED"|"DOB_CORRECTED"|"SUBSCRIPTION_MODIFIED"|"PAYMENT_REFUNDED"|"PAYMENT_CLAIM_APPROVED"|"PAYMENT_CLAIM_REJECTED"|"PAYMENT_CLAIM_NEEDS_INFO"|"EVIDENCE_VIEWED"|"REPORT_RESOLVED"|"SETTING_CHANGED"|"ROLE_CHANGED"|"ADMIN_CREATED"|"REPORTED_MESSAGES_VIEWED","availability_status": "UNAVAILABLE"|"AVAILABLE"|"PAUSED","claim_rejection_reason": "TRANSACTION_NOT_FOUND"|"AMOUNT_MISMATCH"|"ALREADY_USED"|"DETAILS_DO_NOT_MATCH"|"EVIDENCE_UNCLEAR","claim_status": "PENDING_REVIEW"|"NEEDS_INFO"|"APPROVED"|"REJECTED"|"CANCELLED","consent_document": "TERMS"|"PRIVACY"|"RULES","conversation_status": "OPEN"|"CLOSED","conversation_type": "RELATIONSHIP"|"CASUAL","flag_status": "OPEN"|"RESOLVED"|"DISMISSED","gender": "WOMAN"|"MAN","geo_result": "PASS"|"BLOCKED_COUNTRY"|"BLOCKED_PHONE"|"BLOCKED_LIST"|"RATE_LIMITED","match_status": "ACTIVE"|"UNMATCHED","message_permission": "ANYONE"|"NOBODY","notification_type": "VERIFICATION_APPROVED"|"VERIFICATION_REJECTED"|"PHOTO_REJECTED"|"ACCOUNT_ACTIVE"|"PAYMENT_APPROVED"|"PAYMENT_REJECTED"|"PAYMENT_NEEDS_INFO","payment_provider": "ORANGE_MONEY"|"MTN_MOMO"|"CARD","payment_source": "MOBILE_MONEY"|"CARD","payment_status": "PENDING"|"SUCCEEDED"|"FAILED"|"REFUNDED","photo_rejection_reason": "FACE_NOT_CLEAR"|"NUDITY_OR_SEXUAL"|"TEXT_OR_CONTACT"|"CHILD_IN_PHOTO"|"NOT_THE_MEMBER"|"POOR_QUALITY","photo_status": "UPLOADING"|"PENDING_REVIEW"|"APPROVED"|"REJECTED"|"HIDDEN"|"DELETED","report_category": "UNDER_18"|"SELLING_SEX"|"MONEY_SCAM"|"THREATS_HARASSMENT"|"FAKE_PROFILE"|"INAPPROPRIATE_PHOTO"|"SPAM"|"OTHER","report_priority": "HIGH"|"MEDIUM"|"LOW","report_status": "OPEN"|"RESOLVED"|"DISMISSED","request_status": "PENDING"|"ACCEPTED"|"DECLINED"|"EXPIRED"|"BLOCKED","subscription_status": "PENDING"|"ACTIVE"|"CANCELLED"|"PAYMENT_FAILED"|"EXPIRED"|"SUSPENDED"|"REFUNDED","user_role": "USER"|"MODERATOR"|"ADMIN"|"SUPER_ADMIN","verification_rejection_reason": "POSE_NOT_MATCHING"|"NOT_SAME_PERSON"|"AGE_DOUBT"|"NOT_LIVE"|"UNCLEAR","verification_status": "AWAITING_SELFIE"|"PENDING"|"VERIFIED"|"REJECTED"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1556,7 +1654,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED", "REPORTED_MESSAGES_VIEWED"],"availability_status": ["UNAVAILABLE", "AVAILABLE", "PAUSED"],"claim_rejection_reason": ["TRANSACTION_NOT_FOUND", "AMOUNT_MISMATCH", "ALREADY_USED", "DETAILS_DO_NOT_MATCH", "EVIDENCE_UNCLEAR"],"claim_status": ["PENDING_REVIEW", "NEEDS_INFO", "APPROVED", "REJECTED", "CANCELLED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"conversation_status": ["OPEN", "CLOSED"],"conversation_type": ["RELATIONSHIP", "CASUAL"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"match_status": ["ACTIVE", "UNMATCHED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE", "PAYMENT_APPROVED", "PAYMENT_REJECTED", "PAYMENT_NEEDS_INFO"],"payment_provider": ["ORANGE_MONEY", "MTN_MOMO", "CARD"],"payment_source": ["MOBILE_MONEY", "CARD"],"payment_status": ["PENDING", "SUCCEEDED", "FAILED", "REFUNDED"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"subscription_status": ["PENDING", "ACTIVE", "CANCELLED", "PAYMENT_FAILED", "EXPIRED", "SUSPENDED", "REFUNDED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
+            "account_status": ["PENDING", "ACTIVE", "SUSPENDED", "BANNED", "DELETED"],"audit_action": ["USER_SUSPENDED", "USER_BANNED", "USER_RESTORED", "VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "SELFIE_VIEWED", "PHOTO_APPROVED", "PHOTO_REJECTED", "DOB_CORRECTED", "SUBSCRIPTION_MODIFIED", "PAYMENT_REFUNDED", "PAYMENT_CLAIM_APPROVED", "PAYMENT_CLAIM_REJECTED", "PAYMENT_CLAIM_NEEDS_INFO", "EVIDENCE_VIEWED", "REPORT_RESOLVED", "SETTING_CHANGED", "ROLE_CHANGED", "ADMIN_CREATED", "REPORTED_MESSAGES_VIEWED"],"availability_status": ["UNAVAILABLE", "AVAILABLE", "PAUSED"],"claim_rejection_reason": ["TRANSACTION_NOT_FOUND", "AMOUNT_MISMATCH", "ALREADY_USED", "DETAILS_DO_NOT_MATCH", "EVIDENCE_UNCLEAR"],"claim_status": ["PENDING_REVIEW", "NEEDS_INFO", "APPROVED", "REJECTED", "CANCELLED"],"consent_document": ["TERMS", "PRIVACY", "RULES"],"conversation_status": ["OPEN", "CLOSED"],"conversation_type": ["RELATIONSHIP", "CASUAL"],"flag_status": ["OPEN", "RESOLVED", "DISMISSED"],"gender": ["WOMAN", "MAN"],"geo_result": ["PASS", "BLOCKED_COUNTRY", "BLOCKED_PHONE", "BLOCKED_LIST", "RATE_LIMITED"],"match_status": ["ACTIVE", "UNMATCHED"],"message_permission": ["ANYONE", "NOBODY"],"notification_type": ["VERIFICATION_APPROVED", "VERIFICATION_REJECTED", "PHOTO_REJECTED", "ACCOUNT_ACTIVE", "PAYMENT_APPROVED", "PAYMENT_REJECTED", "PAYMENT_NEEDS_INFO"],"payment_provider": ["ORANGE_MONEY", "MTN_MOMO", "CARD"],"payment_source": ["MOBILE_MONEY", "CARD"],"payment_status": ["PENDING", "SUCCEEDED", "FAILED", "REFUNDED"],"photo_rejection_reason": ["FACE_NOT_CLEAR", "NUDITY_OR_SEXUAL", "TEXT_OR_CONTACT", "CHILD_IN_PHOTO", "NOT_THE_MEMBER", "POOR_QUALITY"],"photo_status": ["UPLOADING", "PENDING_REVIEW", "APPROVED", "REJECTED", "HIDDEN", "DELETED"],"report_category": ["UNDER_18", "SELLING_SEX", "MONEY_SCAM", "THREATS_HARASSMENT", "FAKE_PROFILE", "INAPPROPRIATE_PHOTO", "SPAM", "OTHER"],"report_priority": ["HIGH", "MEDIUM", "LOW"],"report_status": ["OPEN", "RESOLVED", "DISMISSED"],"request_status": ["PENDING", "ACCEPTED", "DECLINED", "EXPIRED", "BLOCKED"],"subscription_status": ["PENDING", "ACTIVE", "CANCELLED", "PAYMENT_FAILED", "EXPIRED", "SUSPENDED", "REFUNDED"],"user_role": ["USER", "MODERATOR", "ADMIN", "SUPER_ADMIN"],"verification_rejection_reason": ["POSE_NOT_MATCHING", "NOT_SAME_PERSON", "AGE_DOUBT", "NOT_LIVE", "UNCLEAR"],"verification_status": ["AWAITING_SELFIE", "PENDING", "VERIFIED", "REJECTED"]
           }
         }
 } as const

@@ -54,3 +54,23 @@ describe("Available now: until a clock time", () => {
     expect(endFromClockTime("", NOW)).toBeNull();
   });
 });
+
+describe("Available Now helpers (§13)", () => {
+  it("window filter: next 2 hours, tonight (10 PM GMT, or the next hour once it's late)", async () => {
+    const { windowFilterUntil } = await import("@/lib/domain/availability");
+    expect(windowFilterUntil("any", NOW)).toBeUndefined();
+    expect(windowFilterUntil("2h", NOW)?.toISOString()).toBe("2026-10-10T20:00:00.000Z");
+    expect(windowFilterUntil("tonight", NOW)?.toISOString()).toBe("2026-10-10T22:00:00.000Z");
+    expect(windowFilterUntil("tonight", new Date("2026-10-10T23:00:00Z"))?.toISOString()).toBe(
+      "2026-10-11T00:00:00.000Z",
+    );
+  });
+
+  it("pass time left reads like the mock-up", async () => {
+    const { formatTimeLeft } = await import("@/lib/domain/availability");
+    expect(formatTimeLeft("2026-10-15T22:00:00Z", NOW)).toBe("5d 4h left");
+    expect(formatTimeLeft("2026-10-10T21:20:00Z", NOW)).toBe("3h 20m left");
+    expect(formatTimeLeft("2026-10-10T18:12:00Z", NOW)).toBe("12m left");
+    expect(formatTimeLeft("2026-10-10T17:00:00Z", NOW)).toBe("0m left");
+  });
+});

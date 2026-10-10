@@ -29,7 +29,7 @@ type RawCard = {
   interests: string[];
 };
 
-function toCard(raw: unknown, url: string | null): MemberCard {
+export function toMemberCard(raw: unknown, url: string | null): MemberCard {
   const c = raw as RawCard;
   return {
     userId: c.user_id,
@@ -68,7 +68,7 @@ export async function discoverNext(
   }
   const rows = data ?? [];
   const url = await withPhotos(rows);
-  return { card: rows[0] ? toCard(rows[0].card, url(rows[0])) : null };
+  return { card: rows[0] ? toMemberCard(rows[0].card, url(rows[0])) : null };
 }
 
 export async function likesReceived(viewerId: string): Promise<(MemberCard & { likedAt: string })[] | null> {
@@ -79,7 +79,7 @@ export async function likesReceived(viewerId: string): Promise<(MemberCard & { l
   }
   const rows = data ?? [];
   const url = await withPhotos(rows);
-  return rows.map((r) => ({ ...toCard(r.card, url(r)), likedAt: r.liked_at }));
+  return rows.map((r) => ({ ...toMemberCard(r.card, url(r)), likedAt: r.liked_at }));
 }
 
 export async function matchesList(viewerId: string) {
@@ -92,7 +92,7 @@ export async function matchesList(viewerId: string) {
     conversationId: r.conversation_id,
     matchedAt: r.matched_at,
     hasMessages: r.has_messages,
-    ...toCard(r.card, url(r)),
+    ...toMemberCard(r.card, url(r)),
   }));
 }
 
@@ -108,7 +108,7 @@ export async function conversationsList(viewerId: string) {
     lastMine: r.last_mine,
     lastMessageAt: r.last_message_at,
     unread: Number(r.unread),
-    ...toCard(r.card, url(r)),
+    ...toMemberCard(r.card, url(r)),
   }));
 }
 
@@ -143,7 +143,7 @@ export async function conversationView(viewerId: string, conversationId: string)
     conversationId: v.conversation_id,
     type: v.type,
     matchId: v.match_id,
-    other: toCard(v.other, photoUrl),
+    other: toMemberCard(v.other, photoUrl),
     canSend: v.can_send,
     messages: v.messages.map((m) => ({
       id: m.id,

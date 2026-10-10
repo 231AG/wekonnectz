@@ -106,3 +106,10 @@ update public.app_settings set value = '7'::jsonb where key = 'availability.max_
 update public.app_settings set value = '30'::jsonb where key = 'availability.short_window_minutes';  -- DEV-ONLY
 update public.app_settings set value = '5'::jsonb where key = 'availability.short_windows_per_day'; -- DEV-ONLY
 update public.app_settings set value = '30'::jsonb where key = 'availability.max_changes_per_hour';  -- DEV-ONLY
+
+-- Phase 9 requests: values for local development only (OD-9, T-19 open).
+update public.app_settings set value = '20'::jsonb where key = 'requests.daily_cap';                 -- DEV-ONLY
+update public.app_settings set value = '7'::jsonb where key = 'requests.decline_cooldown_days';      -- DEV-ONLY
+update public.app_settings set value = '10'::jsonb where key = 'requests.burst_count';              -- DEV-ONLY
+update public.app_settings set value = '10'::jsonb where key = 'requests.burst_minutes';            -- DEV-ONLY
+update public.app_settings set value = '5'::jsonb where key = 'requests.duplicate_text_recipients'; -- DEV-ONLY
