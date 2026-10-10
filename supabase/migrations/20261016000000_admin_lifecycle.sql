@@ -231,7 +231,7 @@ begin
     raise exception 'REASON_REQUIRED' using errcode = '22023';
   end if;
   if not exists (select 1 from public.profiles p join public.users u on u.id = p.user_id
-                 where p.user_id = p_user and u.role = 'USER' and u.status <> 'DELETED') then
+                 where p.user_id = p_user and u.role = 'USER' and u.deleted_at is null) then
     raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
   end if;
   perform set_config('app.dob_correction', 'on', true);
@@ -1097,8 +1097,8 @@ begin
     'reported_user_id', r.reported_user_id,
     'display_name', p.display_name,
     'age', public.age_in_years(p.date_of_birth),
-    'account_status', public.effective_account_status(u.status, u.suspended_until),
-    'stored_status', u.status,
+    'account_status', coalesce(public.effective_account_status(u.status, u.suspended_until), 'DELETED'),
+    'stored_status', coalesce(u.status, 'DELETED'),
     'suspended_until', case when u.suspended_until > now() then u.suspended_until end,
     'hidden_reason', u.hidden_reason,
     'verification', public.latest_verification_status(u.id),

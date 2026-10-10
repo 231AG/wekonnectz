@@ -229,12 +229,13 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             <MemberActions
               userId={d.user_id}
               storedStatus={d.status}
-              suspendedUntil={d.suspended_until}
-              hiddenReason={d.hidden_reason}
+              // A deleted account is only ever banned (Q54): no unhide or lifting a suspension.
+              suspendedUntil={d.deleted_at ? null : d.suspended_until}
+              hiddenReason={d.deleted_at ? null : d.hidden_reason}
               isAdmin={isAdmin}
             />
           </Panel>
-          {isAdmin && d.status !== "DELETED" && d.display_name ? (
+          {isAdmin && !d.deleted_at && d.display_name ? (
             <Panel title="Correct date of birth">
               <StaffForm action={correctDobAction} label="Correct date of birth">
                 <input type="hidden" name="userId" value={d.user_id} />

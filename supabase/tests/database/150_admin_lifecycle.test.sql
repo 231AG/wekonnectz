@@ -1,7 +1,7 @@
 -- Phase 10: admin console + account lifecycle (spec §7, §8, §21; BR-7, BR-34; OD-7, OD-13, OD-30).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(157);
+select plan(158);
 
 -- Fixtures (fictional). Members: Musu (deletes her account), Joseph, Prince, Hawa. Staff: a moderator,
 -- an admin, a super admin, a second admin, and a brand-new email account about to become staff.
@@ -424,10 +424,13 @@ select is((select count(*)::int from public.messages where body = 'Hello Prince'
 select ok(exists (select 1 from public.payments where user_id is null and amount = 1.00), 'OD-7: payment records are kept, unlinked');
 select is((select count(*)::int from public.reports where reported_user_id is null and category = 'SPAM'), 1,
   'reports about a purged member are kept, unlinked');
+insert into r select 'spam_report', id from public.reports where reported_user_id is null and category = 'SPAM';
 set local role authenticated;
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
 select ok(exists (select 1 from public.staff_reports_queue(p_include_closed => true) where reported_user_id is null and category = 'SPAM'),
   '…and still listed for staff (closed view)');
+select is(public.staff_report_detail((select id from r where n = 'spam_report')) ->> 'account_status',
+  'DELETED', '…and its detail opens, showing the member as deleted');
 reset role;
 select set_config('request.jwt.claims', '', true);
 update public.app_settings set value = null where key = 'account.deletion_purge_days';
