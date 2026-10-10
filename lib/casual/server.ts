@@ -20,11 +20,13 @@ export type PoolFilters = {
 export type PoolCard = MemberCard & { availableUntil: string; saved: boolean };
 export type PoolPage = { cards: PoolCard[]; next: string | null };
 
-/** Cursor: "<hour bucket>.<hash>" of the last card shown. */
-function parseCursor(cursor: string | undefined): { bucket: number; hash: string } | null {
-  const m = /^(\d{1,12})\.([0-9a-f]{32})$/.exec(cursor ?? "");
-  return m ? { bucket: Number(m[1]), hash: m[2] } : null;
+/** Cursor: "<shuffle day>.<hour bucket>.<hash>" of the last card shown (the day keeps one order across midnight). */
+function parseCursor(cursor: string | undefined): { day: string; bucket: number; hash: string } | null {
+  const m = /^(\d{4}-\d{2}-\d{2})\.(\d{1,12})\.([0-9a-f]{32})$/.exec(cursor ?? "");
+  return m ? { day: m[1], bucket: Number(m[2]), hash: m[3] } : null;
 }
+
+const PAGE = 20;
 
 export async function poolPage(
   viewerId: string,
@@ -41,13 +43,15 @@ export async function poolPage(
     p_until: f.until?.toISOString(),
     p_after_bucket: after?.bucket,
     p_after_hash: after?.hash,
-    p_limit: 20,
+    p_day: after?.day,
+    p_limit: PAGE + 1, // one extra row tells whether there is a next page
   });
   if (error) {
     if (error.message.includes("NOT_ELIGIBLE")) return { error: "NOT_ELIGIBLE" };
     throw new Error("pool unavailable");
   }
-  const rows = data ?? [];
+  const all = data ?? [];
+  const rows = all.slice(0, PAGE);
   const urls = await signPaths(rows.flatMap((r) => (r.photo_path ? [r.photo_path] : [])));
   const cards = rows.map((r) => ({
     ...toMemberCard(r.card, r.photo_path ? (urls.get(r.photo_path) ?? null) : null),
@@ -55,7 +59,8 @@ export async function poolPage(
     saved: r.saved,
   }));
   const last = rows.at(-1);
-  return { cards, next: rows.length === 20 && last ? `${last.bucket}.${last.sort_hash}` : null };
+  const day = after?.day ?? new Date().toISOString().slice(0, 10);
+  return { cards, next: all.length > PAGE && last ? `${day}.${last.bucket}.${last.sort_hash}` : null };
 }
 
 export type CasualProfile = MemberCard & {

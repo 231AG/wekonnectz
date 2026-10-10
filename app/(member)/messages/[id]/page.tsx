@@ -40,7 +40,10 @@ export default async function ConversationPage({ params }: PageProps<"/messages/
             <ArrowLeft className="size-5" strokeWidth={1.8} aria-hidden />
           </Link>
         </Button>
-        <Link href={`/m/${other.userId}`} className="flex min-w-0 flex-1 items-center gap-3">
+        <Link
+          href={view.type === "CASUAL" ? `/casual/m/${other.userId}` : `/m/${other.userId}`}
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
           <Avatar url={other.photoUrl} name={other.displayName} className="size-11" />
           <span className="flex min-w-0 flex-col">
             <span className="flex items-center gap-1.5 font-display text-[18px] font-bold">

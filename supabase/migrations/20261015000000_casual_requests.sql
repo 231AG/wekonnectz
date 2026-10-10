@@ -59,6 +59,17 @@ create policy message_requests_no_client_access on public.message_requests
 create policy saved_profiles_no_client_access on public.saved_profiles
   as restrictive for all to anon, authenticated using (false) with check (false);
 
+-- Two members' rows locked in a fixed order, so requests, answers and blocks between one pair run one
+-- at a time (no crossed requests, no duplicate conversations, no accept racing a block).
+create or replace function public.lock_pair(p_a uuid, p_b uuid)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  select 1 from public.users where id in (p_a, p_b) order by id for update;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Who a pass-holder may see in the pool (§13)
 -- ---------------------------------------------------------------------------
@@ -130,7 +141,8 @@ create or replace function public.pool_candidates(
   p_until        timestamptz default null,
   p_after_bucket bigint default null,
   p_after_hash   text default null,
-  p_limit        integer default 20
+  p_limit        integer default 20,
+  p_day          date default null
 )
 returns table (card jsonb, photo_path text, available_until timestamptz, saved boolean, bucket bigint, sort_hash text)
 language plpgsql
@@ -138,21 +150,54 @@ stable
 security definer
 set search_path = ''
 as $$
+declare
+  -- The shuffle day travels in the cursor, so paging across midnight keeps one order.
+  v_day      date := coalesce(p_day, current_date);
+  v_min      integer := (public.get_setting('photos.min_required'))::int;
+  v_cooldown interval := coalesce((select make_interval(days => (value #>> '{}')::int) from public.app_settings
+                                   where key = 'requests.decline_cooldown_days' and value is not null),
+                                  interval '1000 years');
+  v_me       public.profiles;
 begin
   -- BR-16: no pass (or not eligible), no pool data at all.
   if p_viewer is null or cardinality(public.casual_ineligibility(p_viewer)) > 0 then
     raise exception 'NOT_ELIGIBLE' using errcode = '42501';
   end if;
+  select * into v_me from public.profiles where user_id = p_viewer;
+  -- One set-based query: the same rules as pool_visible() (pgTAP checks they agree), without per-row
+  -- function calls.
   return query
     select * from (
       select public.member_card(o.user_id), public.primary_photo_path(o.user_id), a.end_at,
-             exists (select 1 from public.saved_profiles s where s.user_id = p_viewer and s.saved_user_id = o.user_id),
+             exists (select 1 from public.saved_profiles sv where sv.user_id = p_viewer and sv.saved_user_id = o.user_id),
              floor(extract(epoch from a.start_at) / 3600)::bigint as b,
-             md5(p_viewer::text || o.user_id::text || current_date::text) as h
+             md5(p_viewer::text || o.user_id::text || v_day::text) as h
       from public.availability a
+      join public.users u on u.id = a.user_id
       join public.profiles o on o.user_id = a.user_id
+      join public.user_settings us on us.user_id = a.user_id and us.casual_message_permission = 'ANYONE'
       where a.status = 'AVAILABLE' and a.start_at <= now() and a.end_at > now()
-        and public.pool_visible(p_viewer, o.user_id)
+        and a.user_id <> p_viewer
+        -- the member: an eligible pass-holder (casual_ineligibility)
+        and u.role = 'USER' and u.hidden_reason is null
+        and public.effective_account_status(u.status, u.suspended_until) = 'ACTIVE'
+        and o.intent_casual
+        and public.latest_verification_status(u.id) = 'VERIFIED'
+        and (select count(*) from public.profile_photos ph where ph.user_id = u.id and ph.status = 'APPROVED') >= v_min
+        and exists (select 1 from public.profile_photos ph where ph.user_id = u.id and ph.is_primary and ph.status = 'APPROVED')
+        and exists (select 1 from public.subscriptions s where s.user_id = u.id and s.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED')
+                    and s.starts_at <= now() and s.expires_at > now())
+        -- "interested in" both ways
+        and v_me.gender = any (o.seeking_genders) and o.gender = any (v_me.seeking_genders)
+        -- can see each other: no block, no unmatch (BR-24)
+        and not exists (select 1 from public.blocks bl where (bl.blocker_id = p_viewer and bl.blocked_id = u.id)
+                                                          or (bl.blocker_id = u.id and bl.blocked_id = p_viewer))
+        and not exists (select 1 from public.matches m where m.user_a_id = least(p_viewer, u.id)
+                        and m.user_b_id = greatest(p_viewer, u.id) and m.status = 'UNMATCHED')
+        -- decline cool-down (OD-9)
+        and not exists (select 1 from public.message_requests r where r.sender_id = p_viewer and r.recipient_id = u.id
+                        and r.status = 'DECLINED' and r.responded_at > now() - v_cooldown)
+        -- filters
         and (p_area_id is null or o.area_id = p_area_id)
         and (p_min_age is null or public.age_in_years(o.date_of_birth) >= p_min_age)
         and (p_max_age is null or public.age_in_years(o.date_of_birth) <= p_max_age)
@@ -162,12 +207,13 @@ begin
     ) x
     where p_after_bucket is null or x.b < p_after_bucket or (x.b = p_after_bucket and x.h > p_after_hash)
     order by x.b desc, x.h
-    limit least(greatest(coalesce(p_limit, 20), 1), 20);
+    limit least(greatest(coalesce(p_limit, 20), 1), 21);
 end;
 $$;
 
--- A Casual member profile (member mock-up 04). Visible when the member is in the viewer's pool, or when
--- they sent the viewer a request that is still open (the recipient may look before answering).
+-- A Casual member profile (member mock-up 04). Visible when the member is in the viewer's pool, when
+-- they sent the viewer a request that is still open (the recipient may look before answering), or when
+-- the two have an open Casual conversation.
 create or replace function public.casual_profile(p_viewer uuid, p_owner uuid)
 returns jsonb
 language sql
@@ -178,12 +224,14 @@ as $$
   select case
     when public.pool_visible(p_viewer, p_owner)
       or (public.can_view_profile(p_viewer, p_owner)
-          and exists (select 1 from public.message_requests r
-                      where r.sender_id = p_owner and r.recipient_id = p_viewer and r.status = 'PENDING' and r.expires_at > now()))
+          and (exists (select 1 from public.message_requests r
+                       where r.sender_id = p_owner and r.recipient_id = p_viewer and r.status = 'PENDING' and r.expires_at > now())
+               or public.casual_conversation_between(p_viewer, p_owner) is not null))
     then jsonb_build_object(
       'card', public.member_card(p_owner),
       -- BR-19: the window end only while the member is in the pool.
-      'available_until', case when public.is_in_pool(p_owner) then (select a.end_at from public.availability a where a.user_id = p_owner) end,
+      'available_until', case when public.pool_visible(p_viewer, p_owner)
+                              then (select a.end_at from public.availability a where a.user_id = p_owner) end,
       'in_pool', public.pool_visible(p_viewer, p_owner),
       -- Server-only paths: signed before anything reaches the member (BR-11).
       'photos', coalesce((select jsonb_agg(jsonb_build_object('id', ph.id, 'path', ph.storage_path)
@@ -250,7 +298,7 @@ declare
   v_end  timestamptz;
   v_id   uuid;
 begin
-  perform 1 from public.users where id = p_viewer for update;
+  perform public.lock_pair(p_viewer, p_recipient);
   if cardinality(public.casual_ineligibility(p_viewer)) > 0 then
     raise exception 'NOT_ELIGIBLE' using errcode = '42501';
   end if;
@@ -301,10 +349,15 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_req  public.message_requests;
-  v_conv uuid;
+  v_req    public.message_requests;
+  v_conv   uuid;
+  v_sender uuid;
 begin
-  perform 1 from public.users where id = p_viewer for update;
+  select sender_id into v_sender from public.message_requests where id = p_request and recipient_id = p_viewer;
+  if v_sender is null then
+    raise exception 'REQUEST_NOT_OPEN' using errcode = '22023';
+  end if;
+  perform public.lock_pair(p_viewer, v_sender);
   select * into v_req from public.message_requests where id = p_request and recipient_id = p_viewer for update;
   if not found or v_req.status <> 'PENDING' or v_req.expires_at <= now()
      or not public.can_view_profile(p_viewer, v_req.sender_id) then
@@ -338,7 +391,12 @@ begin
     values (v_conv, v_req.sender_id, v_req.body, v_req.created_at);
     update public.conversations set last_message_at = now() where id = v_conv;
   end if;
-  update public.message_requests set status = 'ACCEPTED', responded_at = now(), conversation_id = v_conv where id = v_req.id;
+  -- The recipient has read the request; a request they had also sent the other way is answered too.
+  update public.conversation_members set last_read_at = clock_timestamp()
+  where conversation_id = v_conv and user_id = p_viewer;
+  update public.message_requests set status = 'ACCEPTED', responded_at = now(), conversation_id = v_conv
+  where (id = v_req.id)
+     or (sender_id = p_viewer and recipient_id = v_req.sender_id and status = 'PENDING');
   return v_conv;
 end;
 $$;
@@ -462,14 +520,87 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- BR-24: a block also ends open requests between the pair, under the pair lock (an accept can't race it).
+-- ---------------------------------------------------------------------------
+create or replace function public.block_user(p_user_id uuid, p_target uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_member_can_act(p_user_id);
+  if p_target is null or p_target = p_user_id
+     or not exists (select 1 from public.users where id = p_target and role = 'USER') then
+    raise exception 'MEMBER_NOT_FOUND' using errcode = 'P0002';
+  end if;
+  perform public.lock_pair(p_user_id, p_target);
+  insert into public.blocks (blocker_id, blocked_id, target_visible)
+  values (p_user_id, p_target, public.can_view_profile(p_user_id, p_target))
+  on conflict (blocker_id, blocked_id) do nothing;
+  perform public.close_pair(p_user_id, p_target, 'BLOCKED');
+  update public.message_requests set status = 'EXPIRED'
+  where status = 'PENDING'
+    and ((sender_id = p_user_id and recipient_id = p_target) or (sender_id = p_target and recipient_id = p_user_id));
+end;
+$$;
+
+-- Choosing Nobody ends open requests to the member (§14: no one can send them requests).
+create or replace function public.set_casual_message_permission(p_user uuid, p_permission public.message_permission)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_permission is null then
+    raise exception 'BAD_PERMISSION' using errcode = '22023';
+  end if;
+  insert into public.user_settings (user_id, casual_message_permission) values (p_user, p_permission)
+  on conflict (user_id) do update set casual_message_permission = excluded.casual_message_permission;
+  if p_permission = 'NOBODY' then
+    update public.message_requests set status = 'EXPIRED' where recipient_id = p_user and status = 'PENDING';
+  end if;
+end;
+$$;
+
+-- OD-24: requests follow the recipient's window. Changing its end (the same window) moves their expiry;
+-- a new window, or leaving the pool, ends them.
+create or replace function public.availability_requests_follow()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status <> 'UNAVAILABLE' and new.start_at is not distinct from old.start_at and new.end_at is distinct from old.end_at then
+    update public.message_requests set expires_at = new.end_at
+    where recipient_id = new.user_id and status = 'PENDING' and expires_at > now();
+  elsif new.start_at is distinct from old.start_at or new.status = 'UNAVAILABLE' then
+    update public.message_requests set status = 'EXPIRED'
+    where recipient_id = new.user_id and status = 'PENDING';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger availability_requests_follow
+  after update on public.availability
+  for each row execute function public.availability_requests_follow();
+
+-- ---------------------------------------------------------------------------
 -- Privileges: server only.
 -- ---------------------------------------------------------------------------
 revoke all on function public.declined_recently(uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.lock_pair(uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.availability_requests_follow() from public, anon, authenticated, service_role;
+revoke all on function public.set_casual_message_permission(uuid, public.message_permission) from public, anon, authenticated;
+grant execute on function public.set_casual_message_permission(uuid, public.message_permission) to service_role;
 revoke all on function public.pool_visible(uuid, uuid) from public, anon, authenticated, service_role;
 revoke all on function public.casual_conversation_between(uuid, uuid) from public, anon, authenticated, service_role;
 revoke all on function public.check_request_signals(uuid, text) from public, anon, authenticated, service_role;
 revoke all on function public.can_send_in(uuid, uuid) from public, anon, authenticated, service_role;
-revoke all on function public.pool_candidates(uuid, uuid, integer, integer, uuid[], timestamptz, bigint, text, integer) from public, anon, authenticated;
+revoke all on function public.pool_candidates(uuid, uuid, integer, integer, uuid[], timestamptz, bigint, text, integer, date) from public, anon, authenticated;
 revoke all on function public.casual_profile(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.send_message_request(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.respond_to_request(uuid, uuid, text) from public, anon, authenticated;
@@ -479,7 +610,7 @@ revoke all on function public.saved_list(uuid) from public, anon, authenticated;
 revoke all on function public.leave_pool(uuid) from public, anon, authenticated;
 revoke all on function public.tidy_requests() from public, anon, authenticated;
 
-grant execute on function public.pool_candidates(uuid, uuid, integer, integer, uuid[], timestamptz, bigint, text, integer) to service_role;
+grant execute on function public.pool_candidates(uuid, uuid, integer, integer, uuid[], timestamptz, bigint, text, integer, date) to service_role;
 grant execute on function public.casual_profile(uuid, uuid) to service_role;
 grant execute on function public.send_message_request(uuid, uuid, text) to service_role;
 grant execute on function public.respond_to_request(uuid, uuid, text) to service_role;

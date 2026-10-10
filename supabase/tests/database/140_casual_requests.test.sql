@@ -2,7 +2,7 @@
 -- (spec §13, §14, §17; BR-16, 17, 19, 21, 22, 24, 25, 31; OD-9, OD-24).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(78);
 
 -- Fixtures (fictional). Women seeking men: Musu, Fatu (no pass). Men seeking women: Joseph, Prince,
 -- Kemah, Emmanuel. Varney: a man seeking men.
@@ -249,6 +249,105 @@ reset role;
 select is((select count(*)::int from public.moderation_flags where entity_id = 'dddddddd-9000-0000-0000-000000000008'
            and reason = 'DUPLICATE_REQUEST_TEXT' and details::text not like '%Same%'), 1,
   '§17: the same text to many members flags the sender (the text is not in the flag)');
+
+-- ---------------------------------------------------------------------------
+-- Self-audit round 1
+-- ---------------------------------------------------------------------------
+reset role;
+update public.app_settings set value = '20'::jsonb where key = 'requests.daily_cap';
+update public.app_settings set value = '5'::jsonb where key = 'requests.duplicate_text_recipients';
+select pg_temp.member('dddddddd-9000-0000-0000-000000000011', 'Kebeh', 'WOMAN', 'MAN', '1996-02-01');
+select pg_temp.member('dddddddd-9000-0000-0000-000000000012', 'Daniel', 'MAN', 'WOMAN', '1994-02-01');
+select pg_temp.member('dddddddd-9000-0000-0000-000000000013', 'Siah', 'WOMAN', 'MAN', '1997-02-01');
+select pg_temp.give_pass(u, 24) from unnest(array['dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012',
+  'dddddddd-9000-0000-0000-000000000013']::uuid[]) u;
+insert into public.verifications (user_id, pose_prompt, status, rejection_reason, selfie_storage_path, submitted_at, reviewed_at)
+values ('dddddddd-9000-0000-0000-000000000013', 'Touch your ear', 'REJECTED', 'POSE_NOT_MATCHING', gen_random_uuid() || '.webp', now(), now());
+set local role service_role;
+select public.set_availability('dddddddd-9000-0000-0000-000000000012', null, now() + interval '3 hours');
+
+-- The fast pool query and pool_visible() agree for every viewer and member here.
+reset role;
+select is(
+  (select count(*)::int from public.pool_candidates('dddddddd-9000-0000-0000-000000000011')),
+  (select count(*)::int from public.availability a where public.pool_visible('dddddddd-9000-0000-0000-000000000011', a.user_id)),
+  'pool_candidates() and pool_visible() agree');
+set local role service_role;
+select throws_ok($$ select public.send_message_request('dddddddd-9000-0000-0000-000000000013', 'dddddddd-9000-0000-0000-000000000012', 'Hi') $$,
+  '42501', 'NOT_ELIGIBLE', 'BR-21: a sender whose verification was rejected can''t send requests');
+
+-- OD-24: requests follow the recipient's window.
+insert into r select 'k1', public.send_message_request('dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012', 'Hello Daniel');
+select public.set_availability('dddddddd-9000-0000-0000-000000000012', null, now() + interval '5 hours');
+select is((select expires_at from public.message_requests where id = (select id from r where n = 'k1')), now() + interval '5 hours',
+  'OD-24: extending the window moves the request''s expiry with it');
+select public.set_availability('dddddddd-9000-0000-0000-000000000012', null, now() + interval '1 hour');
+select is((select expires_at from public.message_requests where id = (select id from r where n = 'k1')), now() + interval '1 hour',
+  'OD-24: shortening it does too');
+select public.set_availability('dddddddd-9000-0000-0000-000000000012', now() + interval '2 hours', now() + interval '4 hours');
+select is((select status::text from public.message_requests where id = (select id from r where n = 'k1')), 'EXPIRED',
+  'OD-24: a new window ends requests sent during the old one');
+
+-- Nobody ends open requests; BR-19 for a request recipient without a pass.
+select public.set_availability('dddddddd-9000-0000-0000-000000000012', null, now() + interval '3 hours');
+insert into r select 'k2', public.send_message_request('dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012', 'Hello again');
+select public.set_casual_message_permission('dddddddd-9000-0000-0000-000000000012', 'NOBODY');
+select is((select status::text from public.message_requests where id = (select id from r where n = 'k2')), 'EXPIRED',
+  '§14: choosing Nobody ends open requests to the member');
+select public.set_casual_message_permission('dddddddd-9000-0000-0000-000000000012', 'ANYONE');
+insert into r select 'k3', public.send_message_request('dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012', 'Third time');
+reset role;
+select set_config('wk.subscription_admin', 'on', true);
+update public.subscriptions set expires_at = now() - interval '1 second', starts_at = now() - interval '2 days'
+where user_id = 'dddddddd-9000-0000-0000-000000000012';
+select set_config('wk.subscription_admin', 'off', true);
+set local role service_role;
+select is(public.casual_profile('dddddddd-9000-0000-0000-000000000012', 'dddddddd-9000-0000-0000-000000000011') ->> 'available_until', null,
+  'BR-19: no window end for someone outside the viewer''s pool, even with an open request');
+select throws_ok($$ select public.respond_to_request('dddddddd-9000-0000-0000-000000000012', (select id from r where n = 'k3'), 'ACCEPT') $$,
+  '42501', 'NOT_ELIGIBLE', 'BR-25: accepting needs the recipient''s own pass');
+reset role;
+select pg_temp.give_pass('dddddddd-9000-0000-0000-000000000012', 24);
+
+-- A suspended sender's request is hidden and can't be answered.
+update public.users set suspended_until = now() + interval '1 day' where id = 'dddddddd-9000-0000-0000-000000000011';
+set local role service_role;
+select is((select count(*)::int from public.requests_received('dddddddd-9000-0000-0000-000000000012')), 0,
+  'a suspended sender''s request is hidden');
+select throws_ok($$ select public.respond_to_request('dddddddd-9000-0000-0000-000000000012', (select id from r where n = 'k3'), 'ACCEPT') $$,
+  '22023', 'REQUEST_NOT_OPEN', 'and can''t be accepted');
+reset role;
+update public.users set suspended_until = null where id = 'dddddddd-9000-0000-0000-000000000011';
+
+-- Accept, then a block closes the Casual conversation for both (BR-24).
+set local role service_role;
+insert into r select 'kc', public.respond_to_request('dddddddd-9000-0000-0000-000000000012', (select id from r where n = 'k3'), 'ACCEPT');
+select ok(public.casual_profile('dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012') ->> 'conversation_id' is not null,
+  'members of an open Casual conversation can open each other''s Casual profile');
+select public.block_user('dddddddd-9000-0000-0000-000000000011', 'dddddddd-9000-0000-0000-000000000012');
+reset role;
+select is((select status::text from public.conversations where id = (select id from r where n = 'kc')), 'CLOSED',
+  'BR-24: a block closes the Casual conversation for both');
+select is(public.casual_profile('dddddddd-9000-0000-0000-000000000012', 'dddddddd-9000-0000-0000-000000000011'), null,
+  'BR-24: and the profile is gone');
+
+-- §17 request bursts
+update public.app_settings set value = '2'::jsonb where key = 'requests.burst_count';
+select pg_temp.member('dddddddd-9000-0000-0000-000000000014', 'Eric', 'MAN', 'WOMAN', '1992-02-01');
+select pg_temp.member('dddddddd-9000-0000-0000-000000000015', 'Sam', 'MAN', 'WOMAN', '1991-02-01');
+select pg_temp.give_pass(u, 24) from unnest(array['dddddddd-9000-0000-0000-000000000014', 'dddddddd-9000-0000-0000-000000000015']::uuid[]) u;
+set local role service_role;
+select public.set_availability(u, null, now() + interval '3 hours')
+from unnest(array['dddddddd-9000-0000-0000-000000000014', 'dddddddd-9000-0000-0000-000000000015']::uuid[]) u;
+reset role;
+delete from public.verifications where user_id = 'dddddddd-9000-0000-0000-000000000013' and status = 'REJECTED';
+set local role service_role;
+select lives_ok($$ select public.send_message_request('dddddddd-9000-0000-0000-000000000013', 'dddddddd-9000-0000-0000-000000000014', 'Hi Eric'),
+                         public.send_message_request('dddddddd-9000-0000-0000-000000000013', 'dddddddd-9000-0000-0000-000000000015', 'Hi Sam') $$,
+  'two requests in a few minutes');
+reset role;
+select is((select count(*)::int from public.moderation_flags where entity_id = 'dddddddd-9000-0000-0000-000000000013'
+           and reason = 'REQUEST_BURST' and status = 'OPEN'), 1, '§17: many requests in a short time flag the sender (T-19)');
 
 select * from finish();
 rollback;

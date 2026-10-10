@@ -1189,6 +1189,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"lock_pair":
+{ Args: { "p_a": string,"p_b": string }; Returns: undefined
+                           },
 "log_evidence_view":
 { Args: { "p_claim": string }; Returns: undefined
                            },
@@ -1302,7 +1305,7 @@ isOneToOne: false
             }[]
                            },
 "pool_candidates":
-{ Args: { "p_after_bucket"?: number,"p_after_hash"?: string,"p_area_id"?: string,"p_interest_ids"?: (string)[],"p_limit"?: number,"p_max_age"?: number,"p_min_age"?: number,"p_until"?: string,"p_viewer": string }; Returns: {
+{ Args: { "p_after_bucket"?: number,"p_after_hash"?: string,"p_area_id"?: string,"p_day"?: string,"p_interest_ids"?: (string)[],"p_limit"?: number,"p_max_age"?: number,"p_min_age"?: number,"p_until"?: string,"p_viewer": string }; Returns: {
               "available_until": string,"bucket": number,"card": Json,"photo_path": string,"saved": boolean,"sort_hash": string
             }[]
                            },

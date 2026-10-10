@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BadgeCheck, Ban } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 
+import { RequestActions } from "@/components/casual/request-actions";
 import { MemberShell } from "@/components/layout/member-shell";
 import { MessagesTabs } from "@/components/messages/messages-tabs";
 import { Avatar } from "@/components/relationship/avatar";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { respondToRequest } from "@/lib/casual/actions";
@@ -72,25 +72,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/message
                   </span>
                 </Link>
                 <p className="text-[16px] leading-6 break-words">{r.body}</p>
-                <form action={respondToRequest} className="flex gap-2">
-                  <input type="hidden" name="requestId" value={r.requestId} />
-                  <Button type="submit" name="action" value="ACCEPT" variant="casual" size="md" className="flex-[1.4]">
-                    Accept
-                  </Button>
-                  <Button type="submit" name="action" value="DECLINE" variant="outline" size="md" className="flex-1">
-                    Decline
-                  </Button>
-                  <Button
-                    type="submit"
-                    name="action"
-                    value="BLOCK"
-                    variant="outline"
-                    size="icon"
-                    aria-label={`Block ${r.displayName}`}
-                  >
-                    <Ban className="size-5 text-danger" strokeWidth={1.8} aria-hidden />
-                  </Button>
-                </form>
+                <RequestActions requestId={r.requestId} name={r.displayName} respond={respondToRequest} />
               </Card>
             </li>
           ))}
