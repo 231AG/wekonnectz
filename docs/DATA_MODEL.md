@@ -280,6 +280,31 @@ Settings (no values in the migration; DEV-ONLY in `seed.sql`): `availability.max
 
 Settings (no values in the migration; DEV-ONLY in `seed.sql`): `requests.daily_cap`, `requests.decline_cooldown_days` (OD-9), `requests.burst_count`, `requests.burst_minutes`, `requests.duplicate_text_recipients` (T-19).
 
+### Phase 10 ✅ (`20261016000000_admin_lifecycle.sql`) — admin console + account lifecycle
+
+No new tables. `app_settings` gains `kind` (int · bool · object · array · enum), `allowed` (enum choices) and `super_admin_only` (feature flags and system config: `geo.enforcement_mode`, `photos.min_required`, `otp.*`, `staff_login.*`, `account.deletion_purge_days`).
+
+| Function                                                                                     | Callable by          | Purpose                                                                                                                              |
+| -------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `staff_dashboard()`                                                                          | authenticated, ADMIN | §21 figures: members, verified, access by plan, available now, revenue by source, card charges to refund, queues                     |
+| `staff_users_search(query, status, verification, has_access, available, phone, limit)`       | authenticated, MOD+  | Name / id / phone search (phone matched in the database, never returned); access only for ADMIN                                      |
+| `staff_user_detail(user)`                                                                    | authenticated, MOD+  | Profile, status, reports, flags; subscriptions, payments and audit trail only for ADMIN (§7)                                         |
+| `staff_correct_dob(user, dob, reason)`                                                       | authenticated, ADMIN | BR-4 kept; audited `DOB_CORRECTED` with the reason only                                                                              |
+| `staff_subscriptions` / `staff_extend_subscription(sub, days, reason)`                       | authenticated, ADMIN | OD-30 cap per extension; running subscriptions only; audited `SUBSCRIPTION_MODIFIED`                                                 |
+| `staff_payments` / `staff_payment_events` / `staff_webhook_log`                              | authenticated, ADMIN | §21 Payments & events                                                                                                                |
+| `staff_record_refund(payment, reason)`                                                       | authenticated, ADMIN | Payment → REFUNDED (payment event with the admin as actor), the access it bought ends; audited `PAYMENT_REFUNDED`                    |
+| `staff_analytics(days)`                                                                      | authenticated, ADMIN | Daily counts only                                                                                                                    |
+| `staff_audit_logs(actor, action, entity, from, to, before, limit, before_id)`                | authenticated, ADMIN | Read-only, keyset paging                                                                                                             |
+| `staff_settings` / `staff_update_setting(key, value)`                                        | authenticated, ADMIN | Validated by kind; `super_admin_only` keys need SUPER_ADMIN; audited `SETTING_CHANGED` with old and new value                        |
+| `staff_plans` / `staff_save_plan`, `staff_merchant_accounts` / `staff_save_merchant_account` | authenticated, ADMIN | Prices (OD-1), wallets (one active per provider); audited                                                                            |
+| `staff_interests` / `staff_save_interest`, `staff_areas` / `staff_save_area`                 | authenticated, ADMIN | Lists including hidden entries; audited                                                                                              |
+| `staff_list` / `staff_register_new(user, role)` / `staff_set_role` / `staff_set_enabled`     | authenticated, SUPER | Staff management (§7); never a member account, never yourself; audited `ADMIN_CREATED` / `ROLE_CHANGED`                              |
+| `member_delete_account(user)`                                                                | service_role         | §8: leave the pool, end requests, matches and conversations, status DELETED (BR-7; Auth refuses the account via `sync_auth_ban`)     |
+| `member_data_export(user)`                                                                   | service_role         | The member's own data as JSON; no storage paths, no other member's private data, no moderation notes                                 |
+| `accounts_due_for_purge(limit)` / `purge_account_content(user)`                              | service_role         | OD-7: deleted accounts past the retention period, with the files to remove; conversations and matches removed before the Auth delete |
+
+Settings (no values in the migration; DEV-ONLY in `seed.sql`): `account.deletion_purge_days` (OD-7), `subscriptions.manual_extension_max_days` (OD-30), `export.max_per_day` (T-19).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |
