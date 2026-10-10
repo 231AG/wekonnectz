@@ -119,3 +119,6 @@ update public.app_settings set value = '5'::jsonb where key = 'requests.duplicat
 update public.app_settings set value = '30'::jsonb where key = 'account.deletion_purge_days';          -- DEV-ONLY
 update public.app_settings set value = '7'::jsonb where key = 'subscriptions.manual_extension_max_days'; -- DEV-ONLY
 update public.app_settings set value = '5'::jsonb where key = 'export.max_per_day';                   -- DEV-ONLY
+
+-- DEV-ONLY pass expiry reminder until the owner approves T-19 (§16 says "expiry reminders", no lead time).
+update public.app_settings set value = '24'::jsonb where key = 'notifications.pass_expiry_warning_hours'; -- DEV-ONLY
