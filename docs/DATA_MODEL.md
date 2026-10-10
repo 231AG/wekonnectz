@@ -261,6 +261,25 @@ No location column anywhere (BR-20, pgTAP checks the whole schema).
 
 Settings (no values in the migration; DEV-ONLY in `seed.sql`): `availability.max_window_hours`, `availability.max_lead_days` (OD-8), `availability.short_window_minutes`, `availability.short_windows_per_day` (T-19).
 
+### Phase 9 ✅ (`20261015000000_casual_requests.sql`)
+
+| Table              | Key columns                                                                                                                                       | Client access | Notes                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `message_requests` | sender, recipient, body (1–300), body_hash, status (PENDING · ACCEPTED · DECLINED · EXPIRED · BLOCKED), expires_at, responded_at, conversation_id | none          | One pending per sender → recipient (unique partial index); expires at the recipient's window end (OD-24) |
+| `saved_profiles`   | user_id, saved_user_id                                                                                                                            | none          | Listed only while the saved member is in the viewer's pool                                               |
+
+| Function                                                             | Callable by  | Purpose                                                                                                                              |
+| -------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `pool_visible(viewer, owner)`                                        | internal     | §13: eligible pass-holder viewer, owner in the pool, mutual "interested in", visible to each other, not declined recently            |
+| `pool_candidates(viewer, filters…, after_bucket, after_hash, limit)` | service_role | Available Now: filters, hourly buckets newest first with a per-viewer daily shuffle, keyset cursor, 20 a page; raises without a pass |
+| `casual_profile(viewer, owner)`                                      | service_role | Casual profile (photos as server-only paths, window end only while in the pool, saved / request / conversation state)                |
+| `send_message_request` / `respond_to_request` / `requests_received`  | service_role | BR-21, BR-22: send, accept (CASUAL conversation starting with the request), decline (private), block                                 |
+| `save_profile` / `saved_list`                                        | service_role | Saved profiles                                                                                                                       |
+| `can_send_in` (redefined)                                            | internal     | BR-25: Casual needs the sender's own active pass                                                                                     |
+| `leave_pool` (redefined) / `tidy_requests`                           | service_role | OD-24: leaving the pool expires requests to the member; the daily job records expiry                                                 |
+
+Settings (no values in the migration; DEV-ONLY in `seed.sql`): `requests.daily_cap`, `requests.decline_cooldown_days` (OD-9), `requests.burst_count`, `requests.burst_minutes`, `requests.duplicate_text_recipients` (T-19).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |

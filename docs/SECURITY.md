@@ -163,6 +163,14 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - Hidden or suspended members are told only that their account can't be available (no mention of reports).
 - **BR-20:** no location is collected; a pgTAP test fails if any location-like column appears in the schema.
 
+## Casual discovery and requests (Phase 9)
+
+- **BR-16:** every pool function raises for a viewer without an active pass (or not eligible); no pool data, no Casual profile, no requests.
+- **Privacy of declines and blocks:** a decline is never shown to the sender — the member just leaves the sender's pool for the cool-down, and their requests read "Request sent" until they expire. A block removes both members from each other's pool, profiles and requests (BR-24).
+- **BR-19:** a member's window end is returned only by pool functions, and by the Casual profile only while the member is in the pool.
+- **BR-31:** requests run the detection engine in profile mode on the server and are refused on contact details or prices; the database limits them to 1–300 characters. Request text is never logged, and the §17 signals store counts and hashes, never text.
+- **BR-25:** `can_send_in()` requires the sender's own active pass in CASUAL conversations; the server refuses, the screen explains, history stays readable.
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,
