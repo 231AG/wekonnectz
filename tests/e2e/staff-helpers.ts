@@ -27,7 +27,7 @@ export type TestStaff = { id: string; email: string; password: string };
  * A fictional staff account (email + password). Production staff are created only by the first-admin
  * script or by a SUPER_ADMIN; tests set the role directly with the service role.
  */
-export async function createStaff(role: "MODERATOR" | "ADMIN" = "MODERATOR"): Promise<TestStaff> {
+export async function createStaff(role: "MODERATOR" | "ADMIN" | "SUPER_ADMIN" = "MODERATOR"): Promise<TestStaff> {
   const admin = adminClient();
   const email = `moderator-${randomBytes(4).toString("hex")}@example.test`;
   const password = `Test-${randomBytes(9).toString("base64url")}9a`;

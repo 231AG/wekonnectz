@@ -1331,6 +1331,9 @@ isOneToOne: false
               "code": string,"currency": string,"duration_hours": number,"name": string,"price": number,"source": Database["public"]['Enums']["payment_source"]
             }[]
                            },
+"purge_account_content":
+{ Args: { "p_user": string }; Returns: undefined
+                           },
 "raise_flag":
 { Args: { "p_details"?: Json,"p_entity_id": string,"p_entity_type": string,"p_reason": string }; Returns: undefined
                            },
@@ -1460,8 +1463,13 @@ isOneToOne: false
               "day": string,"likes": number,"matches": number,"passes_card": number,"passes_mobile_money": number,"reports": number,"requests": number,"requests_accepted": number,"revenue": number,"signups": number,"verified": number
             }[]
                            },
+"staff_areas":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "active": boolean,"area_id": string,"county": string,"name": string
+            }[]
+                           },
 "staff_audit_logs":
-{ Args: { "p_action"?: Database["public"]['Enums']["audit_action"],"p_actor_email"?: string,"p_before"?: string,"p_entity_id"?: string,"p_entity_type"?: string,"p_from"?: string,"p_limit"?: number,"p_to"?: string }; Returns: {
+{ Args: { "p_action"?: Database["public"]['Enums']["audit_action"],"p_actor_email"?: string,"p_before"?: string,"p_before_id"?: string,"p_entity_id"?: string,"p_entity_type"?: string,"p_from"?: string,"p_limit"?: number,"p_to"?: string }; Returns: {
               "action": Database["public"]['Enums']["audit_action"],"actor": string,"created_at": string,"entity_id": string,"entity_type": string,"log_id": string,"metadata": Json
             }[]
                            },
@@ -1485,6 +1493,11 @@ isOneToOne: false
 "staff_flags_queue":
 { Args: { "p_limit"?: number }; Returns: {
               "account_id": string,"account_status": Database["public"]['Enums']["account_status"],"created_at": string,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string,"stored_status": Database["public"]['Enums']["account_status"],"suspended_until": string
+            }[]
+                           },
+"staff_interests":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "active": boolean,"interest_id": string,"name": string,"slug": string
             }[]
                            },
 "staff_list":

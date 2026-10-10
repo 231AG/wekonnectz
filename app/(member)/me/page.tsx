@@ -1,6 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BadgeCheck, ChevronRight, Images, Pencil, Receipt, ShieldCheck, Sparkles, UserX } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  Images,
+  LockKeyhole,
+  Pencil,
+  Receipt,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  UserX,
+} from "lucide-react";
 
 import { MemberShell } from "@/components/layout/member-shell";
 import { Button } from "@/components/ui/button";
@@ -15,12 +26,15 @@ const LINKS = [
   { href: "/onboarding/about", label: "Name, area and what you’re looking for", icon: Pencil },
   { href: "/onboarding/interests", label: "Interests and bio", icon: Sparkles },
   { href: "/onboarding/photos", label: "Photos", icon: Images },
+  { href: "/account/verification", label: "Verification", icon: BadgeCheck },
   { href: "/me/payments", label: "Subscription & payments", icon: Receipt },
+  { href: "/account/privacy", label: "Privacy & messaging", icon: LockKeyhole },
   { href: "/account/blocked", label: "Blocked members", icon: UserX },
   { href: "/safety", label: "Staying safe", icon: ShieldCheck },
+  { href: "/account/settings", label: "Settings", icon: Settings },
 ];
 
-/** My profile (spec §20), the parts that exist so far. Editing reuses the onboarding steps. */
+/** My profile (spec §20). Editing reuses the onboarding steps. */
 export default async function MePage() {
   const member = await requireMember();
   if (member.status !== "ACTIVE" && member.status !== "SUSPENDED") redirect(nextStepFor(member));
@@ -31,7 +45,7 @@ export default async function MePage() {
     .select("display_name")
     .eq("user_id", member.id)
     .single();
-  const links = member.status === "SUSPENDED" ? LINKS.slice(3) : LINKS;
+  const links = member.status === "SUSPENDED" ? LINKS.slice(4) : LINKS;
   return (
     <MemberShell>
       <h1 className="flex items-center gap-2 font-display text-[34px] font-bold">

@@ -438,7 +438,8 @@ create or replace function public.staff_audit_logs(
   p_from        timestamptz default null,
   p_to          timestamptz default null,
   p_before      timestamptz default null,
-  p_limit       integer default 100
+  p_limit       integer default 100,
+  p_before_id   uuid default null
 )
 returns table (log_id uuid, created_at timestamptz, actor text, action public.audit_action, entity_type text,
                entity_id text, metadata jsonb)
@@ -459,8 +460,9 @@ begin
       and (p_entity_id is null or l.entity_id = p_entity_id)
       and (p_from is null or l.created_at >= p_from)
       and (p_to is null or l.created_at < p_to)
-      and (p_before is null or l.created_at < p_before)
-    order by l.created_at desc
+      -- Keyset page: rows written in one transaction share created_at, so the id breaks ties.
+      and (p_before is null or (l.created_at, l.id) < (p_before, coalesce(p_before_id, 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid)))
+    order by l.created_at desc, l.id desc
     limit least(greatest(coalesce(p_limit, 100), 1), 500);
 end;
 $$;
@@ -629,6 +631,32 @@ begin
   perform public.audit('SETTING_CHANGED', 'merchant_account', v_id::text,
     jsonb_build_object('from', v_old, 'to', (select to_jsonb(m) from public.merchant_accounts m where id = v_id)));
   return v_id;
+end;
+$$;
+
+create or replace function public.staff_interests()
+returns table (interest_id uuid, name text, slug text, active boolean)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.require_staff('ADMIN');
+  return query select i.id, i.name, i.slug, i.active from public.interests i order by i.active desc, i.name;
+end;
+$$;
+
+create or replace function public.staff_areas()
+returns table (area_id uuid, county text, name text, active boolean)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.require_staff('ADMIN');
+  return query select a.id, a.county, a.name, a.active from public.areas a order by a.active desc, a.county, a.name;
 end;
 $$;
 
@@ -895,6 +923,26 @@ as $$
   limit least(greatest(coalesce(p_limit, 50), 1), 200);
 $$;
 
+-- First step of a purge (OD-7), before the files and the Auth account go: the member's conversations
+-- (with their messages) and matches, in an order the cascades can't trip over. The other member
+-- already lost them from every list when the account was deleted (BR-7). Refuses unless the account
+-- is DELETED and past the retention period.
+create or replace function public.purge_account_content(p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not exists (select 1 from public.accounts_due_for_purge(200) d where d.user_id = p_user) then
+    raise exception 'NOT_DUE' using errcode = '22023';
+  end if;
+  delete from public.conversations c
+  where exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = p_user);
+  delete from public.matches where user_a_id = p_user or user_b_id = p_user;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Privileges
 -- ---------------------------------------------------------------------------
@@ -910,13 +958,15 @@ revoke all on function public.staff_payment_events(uuid) from public, anon;
 revoke all on function public.staff_webhook_log(integer) from public, anon;
 revoke all on function public.staff_record_refund(uuid, text) from public, anon;
 revoke all on function public.staff_analytics(integer) from public, anon;
-revoke all on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer) from public, anon;
+revoke all on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer, uuid) from public, anon;
 revoke all on function public.staff_settings() from public, anon;
 revoke all on function public.staff_update_setting(text, jsonb) from public, anon;
 revoke all on function public.staff_plans() from public, anon;
 revoke all on function public.staff_save_plan(uuid, text, text, public.payment_source, integer, numeric, text, boolean, integer) from public, anon;
 revoke all on function public.staff_merchant_accounts() from public, anon;
 revoke all on function public.staff_save_merchant_account(uuid, public.payment_provider, text, text, boolean) from public, anon;
+revoke all on function public.staff_interests() from public, anon;
+revoke all on function public.staff_areas() from public, anon;
 revoke all on function public.staff_save_interest(uuid, text, boolean) from public, anon;
 revoke all on function public.staff_save_area(uuid, text, text, boolean) from public, anon;
 revoke all on function public.staff_list() from public, anon;
@@ -926,6 +976,7 @@ revoke all on function public.staff_set_enabled(uuid, boolean) from public, anon
 revoke all on function public.member_delete_account(uuid) from public, anon, authenticated;
 revoke all on function public.member_data_export(uuid) from public, anon, authenticated;
 revoke all on function public.accounts_due_for_purge(integer) from public, anon, authenticated;
+revoke all on function public.purge_account_content(uuid) from public, anon, authenticated;
 
 -- Staff functions: the staff member's own session (role + MFA checked inside). Not the server key.
 revoke all on function public.staff_dashboard() from service_role;
@@ -939,13 +990,15 @@ revoke all on function public.staff_payment_events(uuid) from service_role;
 revoke all on function public.staff_webhook_log(integer) from service_role;
 revoke all on function public.staff_record_refund(uuid, text) from service_role;
 revoke all on function public.staff_analytics(integer) from service_role;
-revoke all on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer) from service_role;
+revoke all on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer, uuid) from service_role;
 revoke all on function public.staff_settings() from service_role;
 revoke all on function public.staff_update_setting(text, jsonb) from service_role;
 revoke all on function public.staff_plans() from service_role;
 revoke all on function public.staff_save_plan(uuid, text, text, public.payment_source, integer, numeric, text, boolean, integer) from service_role;
 revoke all on function public.staff_merchant_accounts() from service_role;
 revoke all on function public.staff_save_merchant_account(uuid, public.payment_provider, text, text, boolean) from service_role;
+revoke all on function public.staff_interests() from service_role;
+revoke all on function public.staff_areas() from service_role;
 revoke all on function public.staff_save_interest(uuid, text, boolean) from service_role;
 revoke all on function public.staff_save_area(uuid, text, text, boolean) from service_role;
 revoke all on function public.staff_list() from service_role;
@@ -964,13 +1017,15 @@ grant execute on function public.staff_payment_events(uuid) to authenticated;
 grant execute on function public.staff_webhook_log(integer) to authenticated;
 grant execute on function public.staff_record_refund(uuid, text) to authenticated;
 grant execute on function public.staff_analytics(integer) to authenticated;
-grant execute on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer) to authenticated;
+grant execute on function public.staff_audit_logs(text, public.audit_action, text, text, timestamptz, timestamptz, timestamptz, integer, uuid) to authenticated;
 grant execute on function public.staff_settings() to authenticated;
 grant execute on function public.staff_update_setting(text, jsonb) to authenticated;
 grant execute on function public.staff_plans() to authenticated;
 grant execute on function public.staff_save_plan(uuid, text, text, public.payment_source, integer, numeric, text, boolean, integer) to authenticated;
 grant execute on function public.staff_merchant_accounts() to authenticated;
 grant execute on function public.staff_save_merchant_account(uuid, public.payment_provider, text, text, boolean) to authenticated;
+grant execute on function public.staff_interests() to authenticated;
+grant execute on function public.staff_areas() to authenticated;
 grant execute on function public.staff_save_interest(uuid, text, boolean) to authenticated;
 grant execute on function public.staff_save_area(uuid, text, text, boolean) to authenticated;
 grant execute on function public.staff_list() to authenticated;
@@ -981,3 +1036,4 @@ grant execute on function public.staff_set_enabled(uuid, boolean) to authenticat
 grant execute on function public.member_delete_account(uuid) to service_role;
 grant execute on function public.member_data_export(uuid) to service_role;
 grant execute on function public.accounts_due_for_purge(integer) to service_role;
+grant execute on function public.purge_account_content(uuid) to service_role;

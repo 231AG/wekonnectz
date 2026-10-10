@@ -116,6 +116,8 @@ select is_empty(
           'staff_save_plan',          -- Phase 10: ADMIN; audited
           'staff_merchant_accounts',  -- Phase 10: ADMIN
           'staff_save_merchant_account',-- Phase 10: ADMIN; audited
+          'staff_interests',          -- Phase 10: ADMIN
+          'staff_areas',              -- Phase 10: ADMIN
           'staff_save_interest',      -- Phase 10: ADMIN; audited
           'staff_save_area',          -- Phase 10: ADMIN; audited
           'staff_list',               -- Phase 10: SUPER_ADMIN

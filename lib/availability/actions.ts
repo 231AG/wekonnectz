@@ -84,4 +84,5 @@ export async function saveRequestPermission(formData: FormData): Promise<void> {
   if (!permission.success) return;
   await setRequestPermission(member.id, permission.data);
   revalidatePath("/casual/availability");
+  revalidatePath("/account/privacy");
 }

@@ -75,6 +75,9 @@ export default async function UnderReviewPage() {
       footer={
         <>
           <EditWhileWaiting />
+          <Button asChild variant="ghost" size="md" className="w-full">
+            <Link href="/account/settings">Account settings</Link>
+          </Button>
           <form action={signOut}>
             <Button type="submit" variant="ghost" size="md" className="w-full">
               Log out

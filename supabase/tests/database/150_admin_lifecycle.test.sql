@@ -1,7 +1,7 @@
 -- Phase 10: admin console + account lifecycle (spec §7, §8, §21; BR-7, BR-34; OD-7, OD-13, OD-30).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(125);
+select plan(131);
 
 -- Fixtures (fictional). Members: Musu (deletes her account), Joseph, Prince, Hawa. Staff: a moderator,
 -- an admin, a super admin, a second admin, and a brand-new email account about to become staff.
@@ -343,6 +343,16 @@ set local role service_role;
 select is((select cardinality(photo_paths) + cardinality(selfie_paths) from public.accounts_due_for_purge()
            where user_id = 'eeeeeeee-1000-0000-0000-000000000001'), 4, 'OD-7: due after the period, with photos and selfie to delete');
 reset role;
+set local role service_role;
+select throws_ok($$ select public.purge_account_content('eeeeeeee-1000-0000-0000-000000000002') $$, '22023', 'NOT_DUE',
+  'OD-7: only a deleted account past the retention period can be purged');
+select lives_ok($$ select public.purge_account_content('eeeeeeee-1000-0000-0000-000000000001') $$, 'OD-7: the purge removes conversations and matches first');
+reset role;
+-- The purge job then deletes the Auth user (as Supabase Auth does); everything personal cascades.
+select lives_ok($$ delete from auth.users where id = 'eeeeeeee-1000-0000-0000-000000000001' $$, 'OD-7: the purge removes the account');
+select is((select count(*)::int from public.profiles where user_id = 'eeeeeeee-1000-0000-0000-000000000001'), 0, 'OD-7: the profile is gone');
+select is((select count(*)::int from public.messages where body = 'Hello Prince'), 0, 'OD-7: their messages are gone');
+select ok(exists (select 1 from public.payments where user_id is null and amount = 1.00), 'OD-7: payment records are kept, unlinked');
 update public.app_settings set value = null where key = 'account.deletion_purge_days';
 set local role service_role;
 select is((select count(*)::int from public.accounts_due_for_purge()), 0, '§6 rule 9: nothing is purged while OD-7 is unset');

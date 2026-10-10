@@ -3,15 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
+  BadgeCheck,
   Camera,
+  ChartBar,
   ChartLine,
   CreditCard,
   Flag,
   Image as ImageIcon,
+  KeyRound,
   LogOut,
+  ScrollText,
   Settings,
   Shield,
   User,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -32,8 +38,13 @@ const NAV: AdminNavItem[] = [
   { href: "/admin/photos", label: "Photos", icon: ImageIcon, minRole: "MODERATOR" },
   { href: "/admin/reports", label: "Reports", icon: Flag, minRole: "MODERATOR" },
   { href: "/admin/flags", label: "Flags", icon: Shield, minRole: "MODERATOR" },
-  { href: "/admin/payments", label: "Payments", icon: CreditCard, minRole: "ADMIN" },
+  { href: "/admin/payments", label: "Payment claims", icon: CreditCard, minRole: "ADMIN" },
+  { href: "/admin/subscriptions", label: "Subscriptions", icon: BadgeCheck, minRole: "ADMIN" },
+  { href: "/admin/transactions", label: "Payments & events", icon: ArrowLeftRight, minRole: "ADMIN" },
+  { href: "/admin/analytics", label: "Analytics", icon: ChartBar, minRole: "ADMIN" },
+  { href: "/admin/audit", label: "Audit logs", icon: ScrollText, minRole: "ADMIN" },
   { href: "/admin/settings", label: "Settings", icon: Settings, minRole: "ADMIN" },
+  { href: "/admin/staff", label: "Staff", icon: UserCog, minRole: "SUPER_ADMIN" },
 ];
 
 /**
@@ -70,7 +81,7 @@ function AdminShell({
           <p className="text-xs text-muted-foreground">Admin console</p>
         </div>
         <nav aria-label="Admin" className="mt-6 flex-1">
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-0.5">
             {items.map(({ href, label, icon: Icon }) => {
               const isActive = active === href;
               return (
@@ -93,22 +104,33 @@ function AdminShell({
             })}
           </ul>
         </nav>
-        <div className="flex items-center gap-3 border-t border-border px-2 pt-4 text-xs text-muted-foreground">
-          <User className="size-5" strokeWidth={1.6} aria-hidden />
-          <span className="min-w-0 flex-1 break-words">
-            {staffName} · {ROLE_LABEL[role]}
-          </span>
-          {signOut ? (
-            <form action={signOut}>
-              <button
-                type="submit"
-                aria-label="Sign out"
-                className="flex size-11 items-center justify-center rounded-full hover:bg-surface-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                <LogOut className="size-[18px]" strokeWidth={1.6} aria-hidden />
-              </button>
-            </form>
-          ) : null}
+        <div className="flex flex-col gap-1 border-t border-border px-2 pt-4 text-xs text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <User className="size-4 shrink-0" strokeWidth={1.6} aria-hidden />
+            <span className="min-w-0 flex-1 break-all">
+              {staffName} · {ROLE_LABEL[role]}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/admin/account"
+              className="flex min-h-11 flex-1 items-center gap-2 rounded-xl px-2 hover:bg-surface-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <KeyRound className="size-[18px]" strokeWidth={1.6} aria-hidden />
+              Your account
+            </Link>
+            {signOut ? (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  aria-label="Sign out"
+                  className="flex size-11 items-center justify-center rounded-full hover:bg-surface-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <LogOut className="size-[18px]" strokeWidth={1.6} aria-hidden />
+                </button>
+              </form>
+            ) : null}
+          </div>
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-8 py-8">{children}</main>

@@ -8,3 +8,8 @@ export function timeAgo(iso: string | null, now: Date = new Date()): string {
   if (hours < 48) return `${hours} h ago`;
   return `${Math.floor(hours / 24)} days ago`;
 }
+
+/** True while now is within [startsAt, expiresAt). */
+export function isRunningNow(startsAt: string, expiresAt: string, now: Date = new Date()): boolean {
+  return new Date(startsAt) <= now && new Date(expiresAt) > now;
+}
