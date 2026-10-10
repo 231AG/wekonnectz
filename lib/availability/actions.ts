@@ -16,6 +16,8 @@ const MESSAGES: Record<string, string> = {
   START_IN_PAST: "Choose a start time that hasn’t passed.",
   END_BEFORE_START: "The end time must be after the start time.",
   WINDOW_TOO_LONG: "That window is longer than allowed. Choose an earlier end time.",
+  PASS_ENDS_FIRST: "Your pass ends before that window starts. Choose an earlier time or add time to your pass.",
+  TOO_MANY_CHANGES: "You’ve changed your availability a lot in the last hour. Try again later.",
   TOO_FAR_AHEAD: "That’s too far ahead. Choose a closer day.",
   NOT_ELIGIBLE: "You can’t go available right now.",
   NO_WINDOW: "You don’t have a window to pause.",

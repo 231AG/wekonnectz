@@ -1,7 +1,7 @@
 -- Phase 8: availability (spec §12, §13 exclusions, §17 signals; BR-15, BR-17, BR-18, BR-19, BR-20; OD-8).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
+select plan(64);
 
 -- Fixtures (fictional): Musu (Casual, will hold a pass), Hawa (Casual, no pass), Kemah (Relationship only),
 -- Siah (Casual, not verified).
@@ -64,6 +64,7 @@ select throws_ok($$ select * from public.availability $$, '42501', null, 'BR-19:
 reset role;
 select is_empty($$ select table_name || '.' || column_name from information_schema.columns
   where table_schema = 'public' and (column_name ~* '(^|_)(lat|lng|lon|latitude|longitude|location|geo_point|coords?)($|_)')
+    -- geo_checks stores the country of the sign-up IP only (OD-12), never a position.
     and table_name not in ('geo_checks') $$,
   'BR-20: no exact-location column anywhere in the schema');
 
@@ -111,14 +112,14 @@ select ok(not public.is_in_pool('cccccccc-8000-0000-0000-000000000001', now() + 
 select ok(not public.is_in_pool('cccccccc-8000-0000-0000-000000000001', now() + interval '6 hours'), 'out after the window');
 set local role service_role;
 select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 hours') $$,
-  'a new window replaces the current one (one active-or-scheduled window)');
+  'changing the end of the live window');
 reset role;
 select is((select count(*)::int from public.availability where user_id = 'cccccccc-8000-0000-0000-000000000001'), 1, 'one row per member');
 select ok(public.is_in_pool('cccccccc-8000-0000-0000-000000000001', now() + interval '5 hours 59 minutes'), 'in the pool while the pass lasts');
 select ok(not public.is_in_pool('cccccccc-8000-0000-0000-000000000001', now() + interval '6 hours 1 minute'),
   'BR-17: the pass ending mid-window removes the member at once (window runs to 10 hours)');
-select is((select count(*)::int from public.availability_windows where user_id = 'cccccccc-8000-0000-0000-000000000001' and ended_at is not null), 1,
-  'the replaced window is closed in the history');
+select is((select count(*)::int from public.availability_windows where user_id = 'cccccccc-8000-0000-0000-000000000001'), 1,
+  'changing a live window keeps one window in the history (no false short windows)');
 
 -- Scheduled window
 set local role service_role;
@@ -165,19 +166,49 @@ select throws_ok($$ select public.pause_availability('cccccccc-8000-0000-0000-00
 -- ---------------------------------------------------------------------------
 -- §17 signal: frequent short windows (T-19, DEV-ONLY 30 minutes / 5 a day)
 -- ---------------------------------------------------------------------------
-select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 minutes'),
-                         public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 minutes'),
-                         public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 minutes'),
-                         public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 minutes') $$,
-  'four short windows');
+reset role;
+-- Earlier windows today (inserted as history): three that ran 10 minutes, one declared 3 hours but left
+-- after 2 minutes, one schedule changed before it started.
+insert into public.availability_windows (user_id, start_at, end_at, ended_at, created_at)
+select 'cccccccc-8000-0000-0000-000000000001', now() - make_interval(hours => n), now() - make_interval(hours => n) + interval '10 minutes',
+       null, now() - make_interval(hours => n)
+from generate_series(2, 4) n;
+insert into public.availability_windows (user_id, start_at, end_at, ended_at, created_at) values
+  ('cccccccc-8000-0000-0000-000000000001', now() - interval '6 hours', now() - interval '3 hours', now() - interval '5 hours 58 minutes', now() - interval '6 hours'),
+  ('cccccccc-8000-0000-0000-000000000001', now() + interval '5 hours', now() + interval '6 hours', now() - interval '7 hours', now() - interval '8 hours');
+set local role service_role;
+select lives_ok($$ select public.leave_pool('cccccccc-8000-0000-0000-000000000001') $$, 'checking after leaving');
 reset role;
 select is((select count(*)::int from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001' and reason = 'SHORT_WINDOWS'), 0,
-  'not flagged below the threshold');
+  'four short windows: not flagged below the threshold (a schedule changed before it began doesn''t count)');
 set local role service_role;
 select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', null, now() + interval '10 minutes') $$, 'a fifth');
 reset role;
 select is((select count(*)::int from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001'
-           and reason = 'SHORT_WINDOWS' and status = 'OPEN'), 1, '§17: frequent short windows flag the member for review');
+           and reason = 'SHORT_WINDOWS' and status = 'OPEN'), 1,
+  '§17: frequent short windows flag the member for review (leaving early counts, whatever length was declared)');
+
+-- Self-audit round 1
+select pg_temp.give_pass('cccccccc-8000-0000-0000-000000000002', 6);
+set local role service_role;
+select throws_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000002', now() + interval '1 day', now() + interval '1 day 2 hours') $$,
+  '22023', 'PASS_ENDS_FIRST', 'BR-17: a window that would start after the pass ends is refused, not "saved"');
+reset role;
+update public.app_settings set value = '2'::jsonb where key = 'availability.max_changes_per_hour';
+set local role service_role;
+select throws_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', now() + interval '1 hour', now() + interval '2 hours') $$,
+  '22023', 'TOO_MANY_CHANGES', 'window changes are rate-limited (T-19 setting)');
+reset role;
+update public.app_settings set value = '30'::jsonb where key = 'availability.max_changes_per_hour';
+insert into public.verifications (user_id, pose_prompt, status, rejection_reason, selfie_storage_path, submitted_at, reviewed_at)
+values ('cccccccc-8000-0000-0000-000000000004', 'Touch your ear', 'REJECTED', 'POSE_NOT_MATCHING', gen_random_uuid() || '.webp', now(), now());
+set local role service_role;
+select ok((public.member_availability('cccccccc-8000-0000-0000-000000000004') -> 'reasons') ? 'NOT_VERIFIED',
+  'BR-15: a REJECTED verification prevents availability');
+reset role;
+update public.users set hidden_reason = 'REPORT_THRESHOLD', hidden_at = now() where id = 'cccccccc-8000-0000-0000-000000000001';
+select ok(not public.is_in_pool('cccccccc-8000-0000-0000-000000000001'), '§17: an auto-hide after reports removes the member from the pool');
+update public.users set hidden_reason = null, hidden_at = null where id = 'cccccccc-8000-0000-0000-000000000001';
 
 -- Tidy job records what the query already enforces.
 select pg_temp.give_pass('cccccccc-8000-0000-0000-000000000002', 6);
@@ -194,6 +225,26 @@ select ok(public.tidy_availability() >= 1, 'the tidy job runs');
 reset role;
 select is((select status::text from public.availability where user_id = 'cccccccc-8000-0000-0000-000000000002'), 'UNAVAILABLE',
   'an ended window is tidied to UNAVAILABLE');
+-- A briefly ineligible member keeps a scheduled window (e.g. a short suspension, or a pass to be renewed).
+set local role service_role;
+select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000002', now() + interval '1 hour', now() + interval '3 hours') $$,
+  'a scheduled window');
+select lives_ok($$ select public.pause_availability('cccccccc-8000-0000-0000-000000000002', true) $$, 'paused');
+reset role;
+update public.users set suspended_until = now() + interval '1 hour' where id = 'cccccccc-8000-0000-0000-000000000002';
+set local role service_role;
+select lives_ok($$ select public.tidy_availability() $$, 'tidy during a short suspension');
+reset role;
+select is((select status::text from public.availability where user_id = 'cccccccc-8000-0000-0000-000000000002'), 'PAUSED',
+  'the tidy job keeps the window of a member who is only briefly ineligible');
+update public.availability set start_at = now() - interval '3 hours', end_at = now() - interval '1 hour'
+where user_id = 'cccccccc-8000-0000-0000-000000000002';
+set local role service_role;
+select is(public.member_availability('cccccccc-8000-0000-0000-000000000002') ->> 'end_at', null, 'BR-18: a paused window that has ended reads as over');
+select lives_ok($$ select public.tidy_availability() $$, 'tidy');
+reset role;
+select is((select status::text from public.availability where user_id = 'cccccccc-8000-0000-0000-000000000002'), 'UNAVAILABLE',
+  'BR-18: an ended paused window is tidied too');
 
 select * from finish();
 rollback;

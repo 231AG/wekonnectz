@@ -101,6 +101,7 @@ function AvailabilityForm({
         </div>
         <p className="text-[13px] leading-[19px] text-muted-foreground">
           {maxWindowHours ? `Longest window: ${formatHours(maxWindowHours)}. ` : ""}
+          {mode === "now" ? "A time that has already passed today means tomorrow. " : ""}
           You leave the pool automatically when it ends or your pass expires. Times are Liberia time (GMT).
         </p>
       </div>

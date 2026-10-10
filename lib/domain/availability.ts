@@ -59,13 +59,15 @@ export function formatDayLabel(d: Date): string {
 
 /**
  * "Available now … until 11:00 PM": the next time that clock time comes round (later today, or
- * tomorrow if it has already passed), Liberia time.
+ * tomorrow if it has already passed), Liberia time. Null for a time that passed in the last 5 minutes.
  */
 export function endFromClockTime(value: string | null | undefined, now: Date): Date | null {
   const m = /^(\d{2}):(\d{2})$/.exec(value ?? "");
   if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
   const end = new Date(now);
   end.setUTCHours(Number(m[1]), Number(m[2]), 0, 0);
+  // A time that passed only moments ago (the form was open a while) is a mistake, not "tomorrow".
+  if (end.getTime() <= now.getTime() && now.getTime() - end.getTime() <= 5 * 60_000) return null;
   if (end.getTime() <= now.getTime()) end.setUTCDate(end.getUTCDate() + 1);
   return end;
 }

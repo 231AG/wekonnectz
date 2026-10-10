@@ -6,7 +6,7 @@ const NOW = new Date("2026-10-10T18:00:00Z");
 const CAPS = { maxWindowHours: 12, maxLeadDays: 7 };
 const at = (h: number) => new Date(NOW.getTime() + h * 3_600_000);
 
-describe("availability windows (spec §12)", () => {
+describe("BR-17 / BR-18 availability windows (spec §12)", () => {
   it("reads datetime-local values as Liberia time (GMT) and writes them back", () => {
     expect(parseLiberiaLocal("2026-10-10T23:00")?.toISOString()).toBe("2026-10-10T23:00:00.000Z");
     expect(parseLiberiaLocal("10/10/2026 23:00")).toBeNull();
@@ -43,11 +43,13 @@ describe("availability windows (spec §12)", () => {
 });
 
 describe("Available now: until a clock time", () => {
-  it("BR-18: later today, or tomorrow once the time has passed", async () => {
+  it("BR-18: later today, or tomorrow once the time has passed; a time just passed is refused", async () => {
     const { endFromClockTime } = await import("@/lib/domain/availability");
     expect(endFromClockTime("23:00", NOW)?.toISOString()).toBe("2026-10-10T23:00:00.000Z");
     expect(endFromClockTime("02:00", NOW)?.toISOString()).toBe("2026-10-11T02:00:00.000Z");
-    expect(endFromClockTime("18:00", NOW)?.toISOString()).toBe("2026-10-11T18:00:00.000Z");
+    expect(endFromClockTime("17:00", NOW)?.toISOString()).toBe("2026-10-11T17:00:00.000Z");
+    expect(endFromClockTime("18:00", NOW)).toBeNull();
+    expect(endFromClockTime("17:57", NOW)).toBeNull();
     expect(endFromClockTime("25:00", NOW)).toBeNull();
     expect(endFromClockTime("", NOW)).toBeNull();
   });

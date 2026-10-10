@@ -58,6 +58,15 @@ test("§12: go available now, pause, schedule, choose who can send requests, lea
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("availability-status")).toContainText("You’re available until");
 
+  // §13: with Nobody, the member is hidden from the pool even inside a live window.
+  await page.getByRole("button", { name: "Nobody" }).click();
+  await expect(page.getByTestId("availability-status")).toContainText("with Nobody you’re hidden from the pool");
+  await page.goto("/home");
+  await expect(page.getByTestId("home-availability")).toContainText("Not in the pool right now");
+  await page.goto("/casual/availability");
+  await page.getByRole("button", { name: "Anyone in the pool" }).click();
+  await expect(page.getByTestId("availability-status")).toContainText("You’re available until");
+
   // Schedule replaces the current window (one active-or-scheduled window).
   await page.getByRole("button", { name: "Schedule" }).click();
   await page.getByLabel("From").fill(local(new Date(Date.now() + 2 * 3_600_000)));

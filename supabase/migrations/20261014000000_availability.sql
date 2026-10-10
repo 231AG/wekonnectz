@@ -11,7 +11,8 @@ insert into public.app_settings (key, value, description) values
   ('availability.max_window_hours', null, 'Longest availability window in hours (OD-8).'),
   ('availability.max_lead_days', null, 'How many days ahead a window may start (OD-8).'),
   ('availability.short_window_minutes', null, 'A window shorter than this counts as short for the behaviour signal (T-19, §17).'),
-  ('availability.short_windows_per_day', null, 'Short windows in 24 hours that flag the member for review (T-19, §17).')
+  ('availability.short_windows_per_day', null, 'Short windows in 24 hours that flag the member for review (T-19, §17).'),
+  ('availability.max_changes_per_hour', null, 'Window changes one member may make in an hour (T-19); no limit while unset.')
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -110,8 +111,9 @@ as $$
      and cardinality(public.casual_ineligibility(p_user, p_at)) = 0;
 $$;
 
--- §17 behaviour signal: many short windows (as set by the member) in 24 hours. Replacing or leaving a
--- window early doesn't count. Skipped while T-19 has no values.
+-- §17 behaviour signal: many short windows in 24 hours, by the time actually spent in the pool (leaving
+-- early counts; changing a schedule before it starts doesn't, and extending a live window keeps one
+-- window). Skipped while T-19 has no values.
 create or replace function public.check_short_windows(p_user uuid)
 returns void
 language plpgsql
@@ -132,7 +134,8 @@ begin
   end if;
   select count(*) into v_count from public.availability_windows w
   where w.user_id = p_user and w.created_at > now() - interval '24 hours'
-    and w.end_at - w.start_at < make_interval(mins => v_minutes);
+    and (w.ended_at is null or w.ended_at > w.start_at)              -- a schedule changed before it began isn't a window
+    and least(coalesce(w.ended_at, w.end_at), w.end_at) - w.start_at < make_interval(mins => v_minutes);
   if v_count >= v_limit then
     perform public.raise_flag('USER', p_user, 'SHORT_WINDOWS', jsonb_build_object('count', v_count, 'hours', 24));
   end if;
@@ -167,6 +170,8 @@ declare
   v_reasons text[];
   v_hours   integer;
   v_days    integer;
+  v_limit   integer;
+  v_current public.availability;
 begin
   perform 1 from public.users where id = p_user for update;
   v_reasons := public.casual_ineligibility(p_user);
@@ -192,12 +197,34 @@ begin
   if v_start > now() + make_interval(days => v_days) then
     raise exception 'TOO_FAR_AHEAD' using errcode = '22023';
   end if;
+  -- BR-17: a window that would start after the pass ends would never be in the pool.
+  if v_start >= public.casual_access_until(p_user) then
+    raise exception 'PASS_ENDS_FIRST' using errcode = '22023';
+  end if;
+  select (value #>> '{}')::int into v_limit from public.app_settings
+  where key = 'availability.max_changes_per_hour' and value is not null;
+  if v_limit is not null and (select count(*) from public.availability_windows
+                              where user_id = p_user and created_at > now() - interval '1 hour') >= v_limit then
+    raise exception 'TOO_MANY_CHANGES' using errcode = '22023';
+  end if;
 
-  perform public.close_availability_window(p_user);
-  insert into public.availability (user_id, status, start_at, end_at)
-  values (p_user, 'AVAILABLE', v_start, p_end)
-  on conflict (user_id) do update set status = 'AVAILABLE', start_at = excluded.start_at, end_at = excluded.end_at;
-  insert into public.availability_windows (user_id, start_at, end_at) values (p_user, v_start, p_end);
+  select * into v_current from public.availability where user_id = p_user;
+  if v_start = now() and v_current.status = 'AVAILABLE' and v_current.start_at <= now() and v_current.end_at > now() then
+    -- Changing the end of a live window: still the same window (history row extended, start kept).
+    v_start := v_current.start_at;
+    if p_end - v_start > make_interval(hours => v_hours) then
+      raise exception 'WINDOW_TOO_LONG' using errcode = '22023';
+    end if;
+    update public.availability set end_at = p_end where user_id = p_user;
+    update public.availability_windows set end_at = p_end
+    where user_id = p_user and ended_at is null and start_at = v_current.start_at;
+  else
+    perform public.close_availability_window(p_user);
+    insert into public.availability (user_id, status, start_at, end_at)
+    values (p_user, 'AVAILABLE', v_start, p_end)
+    on conflict (user_id) do update set status = 'AVAILABLE', start_at = excluded.start_at, end_at = excluded.end_at;
+    insert into public.availability_windows (user_id, start_at, end_at) values (p_user, v_start, p_end);
+  end if;
   perform public.check_short_windows(p_user);
   return jsonb_build_object('start_at', v_start, 'end_at', p_end);
 end;
@@ -213,6 +240,7 @@ as $$
 declare
   v_row public.availability;
 begin
+  perform 1 from public.users where id = p_user for update;
   select * into v_row from public.availability where user_id = p_user for update;
   if not found or v_row.status = 'UNAVAILABLE' or v_row.end_at <= now() then
     raise exception 'NO_WINDOW' using errcode = '22023';
@@ -236,9 +264,11 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform 1 from public.users where id = p_user for update;
   perform public.close_availability_window(p_user);
   update public.availability set status = 'UNAVAILABLE', start_at = null, end_at = null
   where user_id = p_user and status <> 'UNAVAILABLE';
+  perform public.check_short_windows(p_user); -- leaving early counts toward the §17 signal
 end;
 $$;
 
@@ -284,8 +314,10 @@ as $$
   left join public.availability a on a.user_id = p_user;
 $$;
 
--- Tidy job (daily): records what is_in_pool() already enforces. Windows that ended, and members who
--- can no longer be in the pool (pass ended, fewer than 3 photos, suspended, hidden, verification lost).
+-- Tidy job (daily): records windows that have ended, and clears windows of accounts that can never be
+-- in the pool again (banned, deleted, staff). A member who is only briefly ineligible (pass about to be
+-- renewed, short suspension, photo back in review) keeps their window: is_in_pool() already keeps them
+-- out meanwhile.
 create or replace function public.tidy_availability()
 returns integer
 language plpgsql
@@ -297,11 +329,13 @@ declare
 begin
   update public.availability_windows w set ended_at = now()
   from public.availability a
+  join public.users u on u.id = a.user_id
   where a.user_id = w.user_id and w.ended_at is null and w.end_at > now() and a.status <> 'UNAVAILABLE'
-    and cardinality(public.casual_ineligibility(a.user_id)) > 0;
+    and (u.status in ('BANNED', 'DELETED') or u.role <> 'USER');
   update public.availability a set status = 'UNAVAILABLE', start_at = null, end_at = null
-  where a.status <> 'UNAVAILABLE'
-    and (a.end_at <= now() or cardinality(public.casual_ineligibility(a.user_id)) > 0);
+  from public.users u
+  where u.id = a.user_id and a.status <> 'UNAVAILABLE'
+    and (a.end_at <= now() or u.status in ('BANNED', 'DELETED') or u.role <> 'USER');
   get diagnostics v_count = row_count;
   return v_count;
 end;

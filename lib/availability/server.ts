@@ -70,6 +70,8 @@ const CODES = [
   "WINDOW_TOO_LONG",
   "TOO_FAR_AHEAD",
   "NO_WINDOW",
+  "PASS_ENDS_FIRST",
+  "TOO_MANY_CHANGES",
   "has no value",
 ] as const;
 export type AvailabilityError = (typeof CODES)[number] | "UNKNOWN";

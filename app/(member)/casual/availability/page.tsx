@@ -76,7 +76,9 @@ export default async function AvailabilityPage() {
                 ? `Scheduled: ${formatWindowTime(a.startAt!)} – ${formatWindowTime(a.endAt!)}`
                 : a.inPool
                   ? `You’re available until ${formatWindowTime(a.endAt!)}`
-                  : `Your window runs until ${formatWindowTime(a.endAt!)}, but you’re not in the pool right now`}
+                  : a.permission === "NOBODY" && a.reasons.length === 0
+                    ? `Your window runs until ${formatWindowTime(a.endAt!)}, but with Nobody you’re hidden from the pool`
+                    : `Your window runs until ${formatWindowTime(a.endAt!)}, but you’re not in the pool right now`}
           </p>
           {a.status === "PAUSED" ? (
             <p className="text-[15px] text-muted-foreground">
@@ -84,11 +86,13 @@ export default async function AvailabilityPage() {
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <form action={a.status === "PAUSED" ? resumeAvailability : pauseAvailability}>
-              <Button type="submit" variant="outline" size="md">
-                {a.status === "PAUSED" ? "Resume" : "Pause"}
-              </Button>
-            </form>
+            {a.status === "PAUSED" && a.reasons.length > 0 ? null : (
+              <form action={a.status === "PAUSED" ? resumeAvailability : pauseAvailability}>
+                <Button type="submit" variant="outline" size="md">
+                  {a.status === "PAUSED" ? "Resume" : "Pause"}
+                </Button>
+              </form>
+            )}
             <form action={leaveAvailability}>
               <Button type="submit" variant="ghost" size="md">
                 Leave the pool

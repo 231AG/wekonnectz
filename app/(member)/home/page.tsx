@@ -141,12 +141,18 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                 ? `Available until ${formatWindowTime(availability.endAt)}`
                 : availability.status === "PAUSED"
                   ? "Availability paused"
-                  : availability.status === "AVAILABLE" && availability.startAt
+                  : availability.scheduled && availability.startAt
                     ? `Scheduled from ${formatWindowTime(availability.startAt)}`
-                    : "You’re not available"}
+                    : availability.status === "AVAILABLE"
+                      ? "Not in the pool right now"
+                      : "You’re not available"}
             </span>
             <span className="text-[15px] text-muted-foreground">
-              {availability.inPool ? "You’re in the Available Now pool" : "Go available to appear in the pool"}
+              {availability.inPool
+                ? "You’re in the Available Now pool"
+                : availability.status === "UNAVAILABLE"
+                  ? "Go available to appear in the pool"
+                  : "See why on your availability screen"}
             </span>
           </span>
           <ChevronRight className="size-5 text-muted-foreground" aria-hidden />

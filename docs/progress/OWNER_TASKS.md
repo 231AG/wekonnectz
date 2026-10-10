@@ -249,6 +249,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `availability.max_window_hours`                                            | OD-8 (DEV-ONLY 12 in seed)            | 12 (spec)                                                                  | Phase 8   |
 | `availability.max_lead_days`                                               | OD-8                                  | 7 (spec)                                                                   | Phase 8   |
 | `availability.short_window_minutes` / `availability.short_windows_per_day` | "Frequent short windows" flag (§17)   | 30 min / 5 in 24 h (DEV-ONLY same in seed)                                 | Phase 8   |
+| `availability.max_changes_per_hour`                                        | Window changes per member per hour    | 30 (DEV-ONLY 30 in seed)                                                   | Phase 8   |
 | `requests.daily_cap`                                                       | OD-9                                  | — your call                                                                | Phase 9   |
 | `requests.decline_cooldown_days`                                           | OD-9                                  | — your call                                                                | Phase 9   |
 | `subscriptions.manual_extension_max_days`                                  | OD-30 cap on admin manual extension   | 7 days                                                                     | Phase 10  |
