@@ -144,10 +144,12 @@ export async function givePassViaCard(request: APIRequestContext, userId: string
   });
   expect(error).toBeNull();
   const { data: plan } = await admin.from("subscription_plans").select("price").eq("code", "CARD_WEEKLY").single();
+  const subscriptionRef = `sub_${randomUUID()}`;
+  const chargeId = `ch_${randomUUID()}`;
   const { body, signature } = fakeDelivery(secret!, "checkout.completed", {
     reference: (data as { reference: string }).reference,
-    subscription: `sub_${randomUUID()}`,
-    charge: `ch_${randomUUID()}`,
+    subscription: subscriptionRef,
+    charge: chargeId,
     amount: Number(plan!.price),
     currency: "USD",
     period_end: Math.floor(Date.now() / 1000) + 7 * 86400,
@@ -157,4 +159,29 @@ export async function givePassViaCard(request: APIRequestContext, userId: string
     data: body,
   });
   expect(await res.json()).toMatchObject({ outcome: "APPLIED" });
+  return { subscriptionRef, chargeId };
+}
+
+/** Ends a card pass the way production can: a signed refund event for its charge (access ends, BR-25). */
+export async function refundCardPass(request: APIRequestContext, pass: { subscriptionRef: string; chargeId: string }) {
+  const { fakeDelivery, FAKE_SIGNATURE_HEADER } = await import("../../lib/payments/card/fake");
+  const { body, signature } = fakeDelivery(process.env.FAKE_CARD_WEBHOOK_SECRET!, "charge.refunded", {
+    subscription: pass.subscriptionRef,
+    charge: pass.chargeId,
+  });
+  const res = await request.post("/api/webhooks/card", {
+    headers: { "content-type": "application/json", [FAKE_SIGNATURE_HEADER]: signature },
+    data: body,
+  });
+  expect(await res.json()).toMatchObject({ outcome: "APPLIED" });
+}
+
+/** Opens an availability window for a member through the same database function the screen uses. */
+export async function goAvailable(userId: string, hours = 4) {
+  const { error } = await adminClient().rpc("set_availability", {
+    p_user: userId,
+    p_start: null as unknown as string,
+    p_end: new Date(Date.now() + hours * 3_600_000).toISOString(),
+  });
+  expect(error).toBeNull();
 }

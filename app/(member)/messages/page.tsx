@@ -3,40 +3,39 @@ import { redirect } from "next/navigation";
 import { BadgeCheck } from "lucide-react";
 
 import { MemberShell } from "@/components/layout/member-shell";
+import { MessagesTabs } from "@/components/messages/messages-tabs";
 import { Avatar } from "@/components/relationship/avatar";
 import { Card } from "@/components/ui/card";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { timeAgo } from "@/lib/domain/time";
+import { requestsReceived } from "@/lib/casual/server";
 import { conversationsList } from "@/lib/storage/relationship";
 
 export const metadata = { title: "Messages" };
 
-/** Messages (spec §20; mock-up 05 shows the Requests tab, which arrives with Casual in Phase 9). */
+/** Messages (spec §20; member mock-up 05): Chats, and the Casual Requests tab. */
 export default async function MessagesPage() {
   const member = await requireMember();
   if (member.status !== "ACTIVE" && member.status !== "SUSPENDED") redirect(nextStepFor(member));
-  const chats = await conversationsList(member.id);
+  const [chats, requests] = await Promise.all([
+    conversationsList(member.id),
+    member.status === "ACTIVE" ? requestsReceived(member.id) : Promise.resolve([]),
+  ]);
 
   return (
     <MemberShell>
       <h1 className="font-display text-[34px] font-bold">Messages</h1>
-      <div className="grid grid-cols-2 rounded-2xl border border-border bg-surface-1 p-1" aria-label="Messages">
-        <span
-          aria-current="page"
-          className="flex min-h-11 items-center justify-center rounded-xl bg-surface-2 font-bold"
-        >
-          Chats
-        </span>
-        <span className="flex min-h-11 items-center justify-center text-muted-foreground" aria-disabled="true">
-          Requests
-        </span>
-      </div>
+      <MessagesTabs active="chats" requests={requests.length} />
       {chats.length === 0 ? (
         <Card tone="dashed">
           <p className="text-[15px] text-muted-foreground">
             No conversations yet. Say hello to a{" "}
             <Link href="/relationship/matches" className="font-bold text-pending underline underline-offset-4">
               match
+            </Link>
+            , or send a request to someone{" "}
+            <Link href="/casual" className="font-bold text-pending underline underline-offset-4">
+              available now
             </Link>
             .
           </p>

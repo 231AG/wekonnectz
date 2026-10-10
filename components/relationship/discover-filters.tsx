@@ -8,18 +8,37 @@ import { Sheet } from "@/components/ui/sheet";
 
 const field = "min-h-11 w-full rounded-control border-[1.5px] border-border bg-background px-3 text-[15px]";
 
-/** Discover filters (§15: area, age range, interests; gender comes from "interested in"). */
+const WINDOWS = [
+  ["any", "Any time"],
+  ["2h", "Next 2 hours"],
+  ["tonight", "Tonight"],
+] as const;
+
+/**
+ * Discover filters (§15: area, age range, interests; gender comes from "interested in"). Also used by
+ * Available Now (§13), which adds the availability window.
+ */
 function DiscoverFilters({
   areas,
   interests,
   current,
+  action = "/relationship",
+  withWindow = false,
 }: {
   areas: { id: string; name: string }[];
   interests: { id: string; name: string }[];
-  current: { area?: string; minAge?: number; maxAge?: number; interests?: string[] };
+  current: { area?: string; minAge?: number; maxAge?: number; interests?: string[]; window?: string };
+  action?: string;
+  withWindow?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const active = Boolean(current.area || current.minAge || current.maxAge || current.interests?.length);
+  const active = Boolean(
+    current.area ||
+    current.minAge ||
+    current.maxAge ||
+    current.interests?.length ||
+    (current.window && current.window !== "any"),
+  );
   return (
     <>
       <Button
@@ -38,7 +57,7 @@ function DiscoverFilters({
         title="Filters"
         description="You see people looking for someone like you."
       >
-        <form method="get" action="/relationship" className="flex max-h-[70dvh] flex-col gap-4 overflow-y-auto">
+        <form method="get" action={action} className="flex max-h-[70dvh] flex-col gap-4 overflow-y-auto">
           <label className="flex flex-col gap-2 text-[13px] font-semibold text-muted-foreground">
             Area
             <select name="area" defaultValue={current.area ?? ""} className={field}>
@@ -60,6 +79,28 @@ function DiscoverFilters({
               <input type="number" name="maxAge" min={18} max={99} defaultValue={current.maxAge} className={field} />
             </label>
           </div>
+          {withWindow ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Available</legend>
+              <div className="flex flex-wrap gap-2">
+                {WINDOWS.map(([value, label]) => (
+                  <label
+                    key={value}
+                    className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-border px-4 text-sm has-checked:border-pending has-checked:bg-surface-2"
+                  >
+                    <input
+                      type="radio"
+                      name="window"
+                      value={value}
+                      defaultChecked={(current.window ?? "any") === value}
+                      className="size-4 accent-pending"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-[13px] font-semibold text-muted-foreground">Interests (any of)</legend>
             <div className="flex flex-wrap gap-2">
@@ -82,7 +123,7 @@ function DiscoverFilters({
           </fieldset>
           <Button type="submit">Show people</Button>
           <Button asChild variant="outline">
-            <a href="/relationship">Clear filters</a>
+            <a href={action}>Clear filters</a>
           </Button>
         </form>
       </Sheet>

@@ -116,3 +116,10 @@ export async function tidyAvailability(): Promise<number> {
   if (error) throw new Error("availability tidy failed");
   return Number(data ?? 0);
 }
+
+/** Daily tidy (cron): request expiry by time is enforced at query time (OD-24); this records it. */
+export async function tidyRequests(): Promise<number> {
+  const { data, error } = await createAdminClient().rpc("tidy_requests");
+  if (error) throw new Error("request tidy failed");
+  return Number(data ?? 0);
+}

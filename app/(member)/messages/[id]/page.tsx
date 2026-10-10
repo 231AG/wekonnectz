@@ -6,6 +6,7 @@ import { ConversationLive } from "@/components/messages/conversation-live";
 import { ConversationSafety } from "@/components/messages/conversation-safety";
 import { Avatar } from "@/components/relationship/avatar";
 import { Button } from "@/components/ui/button";
+import { hasCasualAccess } from "@/lib/casual/server";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { loadMessages, markConversationRead, reportConversation, sendMessage } from "@/lib/messages/actions";
 import { unmatchMember } from "@/lib/relationship/actions";
@@ -23,10 +24,13 @@ export default async function ConversationPage({ params }: PageProps<"/messages/
   const view = await conversationView(member.id, id);
   if (!view) notFound();
   const { other } = view;
+  const noPass = view.type === "CASUAL" && !view.canSend && !(await hasCasualAccess(member.id));
   const reason =
     member.status === "SUSPENDED"
       ? "Your account is restricted, so you can read but not send messages right now."
-      : "You can’t send messages in this conversation right now.";
+      : noPass
+        ? "Your pass has ended, so this Casual chat is read-only. Get a pass to reply — your messages are kept."
+        : "You can’t send messages in this conversation right now.";
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col gap-4 px-5 pt-5">
@@ -62,6 +66,11 @@ export default async function ConversationPage({ params }: PageProps<"/messages/
       </header>
       <main className="flex flex-1 flex-col gap-4">
         <h1 className="sr-only">Conversation with {other.displayName}</h1>
+        {noPass && member.status === "ACTIVE" ? (
+          <Button asChild variant="casual" size="md" className="self-center">
+            <Link href="/casual/get-access">Get a pass</Link>
+          </Button>
+        ) : null}
         <ConversationLive
           conversationId={view.conversationId}
           meId={member.id}

@@ -121,3 +121,9 @@ export async function savedList(viewerId: string): Promise<PoolCard[]> {
     saved: true,
   }));
 }
+
+/** BR-25: whether the member may send in Casual conversations (server-side, never from the client). */
+export async function hasCasualAccess(userId: string): Promise<boolean> {
+  const { data } = await createAdminClient().rpc("has_casual_access", { p_user: userId });
+  return data === true;
+}
