@@ -461,13 +461,13 @@ isOneToOne: false
                   ]
                 },"payment_events": {
                   Row: {
-                    "actor_id": string | null,"claim_id": string | null,"id": string,"payment_id": string | null,"raw_payload": NonNullable<Json>,"received_at": string,"signature_valid": boolean | null,"type": string
+                    "actor_id": string | null,"claim_id": string | null,"id": string,"payment_id": string | null,"processor": string | null,"processor_event_id": string | null,"raw_payload": NonNullable<Json>,"received_at": string,"signature_valid": boolean | null,"type": string
                   }
                   Insert: {
-                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type": string
+                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"processor"?: string | null,"processor_event_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type": string
                   }
                   Update: {
-                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type"?: string
+                    "actor_id"?: string | null,"claim_id"?: string | null,"id"?: string,"payment_id"?: string | null,"processor"?: string | null,"processor_event_id"?: string | null,"raw_payload"?: NonNullable<Json>,"received_at"?: string,"signature_valid"?: boolean | null,"type"?: string
                   }
                   Relationships: [
                     {
@@ -492,13 +492,13 @@ isOneToOne: false
                   ]
                 },"payments": {
                   Row: {
-                    "amount": number,"claim_id": string | null,"created_at": string,"currency": string,"id": string,"paid_at": string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id": string | null
+                    "amount": number,"claim_id": string | null,"created_at": string,"currency": string,"id": string,"paid_at": string | null,"plan_id": string,"processor_subscription_ref": string | null,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id": string | null
                   }
                   Insert: {
-                    "amount": number,"claim_id"?: string | null,"created_at"?: string,"currency": string,"id"?: string,"paid_at"?: string | null,"plan_id": string,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id"?: string | null
+                    "amount": number,"claim_id"?: string | null,"created_at"?: string,"currency": string,"id"?: string,"paid_at"?: string | null,"plan_id": string,"processor_subscription_ref"?: string | null,"provider": Database["public"]['Enums']["payment_provider"],"provider_transaction_id": string,"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_key": string,"user_id"?: string | null
                   }
                   Update: {
-                    "amount"?: number,"claim_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"paid_at"?: string | null,"plan_id"?: string,"provider"?: Database["public"]['Enums']["payment_provider"],"provider_transaction_id"?: string,"source"?: Database["public"]['Enums']["payment_source"],"status"?: Database["public"]['Enums']["payment_status"],"transaction_key"?: string,"user_id"?: string | null
+                    "amount"?: number,"claim_id"?: string | null,"created_at"?: string,"currency"?: string,"id"?: string,"paid_at"?: string | null,"plan_id"?: string,"processor_subscription_ref"?: string | null,"provider"?: Database["public"]['Enums']["payment_provider"],"provider_transaction_id"?: string,"source"?: Database["public"]['Enums']["payment_source"],"status"?: Database["public"]['Enums']["payment_status"],"transaction_key"?: string,"user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -717,13 +717,13 @@ isOneToOne: false
                   ]
                 },"subscriptions": {
                   Row: {
-                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"id": string,"plan_id": string,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
+                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"id": string,"last_event_at": string | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"id"?: string,"plan_id": string,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"id"?: string,"plan_id"?: string,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -846,6 +846,9 @@ isOneToOne: false
 "age_in_years":
 { Args: { "p_dob": string,"p_on"?: string }; Returns: number
                            },
+"apply_card_event":
+{ Args: { "p_event": Json,"p_processor": string }; Returns: Json
+                           },
 "approve_payment_claim":
 { Args: { "p_claim": string,"p_wallet_amount": number }; Returns: Json
                            },
@@ -902,6 +905,14 @@ isOneToOne: false
                            },
 "cancel_payment_claim":
 { Args: { "p_claim": string,"p_user": string }; Returns: undefined
+                           },
+"card_event_transition":
+{ Args: { "p_at": string,"p_event": Json,"p_processor": string }; Returns: string
+                           },
+"card_renewals_due":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "renews_at": string,"subscription_id": string,"user_id": string
+            }[]
                            },
 "casual_access_until":
 { Args: { "p_user": string }; Returns: string
@@ -978,6 +989,9 @@ isOneToOne: false
 "has_active_card_subscription":
 { Args: { "p_user": string }; Returns: boolean
                            },
+"has_active_mobile_money_pass":
+{ Args: { "p_user": string }; Returns: boolean
+                           },
 "has_casual_access":
 { Args: { "p_at"?: string,"p_user": string }; Returns: boolean
                            },
@@ -1045,6 +1059,9 @@ isOneToOne: false
 "log_evidence_view":
 { Args: { "p_claim": string }; Returns: undefined
                            },
+"log_invalid_card_webhook":
+{ Args: { "p_body": string,"p_processor": string,"p_reason": string }; Returns: boolean
+                           },
 "log_selfie_view":
 { Args: { "p_verification_id": string }; Returns: undefined
                            },
@@ -1070,8 +1087,16 @@ isOneToOne: false
               "blocked_at": string,"display_name": string,"user_id": string
             }[]
                            },
+"member_cancel_card_subscription":
+{ Args: { "p_subscription": string,"p_user": string }; Returns: undefined
+                           },
 "member_card":
 { Args: { "p_user": string }; Returns: Json
+                           },
+"member_card_subscription":
+{ Args: { "p_user": string }; Returns: {
+              "cancel_at_period_end": boolean,"currency": string,"customer_ref": string,"expires_at": string,"id": string,"period_end": string,"plan_name": string,"price": number,"processor": string,"processor_subscription_id": string,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"]
+            }[]
                            },
 "member_claims":
 { Args: { "p_user": string }; Returns: {
@@ -1080,7 +1105,7 @@ isOneToOne: false
                            },
 "member_passes":
 { Args: { "p_user": string }; Returns: {
-              "amount": number,"currency": string,"expires_at": string,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"source": Database["public"]['Enums']["payment_source"],"starts_at": string,"transaction_id": string
+              "amount": number,"currency": string,"expires_at": string,"payment_status": Database["public"]['Enums']["payment_status"],"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"source": Database["public"]['Enums']["payment_source"],"starts_at": string,"transaction_id": string
             }[]
                            },
 "member_payment_options":
@@ -1148,6 +1173,9 @@ isOneToOne: false
                            },
 "recompute_account_state":
 { Args: { "p_user_id": string }; Returns: undefined
+                           },
+"record_card_charge":
+{ Args: { "p_at": string,"p_event": Json,"p_sub": Database["public"]['Tables']["subscriptions"]['Row'] }; Returns: string
                            },
 "record_staff_sign_in_failure":
 { Args: { "p_account": string,"p_ip": string }; Returns: undefined
@@ -1274,6 +1302,9 @@ isOneToOne: false
 { Args: { "p_limit"?: number }; Returns: {
               "age": number,"display_name": string,"escalated": boolean,"previous_rejections": number,"submitted_at": string,"user_id": string,"verification_id": string
             }[]
+                           },
+"start_card_checkout":
+{ Args: { "p_plan_code": string,"p_processor": string,"p_user": string }; Returns: Json
                            },
 "start_verification":
 { Args: { "p_user_id": string }; Returns: {

@@ -250,8 +250,8 @@ select throws_ok($$ insert into public.subscriptions (user_id, plan_id, source, 
   values ('bbbbbbbb-7000-0000-0000-000000000002', (select id from ids where n = 'week'), 'CARD', 'ACTIVE', now(), now() + interval '7 days', true) $$,
   '42501', 'ACCESS_ONLY_BY_CARD_EVENT', 'card access only through the card event function (Phase 7b)');
 select set_config('wk.card_event', 'on', true);
-insert into public.subscriptions (user_id, plan_id, source, status, starts_at, expires_at, auto_renew)
-values ('bbbbbbbb-7000-0000-0000-000000000002', (select id from ids where n = 'week'), 'CARD', 'ACTIVE', now(), now() + interval '7 days', true);
+insert into public.subscriptions (user_id, plan_id, source, status, starts_at, expires_at, auto_renew, processor)
+values ('bbbbbbbb-7000-0000-0000-000000000002', (select id from ids where n = 'week'), 'CARD', 'ACTIVE', now(), now() + interval '7 days', true, 'fake');
 select throws_ok($$ select public.submit_payment_claim('bbbbbbbb-7000-0000-0000-000000000002', (select id from ids where n = 'week'),
   'ORANGE_MONEY', 'OM777777', '+231770007002', now(), gen_random_uuid() || '.webp', repeat('f', 64)) $$,
   '22023', 'CARD_SUBSCRIPTION_ACTIVE', 'BR-41: blocked while a card subscription is active');

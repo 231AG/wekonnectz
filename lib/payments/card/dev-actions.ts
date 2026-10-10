@@ -1,0 +1,46 @@
+"use server";
+
+import { createHash, randomUUID } from "node:crypto";
+
+import { redirect } from "next/navigation";
+import { z } from "zod";
+
+import { requireMember } from "@/lib/auth/session";
+import { serverEnv } from "@/lib/env.server";
+import { fakeDelivery, FAKE_SIGNATURE_HEADER } from "@/lib/payments/card/fake";
+import { getCardProcessor, processCardWebhook } from "@/lib/payments/card/server";
+import { publicPlans } from "@/lib/storage/payments";
+
+/**
+ * The fake processor's "hosted checkout" (local development and tests only). Paying sends a signed
+ * checkout.completed delivery through the same webhook code a real processor's would take.
+ */
+const schema = z.object({
+  ref: z.uuid(),
+  plan: z.string().regex(/^[a-z0-9_]{2,40}$/i),
+  success: z.string().regex(/^\/(?![/\\])[\w\-/?=&.]*$/),
+});
+
+export async function fakePay(formData: FormData): Promise<void> {
+  const member = await requireMember();
+  const secret = serverEnv().FAKE_CARD_WEBHOOK_SECRET;
+  if (getCardProcessor()?.id !== "fake" || !secret) redirect("/casual/get-access");
+  const parsed = schema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect("/casual/get-access/card?error=UNAVAILABLE");
+  const plans = await publicPlans();
+  // DEV-ONLY seed: the fake processor's price IDs are our plan codes.
+  const plan = plans.find((p) => p.source === "CARD" && p.code === parsed.data.plan);
+  if (!plan) redirect("/casual/get-access/card?error=PLAN_NOT_AVAILABLE");
+  const now = Math.floor(Date.now() / 1000);
+  const { body, signature } = fakeDelivery(secret, "checkout.completed", {
+    reference: parsed.data.ref,
+    subscription: `sub_${randomUUID()}`,
+    customer: `cus_${createHash("sha256").update(member.id).digest("hex").slice(0, 16)}`,
+    charge: `ch_${randomUUID()}`,
+    amount: plan.price,
+    currency: plan.currency,
+    period_end: now + plan.duration_hours * 3600,
+  });
+  const result = await processCardWebhook(new Headers({ [FAKE_SIGNATURE_HEADER]: signature }), body);
+  redirect(result.status === 200 ? parsed.data.success : "/casual/get-access/card?error=UNAVAILABLE");
+}

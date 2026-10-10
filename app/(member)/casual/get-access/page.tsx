@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MEMBER_HOME, nextStepFor, requireMember } from "@/lib/auth/session";
 import { formatDuration, formatUsd } from "@/lib/domain/money";
+import { cardPaymentsEnabled } from "@/lib/payments/card/server";
 import { paymentOptions } from "@/lib/storage/payments";
 import { PROVIDER_LABELS } from "@/lib/validation/payments";
 
@@ -14,12 +15,13 @@ export const metadata = { title: "Get a pass" };
 const radioCard =
   "flex min-h-11 cursor-pointer items-center gap-4 rounded-card border border-border bg-surface-1 p-5 has-checked:border-casual has-checked:bg-casual/10 has-focus-visible:outline-2 has-focus-visible:outline-ring";
 
-/** Choose plan and wallet (member mock-up 07; spec §16 step 1). Card arrives in Phase 7b. */
+/** Choose plan and wallet (member mock-up 07; spec §16 step 1). Card behind CARD_PAYMENTS_ENABLED (Phase 7b). */
 export default async function GetAccessPage() {
   const member = await requireMember();
   if (member.status === "SUSPENDED") redirect(MEMBER_HOME);
   if (member.status !== "ACTIVE") redirect(nextStepFor(member));
   const options = await paymentOptions(member.id);
+  const cardEnabled = cardPaymentsEnabled();
   const blocked = options.cardActive || options.pendingClaims >= options.maxPending || options.wallets.length === 0;
 
   return (
@@ -91,13 +93,23 @@ export default async function GetAccessPage() {
                 {PROVIDER_LABELS[w.provider]}
               </label>
             ))}
-            <span
-              aria-disabled="true"
-              className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-card border border-border p-3 text-center text-[15px] font-bold text-muted-foreground opacity-60"
-            >
-              <CreditCard className="size-6" strokeWidth={1.6} aria-hidden />
-              Card · soon
-            </span>
+            {cardEnabled ? (
+              <Link
+                href="/casual/get-access/card"
+                className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-card border border-border bg-surface-1 p-3 text-center text-[15px] font-bold focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <CreditCard className="size-6 text-casual" strokeWidth={1.6} aria-hidden />
+                Card
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-card border border-border p-3 text-center text-[15px] font-bold text-muted-foreground opacity-60"
+              >
+                <CreditCard className="size-6" strokeWidth={1.6} aria-hidden />
+                Card · soon
+              </span>
+            )}
           </div>
         </fieldset>
         <div className="flex-1" />

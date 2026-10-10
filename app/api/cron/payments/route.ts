@@ -4,11 +4,12 @@ import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { serverEnv } from "@/lib/env.server";
+import { cardRenewalsDue } from "@/lib/payments/card/server";
 import { paymentHousekeeping } from "@/lib/storage/payments";
 
 /**
  * Daily payments housekeeping: records passes that have ended (access itself already ends by time,
- * BR-27) and deletes payment screenshots past retention (OD-18). Called by Vercel Cron with
+ * BR-27), deletes payment screenshots past retention (OD-18) and lists card renewals due a reminder. Called by Vercel Cron with
  * `Authorization: Bearer $CRON_SECRET`.
  */
 export const dynamic = "force-dynamic";
@@ -24,7 +25,9 @@ function authorized(request: NextRequest): boolean {
 export async function GET(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    return NextResponse.json(await paymentHousekeeping());
+    const housekeeping = await paymentHousekeeping();
+    // Card renewal reminders (§16): listed here; sending arrives with notifications in Phase 11.
+    return NextResponse.json({ ...housekeeping, cardRenewalsDue: await cardRenewalsDue() });
   } catch (e) {
     Sentry.captureException(e);
     return NextResponse.json({ error: "payments job failed" }, { status: 500 });

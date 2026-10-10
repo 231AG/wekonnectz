@@ -91,3 +91,11 @@ update public.app_settings set value = '{"ORANGE_MONEY": "^[A-Z0-9.]{6,30}$", "M
   where key = 'claims.transaction_id_patterns';                  -- DEV-ONLY
 update public.app_settings set value = '3'::jsonb where key = 'claims.rejections_before_flag';     -- DEV-ONLY
 update public.app_settings set value = '90'::jsonb where key = 'claims.evidence_retention_days';  -- DEV-ONLY
+-- Phase 7b card scaffold: plans and values for the fake processor only (OD-1, OD-15, OD-19, OD-20 open).
+insert into public.subscription_plans (code, name, source, duration_hours, price, renews, processor_price_id, sort_order) values
+  ('CARD_WEEKLY', 'Weekly', 'CARD', 168, 3.00, true, 'CARD_WEEKLY', 1),     -- DEV-ONLY price
+  ('CARD_MONTHLY', 'Monthly', 'CARD', 720, 10.00, true, 'CARD_MONTHLY', 2)  -- DEV-ONLY price
+on conflict (code) do nothing;
+update public.app_settings set value = '48'::jsonb where key = 'card.grace_hours';                         -- DEV-ONLY
+update public.app_settings set value = 'true'::jsonb where key = 'card.allow_during_mobile_money_pass';    -- DEV-ONLY
+update public.app_settings set value = '24'::jsonb where key = 'card.renewal_reminder_hours';             -- DEV-ONLY

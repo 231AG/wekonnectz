@@ -17,3 +17,10 @@ export function formatLiberiaTime(iso: string): string {
   const d = new Date(iso);
   return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}`;
 }
+
+/** Card billing period for people: "week", "month", or "10 days". */
+export function formatBillingPeriod(hours: number): string {
+  if (hours === 168) return "week";
+  if (hours === 720) return "month";
+  return formatDuration(hours);
+}

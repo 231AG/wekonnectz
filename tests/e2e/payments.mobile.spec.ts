@@ -27,7 +27,7 @@ test("§16: a member pays outside the app and submits a claim with a screenshot;
   await page.getByRole("link", { name: "Get a pass" }).click();
   await expect(page).toHaveURL(/\/casual\/get-access$/);
   await expect(page.getByText("7-Day Pass")).toBeVisible();
-  await expect(page.getByText("Card · soon")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Card" })).toBeVisible(); // fake processor on locally (Phase 7b)
   await page.screenshot({ path: `${SHOTS_P7}/member-get-access-choose-plan.png`, fullPage: true });
   await page.getByRole("button", { name: "Continue" }).click();
 

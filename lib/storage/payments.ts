@@ -149,12 +149,25 @@ export async function cancelClaim(userId: string, claimId: string): Promise<Clai
   return error ? dbError(error.message) : null;
 }
 
+type Plan = { id: string; code: string; name: string; durationHours: number; price: number; currency: string };
+type PlanRow = { id: string; code: string; name: string; duration_hours: number; price: number; currency: string };
+const toPlan = (p: PlanRow): Plan => ({
+  id: p.id,
+  code: p.code,
+  name: p.name,
+  durationHours: p.duration_hours,
+  price: Number(p.price),
+  currency: p.currency,
+});
+
 export type PaymentOptions = {
-  plans: { id: string; code: string; name: string; durationHours: number; price: number; currency: string }[];
+  plans: Plan[];
+  cardPlans: Plan[];
   wallets: { provider: Provider; displayName: string; numberOrCode: string }[];
   referenceCode: string;
   accessUntil: string | null;
   cardActive: boolean;
+  mobileMoneyActive: boolean;
   pendingClaims: number;
   maxPending: number;
 };
@@ -163,16 +176,19 @@ export async function paymentOptions(userId: string): Promise<PaymentOptions> {
   const { data, error } = await createAdminClient().rpc("member_payment_options", { p_user: userId });
   if (error || !data) throw new Error("payment options unavailable");
   const d = data as {
-    plans: { id: string; code: string; name: string; duration_hours: number; price: number; currency: string }[];
+    plans: PlanRow[];
+    card_plans: PlanRow[];
     wallets: { provider: Provider; display_name: string; number_or_code: string }[];
     reference_code: string;
     access_until: string | null;
     card_active: boolean;
+    mobile_money_active: boolean;
     pending_claims: number;
     max_pending: number;
   };
   return {
-    plans: d.plans.map((p) => ({ ...p, durationHours: p.duration_hours, price: Number(p.price) })),
+    plans: d.plans.map(toPlan),
+    cardPlans: d.card_plans.map(toPlan),
     wallets: d.wallets.map((w) => ({
       provider: w.provider,
       displayName: w.display_name,
@@ -181,6 +197,7 @@ export async function paymentOptions(userId: string): Promise<PaymentOptions> {
     referenceCode: d.reference_code,
     accessUntil: d.access_until,
     cardActive: d.card_active,
+    mobileMoneyActive: d.mobile_money_active,
     pendingClaims: Number(d.pending_claims),
     maxPending: Number(d.max_pending),
   };
@@ -221,12 +238,14 @@ export async function memberPasses(userId: string) {
   if (error) throw new Error("passes unavailable");
   return (data ?? []).map((p) => ({
     planName: p.plan_name,
+    source: p.source,
     startsAt: p.starts_at,
     expiresAt: p.expires_at,
     amount: p.amount === null ? null : Number(p.amount),
     currency: p.currency,
     provider: p.provider,
     transactionId: p.transaction_id,
+    paymentStatus: p.payment_status,
   }));
 }
 
