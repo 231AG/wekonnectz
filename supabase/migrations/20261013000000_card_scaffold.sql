@@ -615,7 +615,10 @@ begin
     return 'IGNORED_STALE';
   end if;
   if v_type in ('DISPUTE_OPENED', 'DISPUTE_CLOSED') then
-    v_dispute := left(coalesce(nullif(p_event ->> 'dispute_id', ''), nullif(p_event ->> 'charge_id', ''), 'unknown'), 200);
+    v_dispute := nullif(p_event ->> 'dispute_id', '');
+    if v_dispute is null or length(v_dispute) > 200 then
+      raise exception 'DISPUTE_ID_REQUIRED' using errcode = '22023';
+    end if;
   end if;
 
   if v_type = 'RENEWAL_SUCCEEDED' then
@@ -696,7 +699,8 @@ begin
                            then 'EXPIRED'::public.subscription_status
                          when status = 'ACTIVE' then 'CANCELLED'::public.subscription_status
                          else status end,
-           auto_renew = false, last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
+           auto_renew = false, cancel_at_period_end = true,
+           last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
      where id = v_sub.id;
     return 'ENDED';
   end if;

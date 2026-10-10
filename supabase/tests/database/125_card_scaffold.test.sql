@@ -316,7 +316,7 @@ select is(public.apply_card_event('fake', pg_temp.ev('evt_k2late', 'RENEWAL_SUCC
   jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2old', 'amount', 3.00, 'currency', 'USD',
                      'period_end', now() + interval '7 days'))) ->> 'result', 'CHARGE_RECORDED',
   'a late charge for a period already covered is recorded only');
-select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_k2"}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d', 'DISPUTE_OPENED', now(), '{"dispute_id":"dp_k2","subscription_ref":"sub_k2"}')) ->> 'result',
   'SUSPENDED', 'dispute opened');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_k2bad', 'RENEWAL_SUCCEEDED', now(),
   jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2bad', 'amount', 9.99, 'currency', 'USD',
@@ -325,19 +325,19 @@ reset role;
 select is((select status::text from public.subscriptions where processor_subscription_id = 'sub_k2'), 'SUSPENDED',
   'a wrong-amount charge never lifts a dispute suspension');
 set local role service_role;
-select is(public.apply_card_event('fake', pg_temp.ev('evt_m_closed', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_hawa","won":true}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_m_closed', 'DISPUTE_CLOSED', now(), '{"dispute_id":"dp_m","subscription_ref":"sub_hawa","won":true}')) ->> 'result',
   'IGNORED_STATE', 'a dispute closed before it was opened (out of order) is ignored');
-select is(public.apply_card_event('fake', pg_temp.ev('evt_m_opened', 'DISPUTE_OPENED', now() - interval '1 minute', '{"subscription_ref":"sub_hawa"}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_m_opened', 'DISPUTE_OPENED', now() - interval '1 minute', '{"dispute_id":"dp_m","subscription_ref":"sub_hawa"}')) ->> 'result',
   'IGNORED_STATE', 'and the "opened" arriving afterwards no longer suspends it');
 
 -- Self-audit round 3: a dispute opened before a later charge still applies; a lost dispute refunds
 -- whatever the state; the cancel request stops once the processor confirmed it.
-select is(public.apply_card_event('fake', pg_temp.ev('evt_k2won', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2","won":true}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2won', 'DISPUTE_CLOSED', now(), '{"dispute_id":"dp_k2","subscription_ref":"sub_k2","won":true}')) ->> 'result',
   'RESTORED', 'dispute won');
-select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d2', 'DISPUTE_OPENED', now() - interval '2 days', '{"subscription_ref":"sub_k2"}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d2', 'DISPUTE_OPENED', now() - interval '2 days', '{"dispute_id":"dp_k2","subscription_ref":"sub_k2"}')) ->> 'result',
   'IGNORED_STATE', 'a dispute already closed can''t be reopened by a late event');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(),
-  '{"subscription_ref":"sub_k2","won":false,"charge_id":"ch_k2r3"}')) ->> 'result', 'REFUNDED',
+  '{"dispute_id":"dp_k2l","subscription_ref":"sub_k2","won":false,"charge_id":"ch_k2r3"}')) ->> 'result', 'REFUNDED',
   'a lost dispute ends access even if the "opened" event never suspended it');
 select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000004', now() + interval '8 days'),
   'no card access after a lost dispute (the mobile money pass has ended by then)');
