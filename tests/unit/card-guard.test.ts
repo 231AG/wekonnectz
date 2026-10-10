@@ -26,14 +26,15 @@ describe("fake card processor stays local (OD-4, §6 rule 3)", () => {
     expect(cardPaymentsEnabled()).toBe(true);
   });
 
-  it("refuses without the opt-in", () => {
+  it("refuses without the opt-in (card payments off, pages keep working)", () => {
     env.ALLOW_FAKE_CARD_PROCESSOR = undefined;
-    expect(() => getCardProcessor()).toThrow(/only locally/);
+    expect(getCardProcessor()).toBeNull();
+    expect(cardPaymentsEnabled()).toBe(false);
   });
 
   it("refuses on any Vercel deployment, preview included", () => {
     env.VERCEL = "1";
-    expect(() => getCardProcessor()).toThrow(/only locally/);
+    expect(getCardProcessor()).toBeNull();
   });
 
   it("no processor configured: card payments are off", () => {

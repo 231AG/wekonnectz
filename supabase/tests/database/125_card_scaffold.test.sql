@@ -1,7 +1,7 @@
 -- Phase 7b: card subscriptions scaffold (spec §16, §22; BR-26 card, BR-29, BR-40, BR-41; OD-19, OD-20).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(89);
+select plan(97);
 
 -- Fixtures (fictional): Musu, Hawa, Kebeh verified ACTIVE members; Siah not verified.
 insert into auth.users (id, phone, email, aud, role) values
@@ -70,7 +70,7 @@ select is((select status::text from public.subscriptions where id = (select id f
 select is(public.apply_card_event('fake', pg_temp.ev('evt_1', 'CHECKOUT_COMPLETED', now() - interval '1 hour',
   jsonb_build_object('reference', (select id from refs where n = 'm2'), 'subscription_ref', 'sub_musu', 'customer_ref', 'cus_musu',
                      'charge_id', 'ch_1', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '6 days 23 hours'))),
-  '{"outcome": "APPLIED", "result": "ACTIVATED"}'::jsonb, 'BR-26: a verified completed checkout activates the subscription');
+  '{"outcome": "APPLIED", "result": "ACTIVATED", "cancel_at_processor": false}'::jsonb, 'BR-26: a verified completed checkout activates the subscription');
 select ok(public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000001'), 'access is live after the first charge');
 select is((select status::text from public.subscriptions where processor_subscription_id = 'sub_musu'), 'ACTIVE', 'subscription ACTIVE');
 select is((select transaction_key from public.payments where provider_transaction_id = 'ch_1'), 'CARD:fake:ch_1',
@@ -84,7 +84,7 @@ set local role service_role;
 select is(public.apply_card_event('fake', pg_temp.ev('evt_1', 'CHECKOUT_COMPLETED', now() - interval '1 hour',
   jsonb_build_object('reference', (select id from refs where n = 'm2'), 'subscription_ref', 'sub_musu',
                      'charge_id', 'ch_1', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '6 days 23 hours'))),
-  '{"outcome": "DUPLICATE"}'::jsonb, '§22: a replayed event is a no-op');
+  '{"outcome": "DUPLICATE", "cancel_at_processor": false}'::jsonb, '§22: a replayed event is a no-op');
 select is((select count(*)::int from public.payments where processor_subscription_ref = 'sub_musu'), 1, 'replay: no second payment');
 select is((select count(*)::int from public.payment_events where processor = 'fake' and processor_event_id = 'evt_1'), 1,
   'replay: the event is stored once');
@@ -297,6 +297,38 @@ reset role;
 select ok((select period_end from public.subscriptions where processor_subscription_id = 'sub_k2') <= now() + interval '15 days 1 minute',
   'a period end beyond the plan''s length is capped');
 set local role service_role;
+
+-- Self-audit round 2
+select is((public.apply_card_event('fake', pg_temp.ev('evt_k1r', 'RENEWAL_SUCCEEDED', now(), '{"subscription_ref":"sub_k1"}'))
+           ->> 'cancel_at_processor')::boolean, true,
+  'a replay of an event on a subscription awaiting refund still asks the server to cancel renewals (retry)');
+reset role;
+update public.subscription_plans set price = 4.00 where code = 'CARD_WEEKLY';
+set local role service_role;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2r3', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2r3', 'amount', 3.00, 'currency', 'USD',
+                     'period_end', now() + interval '21 days'))) ->> 'result', 'RENEWED',
+  'a later price change never breaks existing subscribers (the price is locked at checkout)');
+reset role;
+update public.subscription_plans set price = 3.00 where code = 'CARD_WEEKLY';
+set local role service_role;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2late', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2old', 'amount', 3.00, 'currency', 'USD',
+                     'period_end', now() + interval '7 days'))) ->> 'result', 'CHARGE_RECORDED',
+  'a late charge for a period already covered is recorded only');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_k2"}')) ->> 'result',
+  'SUSPENDED', 'dispute opened');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2bad', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2bad', 'amount', 9.99, 'currency', 'USD',
+                     'period_end', now() + interval '28 days'))) ->> 'result', 'NEEDS_REFUND', 'a wrong-amount charge during a dispute');
+reset role;
+select is((select status::text from public.subscriptions where processor_subscription_id = 'sub_k2'), 'SUSPENDED',
+  'a wrong-amount charge never lifts a dispute suspension');
+set local role service_role;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_m_closed', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_hawa","won":true}')) ->> 'result',
+  'IGNORED_STATE', 'a dispute closed before it was opened (out of order) is ignored');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_m_opened', 'DISPUTE_OPENED', now() - interval '1 minute', '{"subscription_ref":"sub_hawa"}')) ->> 'result',
+  'IGNORED_STALE', 'and the older "opened" arriving afterwards no longer suspends it');
 
 -- ---------------------------------------------------------------------------
 -- Invalid signatures, renewal reminders, tidy job, account purge

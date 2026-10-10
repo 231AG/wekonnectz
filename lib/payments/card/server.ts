@@ -19,7 +19,9 @@ export function getCardProcessor(): CardProcessor | null {
       // Local development and CI only: needs the explicit opt-in that `pnpm env:setup` writes, and never
       // runs on any Vercel deployment (production or preview).
       if (env.VERCEL || env.ALLOW_FAKE_CARD_PROCESSOR !== "1") {
-        throw new Error("The fake card processor runs only locally. Configure a real processor (OD-4).");
+        // Misconfigured deployment: card payments stay off (fail closed) without taking pages down.
+        Sentry.captureMessage("The fake card processor runs only locally; card payments are off", { level: "error" });
+        return null;
       }
       if (!env.FAKE_CARD_WEBHOOK_SECRET) return null;
       return new FakeCardProcessor(env.FAKE_CARD_WEBHOOK_SECRET);
@@ -72,7 +74,7 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
     });
     return { status: 500 };
   }
-  const d = (data ?? {}) as { outcome?: string; result?: string; reason?: string };
+  const d = (data ?? {}) as { outcome?: string; result?: string; reason?: string; cancel_at_processor?: boolean };
   const outcome = d.outcome ?? "UNKNOWN";
   if (outcome === "REJECTED") {
     Sentry.captureMessage("card webhook event rejected", {
@@ -80,13 +82,15 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
       extra: { reason: d.reason, type: event.type },
     });
   }
-  // A charge we won't give access for, or a refunded subscription: stop renewals at the processor too.
-  if ((d.result === "NEEDS_REFUND" || d.result === "REFUNDED") && event.subscriptionRef) {
-    if (d.result === "NEEDS_REFUND") Sentry.captureMessage("card charge needs a refund", { level: "warning" });
+  if (d.result === "NEEDS_REFUND") Sentry.captureMessage("card charge needs a refund", { level: "warning" });
+  // A refunded subscription, or a charge we won't give access for: stop renewals at the processor too.
+  // The flag comes back on replays as well, so if this call fails the processor's retry tries again.
+  if (d.cancel_at_processor && event.subscriptionRef) {
     try {
       await processor.cancelAtPeriodEnd(event.subscriptionRef);
     } catch (e) {
       Sentry.captureException(e);
+      return { status: 500 };
     }
   }
   return { status: 200, outcome };
