@@ -1,7 +1,7 @@
 -- Phase 7b: card subscriptions scaffold (spec §16, §22; BR-26 card, BR-29, BR-40, BR-41; OD-19, OD-20).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(74);
+select plan(89);
 
 -- Fixtures (fictional): Musu, Hawa, Kebeh verified ACTIVE members; Siah not verified.
 insert into auth.users (id, phone, email, aud, role) values
@@ -135,7 +135,7 @@ select ok(public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000001', now()
 select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000001', now() + interval '13 days 23 hours' + interval '49 hours'),
   'BR-40: access ends when the grace period ends');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_5', 'RENEWAL_FAILED', now() - interval '5 minutes',
-  '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_STATE', 'a failed retry does not extend the grace period');
+  '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_GRACE_USED', 'a failed retry does not extend the grace period');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_old', 'CANCEL_SCHEDULED', now() - interval '20 minutes',
   '{"subscription_ref":"sub_musu"}')) ->> 'result', 'IGNORED_STALE', 'an event older than the last one applied is stale');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_6', 'RENEWAL_SUCCEEDED', now() - interval '4 minutes',
@@ -241,12 +241,71 @@ select lives_ok($$ select public.start_card_checkout('bbbbbbbb-7b00-0000-0000-00
   'OD-19 = yes: allowed, both run at once');
 
 -- ---------------------------------------------------------------------------
+-- Self-audit round 1: grace once per period, out-of-order events, second paid checkout, amounts
+-- ---------------------------------------------------------------------------
+reset role;
+select set_config('wk.subscription_admin', 'on', true);
+update public.subscriptions set period_end = now() - interval '3 days', expires_at = now() - interval '3 days',
+       starts_at = now() - interval '10 days', last_event_at = now() - interval '3 days'
+where processor_subscription_id = 'sub_hawa';
+select set_config('wk.subscription_admin', 'off', true);
+set local role service_role;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_g1', 'RENEWAL_FAILED', now() - interval '2 days 23 hours',
+  '{"subscription_ref":"sub_hawa"}')) ->> 'result', 'PAYMENT_FAILED', 'renewal fails: grace starts');
+select ok(public.expire_subscriptions() >= 1, 'grace runs out and the tidy job expires it');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_g2', 'RENEWAL_FAILED', now() - interval '1 hour',
+  '{"subscription_ref":"sub_hawa"}')) ->> 'result', 'IGNORED_GRACE_USED', 'BR-40: a later failed retry never gives a second grace period');
+select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000002'), 'BR-40: EXPIRED after the grace period');
+
+select throws_ok($$ select public.apply_card_event('fake', pg_temp.ev('evt_early', 'REFUNDED', now(),
+  '{"subscription_ref":"sub_not_yet","charge_id":"ch_zz"}')) $$, '55000', 'UNKNOWN_SUBSCRIPTION',
+  'an event for a subscription we don''t know yet fails so the processor retries it');
+select is((select count(*)::int from public.payment_events where processor_event_id = 'evt_early'), 0,
+  'and is not marked as seen');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_old2', 'REFUNDED', now() - interval '4 days',
+  '{"subscription_ref":"sub_not_yet","charge_id":"ch_zz"}')) ->> 'reason', 'UNKNOWN_SUBSCRIPTION',
+  'after three days it is recorded as rejected instead');
+select throws_ok($$ select public.apply_card_event('fake', pg_temp.ev('evt_wrongsub', 'REFUNDED', now(),
+  '{"subscription_ref":"sub_hawa","charge_id":"ch_3"}')) $$, '55000', 'UNKNOWN_CHARGE',
+  'a refund only touches a charge of the same subscription');
+
+-- Kebeh: a second paid checkout while a card subscription is active is kept for a refund, not activated.
+insert into refs select 'k1', (public.start_card_checkout('bbbbbbbb-7b00-0000-0000-000000000004', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
+insert into refs select 'k2', (public.start_card_checkout('bbbbbbbb-7b00-0000-0000-000000000004', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2', 'CHECKOUT_COMPLETED', now(),
+  jsonb_build_object('reference', (select id from refs where n = 'k2'), 'subscription_ref', 'sub_k2',
+                     'charge_id', 'ch_k2', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '7 days'))) ->> 'result',
+  'ACTIVATED', 'the newer checkout activates');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k1', 'CHECKOUT_COMPLETED', now(),
+  jsonb_build_object('reference', (select id from refs where n = 'k1'), 'subscription_ref', 'sub_k1',
+                     'charge_id', 'ch_k1', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '7 days'))) ->> 'result',
+  'NEEDS_REFUND', 'a second paid checkout is recorded for a refund, not a second subscription');
+select is((select count(*)::int from public.payment_events where type = 'CARD_NEEDS_REFUND'
+           and raw_payload ->> 'subscription_ref' = 'sub_k1'), 1, 'staff see it needs a refund');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k1r', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k1', 'charge_id', 'ch_k1r', 'amount', 3.00, 'currency', 'USD',
+                     'period_end', now() + interval '14 days'))) ->> 'result', 'NEEDS_REFUND',
+  'a charge on a refunded subscription never restores access; it is kept for a refund');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2r', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2r', 'amount', 0.50, 'currency', 'USD',
+                     'period_end', now() + interval '14 days'))) ->> 'result', 'NEEDS_REFUND',
+  'a charge that isn''t the plan price gives no time');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_k2r2', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_k2', 'charge_id', 'ch_k2r2', 'amount', 3.00, 'currency', 'USD',
+                     'period_end', now() + interval '300 days'))) ->> 'result', 'RENEWED', 'a renewal');
+reset role;
+select ok((select period_end from public.subscriptions where processor_subscription_id = 'sub_k2') <= now() + interval '15 days 1 minute',
+  'a period end beyond the plan''s length is capped');
+set local role service_role;
+
+-- ---------------------------------------------------------------------------
 -- Invalid signatures, renewal reminders, tidy job, account purge
 -- ---------------------------------------------------------------------------
 select ok(public.log_invalid_card_webhook('fake', 'BAD_SIGNATURE', repeat('x', 5000)), 'a bad signature is logged');
-select is((select length(raw_payload ->> 'body') || ':' || (raw_payload ->> 'length') || ':' || signature_valid
+select is((select length(raw_payload ->> 'prefix') || ':' || (raw_payload ->> 'length') || ':' || length(raw_payload ->> 'sha256')
+                  || ':' || signature_valid
            from public.payment_events where type = 'CARD_WEBHOOK_INVALID' order by received_at desc limit 1),
-  '2048:5000:false', 'logged as invalid, with the body truncated');
+  '256:5000:64:false', 'logged as invalid: a hash and a short prefix of the body only');
 select is((select count(*)::int from generate_series(1, 120) g where public.log_invalid_card_webhook('fake', 'BAD_SIGNATURE', 'x')), 99,
   'a flood of forged requests stops being logged after 100 in ten minutes');
 
@@ -254,16 +313,17 @@ select is((select count(*)::int from public.card_renewals_due() where user_id = 
   'no reminder a week before renewal');
 reset role;
 select set_config('wk.subscription_admin', 'on', true);
-update public.subscriptions set period_end = now() + interval '3 hours', expires_at = now() + interval '3 hours'
+update public.subscriptions set status = 'ACTIVE', period_end = now() + interval '3 hours', expires_at = now() + interval '3 hours'
 where processor_subscription_id = 'sub_hawa';
+insert into refs select 'k3', (public.start_card_checkout('bbbbbbbb-7b00-0000-0000-000000000001', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
 update public.subscriptions set starts_at = now() - interval '3 hours', expires_at = now() - interval '2 hours'
-where user_id = 'bbbbbbbb-7b00-0000-0000-000000000004' and status = 'PENDING';
+where id = (select id from refs where n = 'k3');
 select set_config('wk.subscription_admin', 'off', true);
 set local role service_role;
 select is((select count(*)::int from public.card_renewals_due() where user_id = 'bbbbbbbb-7b00-0000-0000-000000000002'), 1,
   'the renewal reminder hook lists a renewal within the lead time');
 select ok(public.expire_subscriptions() >= 1, 'the tidy job closes abandoned checkouts');
-select is((select status::text from public.subscriptions where user_id = 'bbbbbbbb-7b00-0000-0000-000000000004' and source = 'CARD'),
+select is((select status::text from public.subscriptions where id = (select id from refs where n = 'k3')),
   'EXPIRED', 'an abandoned checkout is EXPIRED');
 reset role;
 

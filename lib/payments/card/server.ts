@@ -16,8 +16,10 @@ export function getCardProcessor(): CardProcessor | null {
   const env = serverEnv();
   switch (env.CARD_PROCESSOR) {
     case "fake":
-      if (env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-        throw new Error("The fake card processor cannot run in production. Configure a real processor (OD-4).");
+      // Local development and CI only: needs the explicit opt-in that `pnpm env:setup` writes, and never
+      // runs on any Vercel deployment (production or preview).
+      if (env.VERCEL || env.ALLOW_FAKE_CARD_PROCESSOR !== "1") {
+        throw new Error("The fake card processor runs only locally. Configure a real processor (OD-4).");
       }
       if (!env.FAKE_CARD_WEBHOOK_SECRET) return null;
       return new FakeCardProcessor(env.FAKE_CARD_WEBHOOK_SECRET);
@@ -48,11 +50,13 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
   }
   const event = processor.verifyWebhook(headers, rawBody);
   if (!event) {
-    await admin.rpc("log_invalid_card_webhook", {
+    const { data: logged } = await admin.rpc("log_invalid_card_webhook", {
       p_processor: processor.id,
       p_reason: "BAD_SIGNATURE",
       p_body: rawBody,
     });
+    if (logged === false)
+      Sentry.captureMessage("card webhook: invalid-delivery log paused (flood)", { level: "warning" });
     return { status: 401 };
   }
   const { data, error } = await admin.rpc("apply_card_event", {
@@ -60,16 +64,30 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
     p_event: toDatabaseEvent(event) as Database["public"]["Functions"]["apply_card_event"]["Args"]["p_event"],
   });
   if (error) {
-    // e.g. an owner setting without a value (OD-20): fail so the processor retries later.
-    Sentry.captureMessage("card webhook could not be applied", { level: "error", extra: { code: error.code } });
+    // 55000: an earlier event hasn't arrived yet; P0001: an owner setting has no value (e.g. OD-20).
+    // Either way nothing was stored, so the processor's retry is applied later.
+    Sentry.captureMessage("card webhook not applied yet", {
+      level: error.code === "55000" ? "info" : "error",
+      extra: { code: error.code },
+    });
     return { status: 500 };
   }
-  const outcome = (data as { outcome?: string } | null)?.outcome ?? "UNKNOWN";
+  const d = (data ?? {}) as { outcome?: string; result?: string; reason?: string };
+  const outcome = d.outcome ?? "UNKNOWN";
   if (outcome === "REJECTED") {
     Sentry.captureMessage("card webhook event rejected", {
       level: "warning",
-      extra: { reason: (data as { reason?: string }).reason, type: event.type },
+      extra: { reason: d.reason, type: event.type },
     });
+  }
+  // A charge we won't give access for, or a refunded subscription: stop renewals at the processor too.
+  if ((d.result === "NEEDS_REFUND" || d.result === "REFUNDED") && event.subscriptionRef) {
+    if (d.result === "NEEDS_REFUND") Sentry.captureMessage("card charge needs a refund", { level: "warning" });
+    try {
+      await processor.cancelAtPeriodEnd(event.subscriptionRef);
+    } catch (e) {
+      Sentry.captureException(e);
+    }
   }
   return { status: 200, outcome };
 }
@@ -162,6 +180,7 @@ export async function cancelCardSubscription(userId: string): Promise<boolean> {
   const s = data?.[0];
   const processor = getCardProcessor();
   if (!s || !processor || processor.id !== s.processor || !s.processor_subscription_id) return false;
+  if (s.status !== "ACTIVE" && s.status !== "PAYMENT_FAILED" && s.status !== "CANCELLED") return false;
   if (s.cancel_at_period_end) return true;
   try {
     await processor.cancelAtPeriodEnd(s.processor_subscription_id);

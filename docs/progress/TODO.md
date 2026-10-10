@@ -16,17 +16,17 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Relationship mode   | 7       | 0              | 0              | 0          |
 | Messaging           | 5       | 1              | 1              | 0          |
 | Mobile money access | 11      | 0              | 0              | 1          |
-| Card subscriptions  | 0       | 0              | 4              | 1          |
+| Card subscriptions  | 4       | 0              | 0              | 1          |
 | Availability        | 0       | 0              | 6              | 1          |
 | Casual discovery    | 0       | 0              | 6              | 1          |
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **72**  | **16**         | **38**         | **9**      |
+| **Total**           | **76**  | **16**         | **34**         | **9**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29).
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19.
 
 ## Planning
 
@@ -151,10 +151,10 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Card subscriptions
 
-- ⬜ `CardProcessor` interface + fake adapter — P7b
-- ⬜ Webhook Edge Function (signature, raw log, idempotent, replay) — P7b
-- ⬜ State machine: renew, PAYMENT_FAILED → grace → EXPIRED, CANCELLED to period end — P7b — BR-40
-- ⬜ Card UI behind `CARD_PAYMENTS_ENABLED` — P7b
+- ✅ `CardProcessor` interface + fake adapter — P7b
+- ✅ Webhook route (signature, raw log, idempotent, replay window) — P7b
+- ✅ State machine: renew, PAYMENT_FAILED → grace → EXPIRED, CANCELLED to period end, disputes, refunds — P7b — BR-26, 29, 40, 41
+- ✅ Card UI behind `CARD_PAYMENTS_ENABLED` (choose plan, hosted checkout, status, cancel, receipts) — P7b
 - ⬜ Real processor adapter — P7c ⛔ until OD-4
 
 ## Availability

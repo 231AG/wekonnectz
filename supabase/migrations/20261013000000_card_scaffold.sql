@@ -19,11 +19,13 @@ on conflict (key) do nothing;
 -- Columns
 -- ---------------------------------------------------------------------------
 -- Which processor a card subscription lives at, the paid period end (expires_at adds the grace period
--- after a failed renewal) and the time of the last processor event applied (out-of-order delivery).
+-- after a failed renewal), the time of the last processor event applied (out-of-order delivery) and the
+-- paid period a grace period was already given for (one grace period per period, BR-40).
 alter table public.subscriptions
   add column processor     text check (processor ~ '^[a-z0-9_]{2,30}$'),
   add column period_end    timestamptz,
   add column last_event_at timestamptz,
+  add column grace_for_period_end timestamptz,
   add constraint subscriptions_card_has_processor check (source <> 'CARD' or processor is not null);
 create unique index subscriptions_processor_ref on public.subscriptions (processor, processor_subscription_id)
   where processor_subscription_id is not null;
@@ -128,11 +130,11 @@ begin
   end if;
   if (new.id, new.user_id, new.plan_id, new.source, new.starts_at, new.expires_at, new.source_payment_id,
       new.auto_renew, new.cancel_at_period_end, new.processor_subscription_id, new.created_at,
-      new.processor, new.period_end, new.last_event_at)
+      new.processor, new.period_end, new.last_event_at, new.grace_for_period_end)
      is distinct from
      (old.id, old.user_id, old.plan_id, old.source, old.starts_at, old.expires_at, old.source_payment_id,
       old.auto_renew, old.cancel_at_period_end, old.processor_subscription_id, old.created_at,
-      old.processor, old.period_end, old.last_event_at)
+      old.processor, old.period_end, old.last_event_at, old.grace_for_period_end)
      or not (new.status = 'EXPIRED' and old.expires_at <= now()) then
     raise exception 'SUBSCRIPTION_IMMUTABLE' using errcode = '42501';
   end if;
@@ -314,6 +316,24 @@ begin
 end;
 $$;
 
+-- The fake processor's test checkout page (development only): the member's own open checkout and its
+-- plan, so the page never takes the plan or the price from the browser.
+create or replace function public.member_pending_checkout(p_user uuid, p_reference uuid)
+returns table (plan_code text, price numeric, currency text, duration_hours integer, processor_price_id text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p.code, p.price, p.currency, p.duration_hours, p.processor_price_id
+  from public.subscriptions s
+  join public.subscription_plans p on p.id = s.plan_id
+  where s.id = p_reference and s.user_id = p_user and s.source = 'CARD' and s.status = 'PENDING'
+    and s.expires_at > now();
+$$;
+revoke all on function public.member_pending_checkout(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.member_pending_checkout(uuid, uuid) to service_role;
+
 -- The member's current card subscription (§16 My profile: status, renewal, cancel).
 create or replace function public.member_card_subscription(p_user uuid)
 returns table (id uuid, plan_name text, price numeric, currency text, status public.subscription_status,
@@ -369,8 +389,9 @@ $$;
 -- Processor events (webhook). The server calls these only after the adapter verified the signature.
 -- ---------------------------------------------------------------------------
 
--- A delivery whose signature failed: logged without trusting anything in it (§22). Logging pauses
--- under a flood so forged requests can't grow the append-only table without limit.
+-- A delivery whose signature failed: logged without trusting anything in it (§22). Only a hash and a
+-- short prefix of the body are kept, and logging pauses under a flood (the caller alerts) so forged
+-- requests can't grow the append-only table without limit.
 create or replace function public.log_invalid_card_webhook(p_processor text, p_reason text, p_body text)
 returns boolean
 language plpgsql
@@ -385,7 +406,8 @@ begin
   insert into public.payment_events (type, raw_payload, signature_valid, processor)
   values ('CARD_WEBHOOK_INVALID',
           jsonb_build_object('reason', left(coalesce(p_reason, ''), 60), 'length', length(coalesce(p_body, '')),
-                             'body', left(coalesce(p_body, ''), 2048)),
+                             'sha256', encode(extensions.digest(coalesce(p_body, ''), 'sha256'), 'hex'),
+                             'prefix', left(coalesce(p_body, ''), 256)),
           false,
           case when p_processor ~ '^[a-z0-9_]{2,30}$' then p_processor end);
   return true;
@@ -431,6 +453,37 @@ begin
 end;
 $$;
 
+-- A charge we keep a record of but don't give access for: staff refund it (Phase 10 Payments page lists
+-- CARD_NEEDS_REFUND) and the server cancels renewals at the processor.
+create or replace function public.card_needs_refund(p_sub public.subscriptions, p_payment uuid, p_reason text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.payment_events (payment_id, type, raw_payload, processor)
+  values (p_payment, 'CARD_NEEDS_REFUND',
+          jsonb_build_object('reason', p_reason, 'subscription_id', p_sub.id,
+                             'subscription_ref', p_sub.processor_subscription_id),
+          p_sub.processor);
+$$;
+
+-- An unknown subscription or charge usually means an earlier event (the checkout, the charge) hasn't
+-- arrived yet: fail without storing anything so the processor retries. After three days it is recorded
+-- as rejected instead.
+create or replace function public.card_not_yet_known(p_what text, p_at timestamptz)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if p_at > now() - interval '3 days' then
+    raise exception '%', p_what using errcode = '55000';
+  end if;
+  raise exception '%', p_what using errcode = '22023';
+end;
+$$;
+
 -- State machine (§16 subscription states; BR-40). Returns what happened.
 create or replace function public.card_event_transition(p_processor text, p_event jsonb, p_at timestamptz)
 returns text
@@ -441,11 +494,13 @@ as $$
 declare
   v_type    text := p_event ->> 'type';
   v_sub     public.subscriptions;
+  v_plan    public.subscription_plans;
   v_ref     uuid;
   v_end     timestamptz;
   v_payment uuid;
   v_status  public.subscription_status;
   v_charge  public.payments;
+  v_problem text;
 begin
   if v_type = 'CHECKOUT_COMPLETED' then
     begin
@@ -462,32 +517,51 @@ begin
     if v_sub.processor_subscription_id is not null then
       return 'IGNORED_ALREADY_ACTIVE';
     end if;
-    -- PENDING, or a checkout closed by a newer one / the hourly tidy: the member paid, so it is honoured.
     if v_sub.status not in ('PENDING', 'EXPIRED') then
       raise exception 'CHECKOUT_NOT_PENDING' using errcode = '22023';
     end if;
     if coalesce(p_event ->> 'subscription_ref', '') = '' then
       raise exception 'SUBSCRIPTION_REF_REQUIRED' using errcode = '22023';
     end if;
+    select * into v_plan from public.subscription_plans where id = v_sub.plan_id;
     v_end := (p_event ->> 'period_end')::timestamptz;
     if v_end is null or v_end <= p_at then
       raise exception 'BAD_PERIOD_END' using errcode = '22023';
     end if;
+    -- Never more than the plan's period (a day's slack for processor billing anchors).
+    v_end := least(v_end, p_at + make_interval(hours => v_plan.duration_hours) + interval '1 day');
+    perform 1 from public.users where id = v_sub.user_id for update;
     v_sub.processor_subscription_id := p_event ->> 'subscription_ref';
     v_payment := public.record_card_charge(v_sub, p_event, p_at);
     if v_payment is null then
       raise exception 'CHARGE_ALREADY_RECORDED' using errcode = '22023';
     end if;
-    update public.subscriptions
-       set status = 'ACTIVE', starts_at = least(p_at, now()), expires_at = v_end, period_end = v_end,
-           processor_subscription_id = p_event ->> 'subscription_ref', source_payment_id = v_payment,
-           auto_renew = true, cancel_at_period_end = false, last_event_at = p_at, updated_at = now()
-     where id = v_sub.id;
     if coalesce(p_event ->> 'customer_ref', '') <> '' then
       insert into public.card_customers (user_id, processor, customer_ref)
       values (v_sub.user_id, p_processor, p_event ->> 'customer_ref')
       on conflict (user_id) do update set processor = excluded.processor, customer_ref = excluded.customer_ref;
     end if;
+    -- A paid checkout is activated unless that would break a rule checked when it started: the amount
+    -- is the plan price, one card subscription at a time (a second paid checkout), OD-19.
+    v_problem := case
+      when (p_event ->> 'amount')::numeric <> v_plan.price then 'AMOUNT_MISMATCH'
+      when public.has_active_card_subscription(v_sub.user_id) then 'CARD_SUBSCRIPTION_ACTIVE'
+      when public.has_active_mobile_money_pass(v_sub.user_id)
+           and not (public.get_setting('card.allow_during_mobile_money_pass'))::boolean then 'MOBILE_MONEY_PASS_ACTIVE'
+    end;
+    if v_problem is not null then
+      update public.subscriptions
+         set status = 'REFUNDED', processor_subscription_id = v_sub.processor_subscription_id, source_payment_id = v_payment,
+             auto_renew = false, cancel_at_period_end = true, last_event_at = p_at, updated_at = now()
+       where id = v_sub.id;
+      perform public.card_needs_refund(v_sub, v_payment, v_problem);
+      return 'NEEDS_REFUND';
+    end if;
+    update public.subscriptions
+       set status = 'ACTIVE', starts_at = least(p_at, now()), expires_at = v_end, period_end = v_end,
+           processor_subscription_id = v_sub.processor_subscription_id, source_payment_id = v_payment,
+           auto_renew = true, cancel_at_period_end = false, last_event_at = p_at, updated_at = now()
+     where id = v_sub.id;
     return 'ACTIVATED';
   end if;
 
@@ -498,11 +572,12 @@ begin
   where processor = p_processor and processor_subscription_id = p_event ->> 'subscription_ref'
   for update;
   if not found then
-    raise exception 'UNKNOWN_SUBSCRIPTION' using errcode = '22023';
+    perform public.card_not_yet_known('UNKNOWN_SUBSCRIPTION', p_at);
   end if;
+  select * into v_plan from public.subscription_plans where id = v_sub.plan_id;
 
   -- Money events apply whatever their order; state events older than the last one applied are stale.
-  if v_type in ('RENEWAL_FAILED', 'CANCEL_SCHEDULED', 'SUBSCRIPTION_ENDED')
+  if v_type in ('RENEWAL_FAILED', 'CANCEL_SCHEDULED', 'SUBSCRIPTION_ENDED', 'DISPUTE_OPENED', 'DISPUTE_CLOSED')
      and v_sub.last_event_at is not null and p_at < v_sub.last_event_at then
     return 'IGNORED_STALE';
   end if;
@@ -512,16 +587,33 @@ begin
     if v_end is null or v_end <= p_at then
       raise exception 'BAD_PERIOD_END' using errcode = '22023';
     end if;
+    -- One period past the paid period end (or the charge, if later), with a day's slack.
+    v_end := least(v_end, greatest(p_at, coalesce(v_sub.period_end, p_at))
+                          + make_interval(hours => v_plan.duration_hours) + interval '1 day');
     v_payment := public.record_card_charge(v_sub, p_event, p_at);
     if v_payment is null then
       return 'IGNORED_CHARGE_RECORDED';
     end if;
+    -- A charge on a subscription that ended (refunded, not activated) or for the wrong amount: kept on
+    -- record for a refund, no access, renewals cancelled.
+    v_problem := case
+      when v_sub.status = 'REFUNDED' then 'SUBSCRIPTION_REFUNDED'
+      when (p_event ->> 'amount')::numeric <> v_plan.price then 'AMOUNT_MISMATCH'
+    end;
+    if v_problem is not null then
+      update public.subscriptions
+         set status = case when status = 'REFUNDED' then status else 'CANCELLED'::public.subscription_status end,
+             auto_renew = false, cancel_at_period_end = true, updated_at = now()
+       where id = v_sub.id;
+      perform public.card_needs_refund(v_sub, v_payment, v_problem);
+      return 'NEEDS_REFUND';
+    end if;
     v_end := greatest(v_end, coalesce(v_sub.period_end, v_end));
-    v_status := case when v_sub.status in ('SUSPENDED', 'REFUNDED') then v_sub.status
+    v_status := case when v_sub.status = 'SUSPENDED' then v_sub.status
                      when v_sub.cancel_at_period_end then 'CANCELLED'
                      else 'ACTIVE' end;
     update public.subscriptions
-       set status = v_status, period_end = v_end, expires_at = v_end,
+       set status = v_status, period_end = v_end, expires_at = v_end, grace_for_period_end = null,
            last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
      where id = v_sub.id;
     return 'RENEWED';
@@ -529,12 +621,16 @@ begin
 
   if v_type = 'RENEWAL_FAILED' then
     -- BR-40 / OD-20: access continues for the grace period, counted from the failure (not before the paid
-    -- period ends), and is not extended again by later failed retries.
+    -- period ends). One grace period per paid period: later failed retries never add another.
+    if v_sub.grace_for_period_end is not distinct from v_sub.period_end then
+      return 'IGNORED_GRACE_USED';
+    end if;
     if v_sub.status = 'ACTIVE' or (v_sub.status = 'EXPIRED' and v_sub.auto_renew and not v_sub.cancel_at_period_end) then
       update public.subscriptions
          set status = 'PAYMENT_FAILED',
              expires_at = greatest(coalesce(period_end, expires_at), p_at)
                           + make_interval(hours => (public.get_setting('card.grace_hours'))::int),
+             grace_for_period_end = period_end,
              last_event_at = p_at, updated_at = now()
        where id = v_sub.id;
       return 'PAYMENT_FAILED';
@@ -566,7 +662,7 @@ begin
   if v_type = 'DISPUTE_OPENED' then
     -- §16: SUSPENDED by a processor dispute; access stops until it is settled.
     if v_sub.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED', 'EXPIRED') then
-      update public.subscriptions set status = 'SUSPENDED', updated_at = now() where id = v_sub.id;
+      update public.subscriptions set status = 'SUSPENDED', last_event_at = p_at, updated_at = now() where id = v_sub.id;
       return 'SUSPENDED';
     end if;
     return 'IGNORED_STATE';
@@ -577,10 +673,13 @@ begin
       return 'IGNORED_STATE';
     end if;
     if (p_event ->> 'won')::boolean then
+      -- Back to the state it had: cancelled, in a grace period, or active. Time decides access.
       update public.subscriptions
          set status = case when cancel_at_period_end then 'CANCELLED'::public.subscription_status
+                           when grace_for_period_end is not distinct from period_end and grace_for_period_end is not null
+                             then 'PAYMENT_FAILED'::public.subscription_status
                            else 'ACTIVE'::public.subscription_status end,
-             updated_at = now()
+             last_event_at = p_at, updated_at = now()
        where id = v_sub.id;
       return 'RESTORED';
     end if;
@@ -591,9 +690,10 @@ begin
     -- Refunds are new events, not edits (§16): the payment's status changes and the trigger logs it.
     select * into v_charge from public.payments
     where transaction_key = 'CARD:' || p_processor || ':' || coalesce(p_event ->> 'charge_id', '')
+      and processor_subscription_ref = v_sub.processor_subscription_id
     for update;
     if not found then
-      raise exception 'UNKNOWN_CHARGE' using errcode = '22023';
+      perform public.card_not_yet_known('UNKNOWN_CHARGE', p_at);
     end if;
     if v_charge.status <> 'REFUNDED' then
       update public.payments set status = 'REFUNDED' where id = v_charge.id;
@@ -603,7 +703,7 @@ begin
                             where p.source = 'CARD' and p.processor_subscription_ref = v_sub.processor_subscription_id
                               and p.transaction_key like 'CARD:' || p_processor || ':%') then
       update public.subscriptions
-         set status = 'REFUNDED', auto_renew = false, updated_at = now()
+         set status = 'REFUNDED', auto_renew = false, cancel_at_period_end = true, updated_at = now()
        where id = v_sub.id;
       return 'REFUNDED';
     end if;
@@ -691,6 +791,8 @@ $$;
 revoke all on function public.has_active_mobile_money_pass(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.record_card_charge(public.subscriptions, jsonb, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.card_event_transition(text, jsonb, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.card_needs_refund(public.subscriptions, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.card_not_yet_known(text, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.casual_access_until(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.has_casual_access(uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.expire_subscriptions() from public, anon, authenticated;

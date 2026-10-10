@@ -49,6 +49,7 @@ local.DEV_GEO_COUNTRY ??= "LR";
 // Card payments scaffold (Phase 7b): the fake processor, local only.
 local.CARD_PAYMENTS_ENABLED ??= "1";
 local.CARD_PROCESSOR ??= "fake";
+local.ALLOW_FAKE_CARD_PROCESSOR ??= "1";
 local.FAKE_CARD_WEBHOOK_SECRET ??= random(48);
 
 let status = null;

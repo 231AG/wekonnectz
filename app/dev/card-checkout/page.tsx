@@ -31,7 +31,6 @@ export default async function FakeCheckoutPage({ searchParams }: PageProps<"/dev
       </Card>
       <form action={fakePay} className="flex flex-col gap-3">
         <input type="hidden" name="ref" value={typeof ref === "string" ? ref : ""} />
-        <input type="hidden" name="plan" value={typeof plan === "string" ? plan : ""} />
         <input type="hidden" name="success" value={relative(success)} />
         <Button type="submit" variant="casual">
           Pay with test card

@@ -208,7 +208,8 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 ### T-18 — Card processor (OD-4, OD-15, OD-19, OD-20)
 
 - **What:** Ask processors the §16 questions and pick one; decide Monthly-on-card, card-during-pass behaviour, and grace period.
-- **Why:** Real card payments can't be built without a processor.
+- **Why:** Real card payments can't be built without a processor. The Phase 7b scaffold works end to end with a fake processor; the settings `card.grace_hours` (OD-20) and `card.allow_during_mobile_money_pass` (OD-19) have no value until you decide (a failed renewal or a card start during a pass is refused, never guessed).
+- **Then:** the processor's webhook signing secret goes in Vercel → Project → Settings → Environment Variables (name given in Phase 7c); never paste it in chat. Keep `CARD_PAYMENTS_ENABLED=0` in production until then.
 - **Blocks:** Phase 7c only. Launch is not blocked.
 - **Requested in:** Plan.
 

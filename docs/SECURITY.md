@@ -21,7 +21,7 @@ with a valid member JWT cannot skip them (plan §1.2).
 | Secrets          | Service-role key and provider secrets only in `server-only` modules and Edge Function env; never `NEXT_PUBLIC_*` | `scripts/check-client-bundle.mjs` scans the built client bundle for secret names, `sb_secret_` keys, service_role JWTs and env secret values. Runs in CI. |
 | Storage          | Private buckets, short-TTL signed URLs, paths never sent to clients                                              | Phase 3                                                                                                                                                   |
 | Uploads          | Magic bytes, size limits, re-encode, EXIF strip, rate limit                                                      | Phase 3 / 7                                                                                                                                               |
-| Webhooks         | Signature, raw-body log, idempotent on event id, replay protection                                               | Phase 7b                                                                                                                                                  |
+| Webhooks         | Signature, raw-body log, idempotent on event id, replay protection                                               | Phase 7b ✅                                                                                                                                                |
 | Payment evidence | Private bucket, reviewer-only signed URLs, every view audited, SHA-256                                           | Phase 7 ✅                                                                                                                                                |
 | Rate limits      | OTP per phone and per IP; requests, likes, reports, uploads per user per day                                     | OTP (P1), uploads (P3), reports (P5); requests and likes later                                                                                            |
 | Staff            | Separate accounts, MFA (aal2 checked in the DB), role checks on every admin route/action, audited                | Phase 3                                                                                                                                                   |
@@ -146,6 +146,15 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Screenshots:** uploaded to quarantine through a one-off signed URL, then magic-byte checked, size-capped, re-encoded to WebP without metadata and stored in the private `payment-evidence` bucket; the SHA-256 of the uploaded file flags reuse on another claim. Staff see a 120-second signed URL only after the audited view. Retention: OD-18 job.
 - **Moderators** never see claims, payment flags or payment counts (Q9).
 - Sender phone numbers and transaction IDs are stored for the reviewer but never logged or put in audit rows.
+
+## Card webhooks (Phase 7b)
+
+- **Signature first:** `/api/webhooks/card` (Next.js route handler) hands the raw body to the configured `CardProcessor.verifyWebhook()` before anything else. An untrusted delivery gets 401 and is logged as `CARD_WEBHOOK_INVALID` with `signature_valid = false` (body truncated to 2 KB; logging pauses under a flood of 100 in 10 minutes). Bodies over 64 KB get 413.
+- **Replay protection:** the adapter refuses signatures older or newer than 5 minutes; the database stores each verified event once (unique processor + event ID), so a replay inside the window returns `DUPLICATE` and changes nothing.
+- **Binding:** a completed checkout is matched to the PENDING subscription the server created for the logged-in member (our reference), never to a member or plan named in the event. Later events are matched by the processor subscription ID. Stale state events (older than the last applied) are ignored.
+- **One path to card access** (BR-26): only `apply_card_event()` and the checkout/cancel functions may write CARD subscriptions (`wk.card_event`), and they can't move a row to another member, plan or source. A well-signed event we can't apply is recorded as `CARD_EVENT_REJECTED` (200, so the processor stops retrying; Sentry warning without payload). A missing owner setting (e.g. OD-20) fails with 500 so the processor retries once it is set.
+- **Fake processor:** `CARD_PROCESSOR=fake` signs its own webhooks with `FAKE_CARD_WEBHOOK_SECRET` for local development and tests. It refuses to start on a Vercel production deployment, and the dev checkout page (`/dev/card-checkout`) returns 404 without it. Card UI is hidden unless `CARD_PAYMENTS_ENABLED=1` and a processor is configured. No card data reaches WeKonnectz (hosted checkout).
+- The client-bundle scan also looks for `FAKE_CARD_WEBHOOK_SECRET` / `CARD_WEBHOOK_SECRET`.
 
 ## Logging rule (§6 rule 7)
 

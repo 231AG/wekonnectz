@@ -27,7 +27,13 @@ export async function GET(request: NextRequest) {
   try {
     const housekeeping = await paymentHousekeeping();
     // Card renewal reminders (§16): listed here; sending arrives with notifications in Phase 11.
-    return NextResponse.json({ ...housekeeping, cardRenewalsDue: await cardRenewalsDue() });
+    let renewalsDue: number | null = null;
+    try {
+      renewalsDue = await cardRenewalsDue();
+    } catch (e) {
+      Sentry.captureException(e); // the reminder list must not fail the housekeeping run
+    }
+    return NextResponse.json({ ...housekeeping, cardRenewalsDue: renewalsDue });
   } catch (e) {
     Sentry.captureException(e);
     return NextResponse.json({ error: "payments job failed" }, { status: 500 });

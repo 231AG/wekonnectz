@@ -717,13 +717,13 @@ isOneToOne: false
                   ]
                 },"subscriptions": {
                   Row: {
-                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"id": string,"last_event_at": string | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
+                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"grace_for_period_end": string | null,"id": string,"last_event_at": string | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -908,6 +908,12 @@ isOneToOne: false
                            },
 "card_event_transition":
 { Args: { "p_at": string,"p_event": Json,"p_processor": string }; Returns: string
+                           },
+"card_needs_refund":
+{ Args: { "p_payment": string,"p_reason": string,"p_sub": Database["public"]['Tables']["subscriptions"]['Row'] }; Returns: undefined
+                           },
+"card_not_yet_known":
+{ Args: { "p_at": string,"p_what": string }; Returns: undefined
                            },
 "card_renewals_due":
 { Args: Record<PropertyKey, never>; Returns: {
@@ -1110,6 +1116,11 @@ isOneToOne: false
                            },
 "member_payment_options":
 { Args: { "p_user": string }; Returns: Json
+                           },
+"member_pending_checkout":
+{ Args: { "p_reference": string,"p_user": string }; Returns: {
+              "currency": string,"duration_hours": number,"plan_code": string,"price": number,"processor_price_id": string
+            }[]
                            },
 "member_photos":
 { Args: { "p_user_id": string }; Returns: {

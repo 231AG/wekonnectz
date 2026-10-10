@@ -20,6 +20,7 @@ const schema = z.object({
   // "fake" is for local development and tests only and refuses to run in production (OD-4: no real
   // processor yet).
   CARD_PAYMENTS_ENABLED: z.preprocess(emptyToUndefined, z.enum(["0", "1"]).default("0")),
+  ALLOW_FAKE_CARD_PROCESSOR: z.preprocess(emptyToUndefined, z.enum(["0", "1"]).optional()),
   CARD_PROCESSOR: z.preprocess(emptyToUndefined, z.enum(["fake"]).optional()),
   FAKE_CARD_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
 });

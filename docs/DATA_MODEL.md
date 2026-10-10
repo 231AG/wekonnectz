@@ -216,6 +216,27 @@ No role can write the money tables directly (grants revoked from anon, authentic
 
 Settings: `claims.max_pending` = 2 (OD-21, owner); `claims.transaction_id_patterns` (T-14), `claims.rejections_before_flag` (T-19), `claims.evidence_retention_days` (OD-18) — no values in the migration.
 
+### Phase 7b ✅ (`20261013000000_card_scaffold.sql`) — card scaffold, fake processor only
+
+| Change                        | Notes                                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subscriptions` + columns     | `processor`, `period_end` (paid period end; `expires_at` adds the grace period after a failed renewal), `last_event_at` (out-of-order events). Unique (`processor`, `processor_subscription_id`). CARD rows need a processor. |
+| `payments` + column           | `processor_subscription_ref` (which card subscription a charge paid for; no foreign key, payments outlive subscriptions). Immutable like the money fields.                                                                    |
+| `payment_events` + columns    | `processor`, `processor_event_id` — unique together: one stored row per verified processor event (idempotency).                                                                                                             |
+
+Card states (§16): PENDING (checkout started, no access, closed after an hour) → ACTIVE → renewal extends → CANCELLED (no renewal, access to period end) / PAYMENT_FAILED (access until period end + `card.grace_hours`, then EXPIRED) · SUSPENDED (processor dispute, no access) · REFUNDED (refund of the charge for the current period, access ended). Access: `has_casual_access()` now counts ACTIVE, CANCELLED and PAYMENT_FAILED rows by time.
+
+| Function                                                           | Callable by  | Purpose                                                                                                                                                  |
+| ------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `start_card_checkout(user, plan_code, processor)`                  | service_role | Verified ACTIVE member, CARD plan, one card subscription at a time, OD-19, 5 checkouts an hour; PENDING row whose id the processor sends back             |
+| `apply_card_event(processor, event)`                               | service_role | Called only after the adapter verified the signature. Stores the event once (DUPLICATE on replay), runs the state machine, records REJECTED events        |
+| `log_invalid_card_webhook(processor, reason, body)`                | service_role | Untrusted delivery: logged with `signature_valid = false`, body truncated to 2 KB; logging pauses after 100 in 10 minutes                                  |
+| `member_card_subscription` / `member_cancel_card_subscription`     | service_role | My profile → Subscription & payments; cancel at period end (BR-40)                                                                                         |
+| `card_renewals_due()`                                              | service_role | Renewal reminder hook (sent from Phase 11); empty while `card.renewal_reminder_hours` has no value                                                          |
+| `member_passes` (redefined)                                        | service_role | Receipts: one line per mobile money pass and per card charge, with refunds; abandoned checkouts excluded                                                   |
+
+Settings (no values in the migration; DEV-ONLY values in `seed.sql`): `card.grace_hours` (OD-20), `card.allow_during_mobile_money_pass` (OD-19), `card.renewal_reminder_hours`. Card plans exist only in `seed.sql` (DEV-ONLY prices, OD-1/OD-15).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |
