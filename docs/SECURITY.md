@@ -156,6 +156,13 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Fake processor:** `CARD_PROCESSOR=fake` signs its own webhooks with `FAKE_CARD_WEBHOOK_SECRET` for local development and CI. It needs `ALLOW_FAKE_CARD_PROCESSOR=1` (written only by `pnpm env:setup`) and refuses to start on any Vercel deployment; its test checkout only completes the member's own open checkout at the plan's price, and the dev checkout page (`/dev/card-checkout`) returns 404 without it. Card UI is hidden unless `CARD_PAYMENTS_ENABLED=1` and a processor is configured. No card data reaches WeKonnectz (hosted checkout).
 - The client-bundle scan also looks for `FAKE_CARD_WEBHOOK_SECRET` / `CARD_WEBHOOK_SECRET`.
 
+## Availability (Phase 8)
+
+- **BR-19:** no role reads `availability` or `availability_windows` directly — not members, not the server key. The member's own screen uses `member_availability(session user)`; other members' availability will only ever come back from the Phase 9 pool functions, for pass-holders.
+- **BR-17 at query time:** `is_in_pool()` checks the window, the pass at that moment, the account (ACTIVE, not suspended, not hidden), verification, 3 approved photos and the Anyone setting, so any of these changing removes the member at once; the daily job only tidies the stored status.
+- Hidden or suspended members are told only that their account can't be available (no mention of reports).
+- **BR-20:** no location is collected; a pgTAP test fails if any location-like column appears in the schema.
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,

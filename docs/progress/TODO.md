@@ -17,16 +17,16 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Messaging           | 5       | 1              | 1              | 0          |
 | Mobile money access | 11      | 0              | 0              | 1          |
 | Card subscriptions  | 4       | 0              | 0              | 1          |
-| Availability        | 0       | 0              | 6              | 1          |
+| Availability        | 6       | 1              | 0              | 0          |
 | Casual discovery    | 0       | 0              | 6              | 1          |
 | Admin console       | 1       | 1              | 9              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
 | Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **76**  | **16**         | **34**         | **9**      |
+| **Total**           | **82**  | **17**         | **28**         | **8**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19. Phase 8 code complete; window caps wait on OD-8 and the short-window signal on T-19.
 
 ## Planning
 
@@ -159,13 +159,13 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Availability
 
-- ⬜ `availability` table, Now / Schedule / Pause — P8 — BR-18
-- ⬜ Eligibility checks — P8
-- ⬜ Window caps — P8 ⛔ until OD-8
-- ⬜ `is_in_pool()` query-time; leave on pass expiry — P8 — BR-17
-- ⬜ Availability never visible outside pool — P8 — BR-19
-- ⬜ Request permission ANYONE / NOBODY — P8
-- ⬜ pg_cron tidy job — P8
+- ✅ `availability` table, Now / Schedule / Pause / Leave — P8 — BR-18
+- ✅ Eligibility checks — P8 — BR-15
+- 🔄 Window caps — P8 (built; values wait on OD-8, DEV-ONLY in seed)
+- ✅ `is_in_pool()` query-time; leave on pass expiry, photos, suspension, hide — P8 — BR-17
+- ✅ Availability never visible outside pool; no location stored — P8 — BR-19, BR-20
+- ✅ Request permission ANYONE / NOBODY (Nobody hides from the pool) — P8
+- ✅ Daily tidy job (`/api/cron/availability`) and short-window signal — P8
 
 ## Casual discovery
 

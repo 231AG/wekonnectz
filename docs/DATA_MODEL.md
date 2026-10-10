@@ -240,6 +240,27 @@ Card states (§16): PENDING (checkout started, no access, closed after an hour) 
 
 Settings (no values in the migration; DEV-ONLY values in `seed.sql`): `card.grace_hours` (OD-20), `card.allow_during_mobile_money_pass` (OD-19), `card.renewal_reminder_hours`. Card plans exist only in `seed.sql` (DEV-ONLY prices, OD-1/OD-15).
 
+### Phase 8 ✅ (`20261014000000_availability.sql`)
+
+| Table                  | Key columns                                                               | Client access | Notes                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
+| `availability`         | user_id (PK), status (UNAVAILABLE · AVAILABLE · PAUSED), start_at, end_at | none          | One row per member; a window needs start < end. BR-19: no grants at all, even to the server key |
+| `availability_windows` | user_id, start_at, end_at, ended_at                                       | none          | History for the short-window signal (§17); never shown to members                               |
+
+No location column anywhere (BR-20, pgTAP checks the whole schema).
+
+| Function                                                | Callable by     | Purpose                                                                                                     |
+| ------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `casual_ineligibility(user, at)`                        | none (internal) | Reasons a member can't be in the pool: ACCOUNT, NOT_VERIFIED, PHOTOS, NO_CASUAL_INTENT, NO_PASS             |
+| `is_in_pool(user, at)`                                  | none (internal) | BR-17 at query time: AVAILABLE, inside the window, eligible (incl. pass at that time), requests from Anyone |
+| `set_availability(user, start?, end)`                   | service_role    | Available now (start null) or Schedule; OD-8 caps via `get_setting()`; replaces the current window          |
+| `pause_availability(user, paused)` / `leave_pool(user)` | service_role    | PAUSED keeps the window; leave clears it (BR-18)                                                            |
+| `set_casual_message_permission(user, ANYONE · NOBODY)`  | service_role    | "Who can send you requests"                                                                                 |
+| `member_availability(user)`                             | service_role    | The member's own screen and Home card (caps read directly so the screen loads while OD-8 is open)           |
+| `tidy_availability()`                                   | service_role    | Daily `/api/cron/availability`: records ended windows and members no longer eligible                        |
+
+Settings (no values in the migration; DEV-ONLY in `seed.sql`): `availability.max_window_hours`, `availability.max_lead_days` (OD-8), `availability.short_window_minutes`, `availability.short_windows_per_day` (T-19).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |
