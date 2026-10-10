@@ -58,7 +58,7 @@ The database tests include:
 
 ### Problems found and fixed during self-audit
 
-Four review rounds; the fourth is still running and I'll add its result here.
+Four review rounds; the fourth was clean.
 
 - **Round 1:**
   - The daily tidy wiped scheduled windows of members who were only briefly ineligible.
@@ -73,6 +73,7 @@ Four review rounds; the fourth is still running and I'll add its result here.
   - Changing the end of a paused window quietly put the member back in the pool.
   - The change limit blocked edits to a live window.
 - **Round 3:** my round-2 exemption for replaced windows let members hide short stints. I removed it.
+- **Round 4:** clean. Two small notes fixed: the "just passed" message checks the time is well formed, and the round-3 test now proves the change.
 
 ### Known limitations / not verified
 

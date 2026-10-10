@@ -1,7 +1,7 @@
 -- Phase 8: availability (spec §12, §13 exclusions, §17 signals; BR-15, BR-17, BR-18, BR-19, BR-20; OD-8).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(70);
+select plan(71);
 
 -- Fixtures (fictional): Musu (Casual, will hold a pass), Hawa (Casual, no pass), Kemah (Relationship only),
 -- Siah (Casual, not verified).
@@ -221,8 +221,17 @@ reset role;
 -- Round 3: going available, then switching to a schedule after a few minutes, counts as a short stint.
 reset role;
 delete from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001' and reason = 'SHORT_WINDOWS';
-update public.availability_windows set start_at = start_at - interval '1 minute'
-where user_id = 'cccccccc-8000-0000-0000-000000000001' and ended_at is null;
+-- Start from a clean history: four short stints earlier today, and the live window (paused, then edited
+-- above) began a minute ago.
+delete from public.availability_windows where user_id = 'cccccccc-8000-0000-0000-000000000001' and ended_at is not null;
+insert into public.availability_windows (user_id, start_at, end_at, ended_at, created_at)
+select 'cccccccc-8000-0000-0000-000000000001', now() - make_interval(hours => n), now() - make_interval(hours => n) + interval '10 minutes',
+       null, now() - make_interval(hours => n)
+from generate_series(2, 5) n;
+update public.availability_windows set start_at = now() - interval '1 minute'
+where user_id = 'cccccccc-8000-0000-0000-000000000001' and ended_at is null and end_at > now();
+select is((select count(*)::int from public.moderation_flags where entity_id = 'cccccccc-8000-0000-0000-000000000001'
+           and reason = 'SHORT_WINDOWS'), 0, 'four short stints: no flag yet');
 set local role service_role;
 select lives_ok($$ select public.set_availability('cccccccc-8000-0000-0000-000000000001', now() + interval '1 hour', now() + interval '2 hours') $$,
   'live window replaced by a schedule');

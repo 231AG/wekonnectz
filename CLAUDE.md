@@ -4,7 +4,7 @@
 
 Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/WeKonnectz_MVP_Build_Spec_v3.pdf` (**source of truth**). Plan: `docs/plan/MASTER_PLAN.md`. Owner workflow: `PROMPT.md`.
 
-**Current phase:** Phase 7b — Card subscriptions scaffold, complete (see `docs/sprints/SPRINT-07b.md`). Next: Phase 8 — Availability, then Phase 9 — Casual discovery & requests.
+**Current phase:** Phase 9 — Casual discovery & requests (see `docs/sprints/SPRINT-09.md`). Phases 7b and 8 complete.
 
 ## Stack (pinned exactly; record changes here)
 
