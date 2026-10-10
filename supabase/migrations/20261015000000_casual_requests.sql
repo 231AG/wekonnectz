@@ -396,7 +396,7 @@ begin
   where conversation_id = v_conv and user_id = p_viewer;
   update public.message_requests set status = 'ACCEPTED', responded_at = now(), conversation_id = v_conv
   where (id = v_req.id)
-     or (sender_id = p_viewer and recipient_id = v_req.sender_id and status = 'PENDING');
+     or (sender_id = p_viewer and recipient_id = v_req.sender_id and status = 'PENDING' and expires_at > now());
   return v_conv;
 end;
 $$;

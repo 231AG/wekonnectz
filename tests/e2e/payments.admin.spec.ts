@@ -151,7 +151,7 @@ test("§16 / §21: an admin verifies a claim against the wallet records and appr
   await expect(m.page.getByText(/We’ll refund it to the number you paid from/)).toBeVisible();
   await m.page.screenshot({ path: `${SHOTS_P7}/member-subscription-payments.png`, fullPage: true });
   await m.page.goto("/casual");
-  await expect(m.page.getByTestId("pass-status")).toHaveText("Your pass is active");
+  await expect(m.page.getByTestId("pass-status")).toHaveText(/^(Your pass is active|Pass active · .+ left)$/); // Phase 9: eligible members see Available Now
   await m.ctx.close();
   expect(errors).toEqual([]);
 });

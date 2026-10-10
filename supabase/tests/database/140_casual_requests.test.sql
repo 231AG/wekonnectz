@@ -269,9 +269,17 @@ select public.set_availability('dddddddd-9000-0000-0000-000000000012', null, now
 -- The fast pool query and pool_visible() agree for every viewer and member here.
 reset role;
 select is(
-  (select count(*)::int from public.pool_candidates('dddddddd-9000-0000-0000-000000000011')),
-  (select count(*)::int from public.availability a where public.pool_visible('dddddddd-9000-0000-0000-000000000011', a.user_id)),
-  'pool_candidates() and pool_visible() agree');
+  (select coalesce(array_agg(x.id::text || ':' || x.o::text order by x.id::text || ':' || x.o::text), '{}') from (
+     select v.id, (c.card ->> 'user_id')::uuid as o
+     from unnest(array['dddddddd-9000-0000-0000-000000000001', 'dddddddd-9000-0000-0000-000000000008',
+                       'dddddddd-9000-0000-0000-000000000011']::uuid[]) v(id),
+          lateral public.pool_candidates(v.id) c) x),
+  (select coalesce(array_agg(x.id::text || ':' || x.o::text order by x.id::text || ':' || x.o::text), '{}') from (
+     select v.id, a.user_id as o
+     from unnest(array['dddddddd-9000-0000-0000-000000000001', 'dddddddd-9000-0000-0000-000000000008',
+                       'dddddddd-9000-0000-0000-000000000011']::uuid[]) v(id),
+          public.availability a where public.pool_visible(v.id, a.user_id)) x),
+  'pool_candidates() and pool_visible() agree for several viewers (blocks, declines, compatibility)');
 set local role service_role;
 select throws_ok($$ select public.send_message_request('dddddddd-9000-0000-0000-000000000013', 'dddddddd-9000-0000-0000-000000000012', 'Hi') $$,
   '42501', 'NOT_ELIGIBLE', 'BR-21: a sender whose verification was rejected can''t send requests');
