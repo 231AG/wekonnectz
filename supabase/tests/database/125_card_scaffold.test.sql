@@ -1,7 +1,7 @@
 -- Phase 7b: card subscriptions scaffold (spec §16, §22; BR-26 card, BR-29, BR-40, BR-41; OD-19, OD-20).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(104);
+select plan(111);
 
 -- Fixtures (fictional): Musu, Hawa, Kebeh verified ACTIVE members; Siah not verified.
 insert into auth.users (id, phone, email, aud, role) values
@@ -170,10 +170,10 @@ select is(public.apply_card_event('fake', pg_temp.ev('evt_7', 'CANCEL_SCHEDULED'
 -- ---------------------------------------------------------------------------
 -- Disputes and refunds (§16 SUSPENDED / REFUNDED)
 -- ---------------------------------------------------------------------------
-select is(public.apply_card_event('fake', pg_temp.ev('evt_8', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_musu","charge_id":"ch_3"}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_8', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_musu","charge_id":"ch_3","dispute_id":"dp_1"}')) ->> 'result',
   'SUSPENDED', 'a processor dispute suspends the subscription');
 select ok(not public.has_casual_access('bbbbbbbb-7b00-0000-0000-000000000001'), 'no access while suspended');
-select is(public.apply_card_event('fake', pg_temp.ev('evt_9', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_musu","won":true}')) ->> 'result',
+select is(public.apply_card_event('fake', pg_temp.ev('evt_9', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_musu","won":true,"dispute_id":"dp_1"}')) ->> 'result',
   'RESTORED', 'a won dispute restores it');
 select is((select status::text from public.subscriptions where id = (select id from refs where n = 'musu')), 'CANCELLED',
   'restored to the state it had (cancelled at period end)');
@@ -328,14 +328,14 @@ set local role service_role;
 select is(public.apply_card_event('fake', pg_temp.ev('evt_m_closed', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_hawa","won":true}')) ->> 'result',
   'IGNORED_STATE', 'a dispute closed before it was opened (out of order) is ignored');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_m_opened', 'DISPUTE_OPENED', now() - interval '1 minute', '{"subscription_ref":"sub_hawa"}')) ->> 'result',
-  'IGNORED_STALE', 'and the older "opened" arriving afterwards no longer suspends it');
+  'IGNORED_STATE', 'and the "opened" arriving afterwards no longer suspends it');
 
 -- Self-audit round 3: a dispute opened before a later charge still applies; a lost dispute refunds
 -- whatever the state; the cancel request stops once the processor confirmed it.
 select is(public.apply_card_event('fake', pg_temp.ev('evt_k2won', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2","won":true}')) ->> 'result',
   'RESTORED', 'dispute won');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_k2d2', 'DISPUTE_OPENED', now() - interval '2 days', '{"subscription_ref":"sub_k2"}')) ->> 'result',
-  'IGNORED_STALE', 'dispute events are ordered among themselves');
+  'IGNORED_STATE', 'a dispute already closed can''t be reopened by a late event');
 select is(public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(),
   '{"subscription_ref":"sub_k2","won":false,"charge_id":"ch_k2r3"}')) ->> 'result', 'REFUNDED',
   'a lost dispute ends access even if the "opened" event never suspended it');
@@ -346,6 +346,29 @@ select is((public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLO
 select lives_ok($$ select public.mark_processor_cancelled('fake', 'sub_k2') $$, 'the server records the processor confirmed');
 select is((public.apply_card_event('fake', pg_temp.ev('evt_k2lost', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_k2"}')) ->> 'cancel_at_processor')::boolean, false,
   'and stops asking (no endless retries)');
+
+-- Self-audit round 4: disputes tracked by ID.
+insert into refs select 'f1', (public.start_card_checkout('bbbbbbbb-7b00-0000-0000-000000000004', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
+select is(public.apply_card_event('fake', pg_temp.ev('evt_f1', 'CHECKOUT_COMPLETED', now() - interval '1 hour',
+  jsonb_build_object('reference', (select id from refs where n = 'f1'), 'subscription_ref', 'sub_f1',
+                     'charge_id', 'ch_f1', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '7 days'))) ->> 'result',
+  'ACTIVATED', 'a new card subscription');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_f1r', 'RENEWAL_SUCCEEDED', now(),
+  jsonb_build_object('subscription_ref', 'sub_f1', 'charge_id', 'ch_f1r', 'amount', 3.00, 'currency', 'USD',
+                     'period_end', now() + interval '14 days'))) ->> 'result', 'RENEWED', 'renewed');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_fd1', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_f1","dispute_id":"dp_a","charge_id":"ch_f1"}')) ->> 'result',
+  'SUSPENDED', 'first dispute');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_fd2', 'DISPUTE_OPENED', now(), '{"subscription_ref":"sub_f1","dispute_id":"dp_b","charge_id":"ch_f1r"}')) ->> 'result',
+  'SUSPENDED', 'second dispute');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_fd3', 'DISPUTE_CLOSED', now(), '{"subscription_ref":"sub_f1","dispute_id":"dp_b","won":true}')) ->> 'result',
+  'IGNORED_STATE', 'winning one dispute doesn''t lift the suspension while another is open');
+select is(public.apply_card_event('fake', pg_temp.ev('evt_fd4', 'DISPUTE_CLOSED', now(),
+  '{"subscription_ref":"sub_f1","dispute_id":"dp_a","won":false,"charge_id":"ch_f1"}')) ->> 'result',
+  'REFUNDED_EARLIER_CHARGE', 'losing a dispute over an earlier charge refunds that charge');
+reset role;
+select is((select status::text from public.subscriptions where processor_subscription_id = 'sub_f1'), 'ACTIVE',
+  'and the paid current period is restored once no dispute is open (no endless suspension)');
+set local role service_role;
 
 -- ---------------------------------------------------------------------------
 -- Invalid signatures, renewal reminders, tidy job, account purge

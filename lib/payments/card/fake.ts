@@ -33,6 +33,7 @@ export type FakeEvent = {
     subscription?: string;
     customer?: string;
     charge?: string;
+    dispute?: string;
     amount?: number;
     currency?: string;
     period_end?: number;
@@ -73,6 +74,7 @@ export function normaliseFake(event: FakeEvent): VerifiedEvent | null {
     subscriptionRef: d.subscription,
     customerRef: d.customer,
     chargeId: d.charge,
+    disputeId: d.dispute,
     amount: d.amount,
     currency: d.currency,
     periodEnd: iso(d.period_end),

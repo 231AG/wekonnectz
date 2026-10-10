@@ -93,7 +93,12 @@ export async function processCardWebhook(headers: Headers, rawBody: string): Pro
   if (d.cancel_at_processor && event.subscriptionRef) {
     try {
       await processor.cancelAtPeriodEnd(event.subscriptionRef);
-      await admin.rpc("mark_processor_cancelled", { p_processor: processor.id, p_ref: event.subscriptionRef });
+      const { error: markError } = await admin.rpc("mark_processor_cancelled", {
+        p_processor: processor.id,
+        p_ref: event.subscriptionRef,
+      });
+      // Harmless if it fails (the next delivery cancels again, which the contract allows), but noted.
+      if (markError) Sentry.captureMessage("card: processor cancel not recorded", { level: "warning" });
     } catch (e) {
       Sentry.captureException(e);
       return { status: 500 };

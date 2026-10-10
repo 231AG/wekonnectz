@@ -46,6 +46,7 @@ export type VerifiedEvent = {
   subscriptionRef?: string;
   customerRef?: string;
   chargeId?: string;
+  disputeId?: string;
   amount?: number;
   currency?: string;
   periodEnd?: string;
@@ -63,6 +64,7 @@ export function toDatabaseEvent(e: VerifiedEvent): Record<string, unknown> {
     subscription_ref: e.subscriptionRef,
     customer_ref: e.customerRef,
     charge_id: e.chargeId,
+    dispute_id: e.disputeId,
     amount: e.amount,
     currency: e.currency,
     period_end: e.periodEnd,

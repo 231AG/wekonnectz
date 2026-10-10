@@ -717,13 +717,13 @@ isOneToOne: false
                   ]
                 },"subscriptions": {
                   Row: {
-                    "auto_renew": boolean,"cancel_at_period_end": boolean,"created_at": string,"expires_at": string,"grace_for_period_end": string | null,"id": string,"last_dispute_event_at": string | null,"last_event_at": string | null,"locked_price": number | null,"period_end": string | null,"plan_id": string,"processor": string | null,"processor_cancelled_at": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
+                    "auto_renew": boolean,"cancel_at_period_end": boolean,"closed_disputes": (string)[],"created_at": string,"expires_at": string,"grace_for_period_end": string | null,"id": string,"last_event_at": string | null,"locked_price": number | null,"open_disputes": (string)[],"period_end": string | null,"plan_id": string,"processor": string | null,"processor_cancelled_at": string | null,"processor_subscription_id": string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id": string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at": string,"grace_for_period_end"?: string | null,"id"?: string,"last_dispute_event_at"?: string | null,"last_event_at"?: string | null,"locked_price"?: number | null,"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"closed_disputes"?: (string)[],"created_at"?: string,"expires_at": string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"locked_price"?: number | null,"open_disputes"?: (string)[],"period_end"?: string | null,"plan_id": string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source": Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"created_at"?: string,"expires_at"?: string,"grace_for_period_end"?: string | null,"id"?: string,"last_dispute_event_at"?: string | null,"last_event_at"?: string | null,"locked_price"?: number | null,"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
+                    "auto_renew"?: boolean,"cancel_at_period_end"?: boolean,"closed_disputes"?: (string)[],"created_at"?: string,"expires_at"?: string,"grace_for_period_end"?: string | null,"id"?: string,"last_event_at"?: string | null,"locked_price"?: number | null,"open_disputes"?: (string)[],"period_end"?: string | null,"plan_id"?: string,"processor"?: string | null,"processor_cancelled_at"?: string | null,"processor_subscription_id"?: string | null,"source"?: Database["public"]['Enums']["payment_source"],"source_payment_id"?: string | null,"starts_at"?: string,"status"?: Database["public"]['Enums']["subscription_status"],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -922,6 +922,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "renews_at": string,"subscription_id": string,"user_id": string
             }[]
+                           },
+"card_restore_after_dispute":
+{ Args: { "p_subscription": string }; Returns: undefined
                            },
 "casual_access_until":
 { Args: { "p_user": string }; Returns: string

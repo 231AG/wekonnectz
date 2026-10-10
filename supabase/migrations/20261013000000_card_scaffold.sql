@@ -22,8 +22,8 @@ on conflict (key) do nothing;
 -- after a failed renewal), the time of the last processor event applied (out-of-order delivery) and the
 -- paid period a grace period was already given for (one grace period per period, BR-40). Card rows lock
 -- the plan price when the checkout starts: charges are checked against it, so a later price change
--- never breaks existing subscribers. Dispute events are ordered among themselves (charges don't make an
--- earlier "dispute opened" stale), and processor_cancelled_at records that renewals were stopped at the
+-- never breaks existing subscribers. Disputes are tracked by their ID (open / closed), so their events
+-- can arrive in any order and two disputes don't settle each other; and processor_cancelled_at records that renewals were stopped at the
 -- processor, so the server stops asking.
 alter table public.subscriptions
   add column processor     text check (processor ~ '^[a-z0-9_]{2,30}$'),
@@ -31,7 +31,8 @@ alter table public.subscriptions
   add column last_event_at timestamptz,
   add column grace_for_period_end timestamptz,
   add column locked_price         numeric(10, 2) check (locked_price > 0),
-  add column last_dispute_event_at timestamptz,
+  add column open_disputes        text[] not null default '{}',
+  add column closed_disputes      text[] not null default '{}',
   add column processor_cancelled_at timestamptz,
   add constraint subscriptions_card_has_processor check (source <> 'CARD' or processor is not null);
 create unique index subscriptions_processor_ref on public.subscriptions (processor, processor_subscription_id)
@@ -141,12 +142,12 @@ begin
   if (new.id, new.user_id, new.plan_id, new.source, new.starts_at, new.expires_at, new.source_payment_id,
       new.auto_renew, new.cancel_at_period_end, new.processor_subscription_id, new.created_at,
       new.processor, new.period_end, new.last_event_at, new.grace_for_period_end, new.locked_price,
-      new.last_dispute_event_at, new.processor_cancelled_at)
+      new.open_disputes, new.closed_disputes, new.processor_cancelled_at)
      is distinct from
      (old.id, old.user_id, old.plan_id, old.source, old.starts_at, old.expires_at, old.source_payment_id,
       old.auto_renew, old.cancel_at_period_end, old.processor_subscription_id, old.created_at,
       old.processor, old.period_end, old.last_event_at, old.grace_for_period_end, old.locked_price,
-      old.last_dispute_event_at, old.processor_cancelled_at)
+      old.open_disputes, old.closed_disputes, old.processor_cancelled_at)
      or not (new.status = 'EXPIRED' and old.expires_at <= now()) then
     raise exception 'SUBSCRIPTION_IMMUTABLE' using errcode = '42501';
   end if;
@@ -497,6 +498,23 @@ begin
 end;
 $$;
 
+-- After the last open dispute is settled: back to the state it had (cancelled, in a grace period, or
+-- active). Time decides access.
+create or replace function public.card_restore_after_dispute(p_subscription uuid)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  update public.subscriptions
+     set status = case when cancel_at_period_end then 'CANCELLED'::public.subscription_status
+                       when grace_for_period_end is not null and grace_for_period_end is not distinct from period_end
+                         then 'PAYMENT_FAILED'::public.subscription_status
+                       else 'ACTIVE'::public.subscription_status end,
+         updated_at = now()
+   where id = p_subscription and status = 'SUSPENDED';
+$$;
+
 -- State machine (§16 subscription states; BR-40). Returns what happened.
 create or replace function public.card_event_transition(p_processor text, p_event jsonb, p_at timestamptz)
 returns text
@@ -514,6 +532,7 @@ declare
   v_status  public.subscription_status;
   v_charge  public.payments;
   v_problem text;
+  v_dispute text;
 begin
   if v_type = 'CHECKOUT_COMPLETED' then
     begin
@@ -596,10 +615,7 @@ begin
     return 'IGNORED_STALE';
   end if;
   if v_type in ('DISPUTE_OPENED', 'DISPUTE_CLOSED') then
-    if v_sub.last_dispute_event_at is not null and p_at < v_sub.last_dispute_event_at then
-      return 'IGNORED_STALE';
-    end if;
-    update public.subscriptions set last_dispute_event_at = p_at where id = v_sub.id;
+    v_dispute := left(coalesce(nullif(p_event ->> 'dispute_id', ''), nullif(p_event ->> 'charge_id', ''), 'unknown'), 200);
   end if;
 
   if v_type = 'RENEWAL_SUCCEEDED' then
@@ -667,7 +683,8 @@ begin
     update public.subscriptions
        set status = case when status in ('ACTIVE', 'PAYMENT_FAILED') then 'CANCELLED'::public.subscription_status
                          else status end,
-           cancel_at_period_end = true, auto_renew = false, last_event_at = p_at, updated_at = now()
+           cancel_at_period_end = true, auto_renew = false,
+           last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
      where id = v_sub.id;
     return 'CANCELLED';
   end if;
@@ -685,28 +702,35 @@ begin
   end if;
 
   if v_type = 'DISPUTE_OPENED' then
-    -- §16: SUSPENDED by a processor dispute; access stops until it is settled.
-    if v_sub.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED', 'EXPIRED') then
-      update public.subscriptions set status = 'SUSPENDED', updated_at = now() where id = v_sub.id;
-      return 'SUSPENDED';
+    -- §16: SUSPENDED by a processor dispute; access stops until every open dispute is settled.
+    if v_dispute = any (v_sub.open_disputes) or v_dispute = any (v_sub.closed_disputes) then
+      return 'IGNORED_STATE'; -- already open, or its "closed" arrived first
     end if;
-    return 'IGNORED_STATE';
+    update public.subscriptions
+       set open_disputes = array_append(open_disputes, v_dispute),
+           status = case when status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED', 'EXPIRED')
+                         then 'SUSPENDED'::public.subscription_status else status end,
+           updated_at = now()
+     where id = v_sub.id
+    returning * into v_sub;
+    return case when v_sub.status = 'SUSPENDED' then 'SUSPENDED' else 'IGNORED_STATE' end;
   end if;
 
   if v_type = 'DISPUTE_CLOSED' then
+    if v_dispute = any (v_sub.closed_disputes) then
+      return 'IGNORED_STATE';
+    end if;
+    update public.subscriptions
+       set open_disputes = array_remove(open_disputes, v_dispute),
+           closed_disputes = array_append(closed_disputes, v_dispute), updated_at = now()
+     where id = v_sub.id
+    returning * into v_sub;
     if (p_event ->> 'won')::boolean then
-      if v_sub.status <> 'SUSPENDED' then
-        return 'IGNORED_STATE';
+      if v_sub.status = 'SUSPENDED' and cardinality(v_sub.open_disputes) = 0 then
+        perform public.card_restore_after_dispute(v_sub.id);
+        return 'RESTORED';
       end if;
-      -- Back to the state it had: cancelled, in a grace period, or active. Time decides access.
-      update public.subscriptions
-         set status = case when cancel_at_period_end then 'CANCELLED'::public.subscription_status
-                           when grace_for_period_end is not distinct from period_end and grace_for_period_end is not null
-                             then 'PAYMENT_FAILED'::public.subscription_status
-                           else 'ACTIVE'::public.subscription_status end,
-             updated_at = now()
-       where id = v_sub.id;
-      return 'RESTORED';
+      return 'IGNORED_STATE';
     end if;
     v_type := 'REFUNDED'; -- a lost dispute returns the money, whatever the current state: a refund below
   end if;
@@ -731,6 +755,10 @@ begin
          set status = 'REFUNDED', auto_renew = false, cancel_at_period_end = true, updated_at = now()
        where id = v_sub.id;
       return 'REFUNDED';
+    end if;
+    -- An earlier charge: the current period stays paid. A suspension ends once no dispute is open.
+    if v_sub.status = 'SUSPENDED' and cardinality(v_sub.open_disputes) = 0 then
+      perform public.card_restore_after_dispute(v_sub.id);
     end if;
     return 'REFUNDED_EARLIER_CHARGE';
   end if;
@@ -932,6 +960,7 @@ revoke all on function public.card_event_transition(text, jsonb, timestamptz) fr
 revoke all on function public.card_needs_refund(public.subscriptions, uuid, text) from public, anon, authenticated, service_role;
 revoke all on function public.card_not_yet_known(text, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.card_cancel_needed(text, text) from public, anon, authenticated, service_role;
+revoke all on function public.card_restore_after_dispute(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.mark_processor_cancelled(text, text) from public, anon, authenticated;
 grant execute on function public.mark_processor_cancelled(text, text) to service_role;
 revoke all on function public.casual_access_until(uuid) from public, anon, authenticated, service_role;
