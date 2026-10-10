@@ -25,7 +25,12 @@ function MemberActions({
   isAdmin: boolean;
 }) {
   const canSuspend = storedStatus === "PENDING" || storedStatus === "ACTIVE";
-  const canBan = storedStatus === "PENDING" || storedStatus === "ACTIVE" || storedStatus === "SUSPENDED";
+  // Q54: an account deleted before its reports were decided can still be banned (phone blocklist).
+  const canBan =
+    storedStatus === "PENDING" ||
+    storedStatus === "ACTIVE" ||
+    storedStatus === "SUSPENDED" ||
+    storedStatus === "DELETED";
   return (
     <div className="flex flex-col gap-4">
       {hiddenReason ? (

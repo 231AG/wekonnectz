@@ -2,6 +2,8 @@
 
 import { randomBytes } from "node:crypto";
 
+import * as Sentry from "@sentry/nextjs";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -342,7 +344,11 @@ export async function changeStaffPasswordAction(
   if (password !== str(formData.get("repeat"))) return { error: "The passwords don’t match." };
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
-  if (!error) await supabase.rpc("staff_log_password_change");
+  if (!error) {
+    const { error: auditError } = await supabase.rpc("staff_log_password_change");
+    // The password did change; a missing audit row must not go unnoticed.
+    if (auditError) Sentry.captureMessage("staff password change not audited", { level: "error" });
+  }
   if (error) {
     return {
       error: /same|different/i.test(error.message)

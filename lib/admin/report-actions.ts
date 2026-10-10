@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireStaff } from "@/lib/auth/staff";
+import { stopCardRenewals } from "@/lib/payments/card/server";
 import { createClient } from "@/lib/supabase/server";
 import { banSchema, noteSchema, resolveReportSchema, suspendSchema } from "@/lib/validation/safety";
 
@@ -105,7 +106,13 @@ export async function banUserAction(_prev: StaffActionState, formData: FormData)
   const { error } = await (
     await createClient()
   ).rpc("ban_user", { p_target: parsed.data.userId, p_reason: parsed.data.reason, p_report_id: parsed.data.reportId });
-  return error ? fail(error.message) : done("Account banned. The phone number can’t register again.");
+  if (error) return fail(error.message);
+  // A banned member's card plan must not renew (card_cancel_needed now asks for it).
+  if (!(await stopCardRenewals(parsed.data.userId, false))) {
+    revalidatePath("/admin", "layout");
+    return { error: "Account banned, but their card plan couldn’t be stopped at the processor. Cancel it there." };
+  }
+  return done("Account banned. The phone number can’t register again.");
 }
 
 export async function restoreUserAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {

@@ -1,7 +1,7 @@
 -- Phase 10: admin console + account lifecycle (spec §7, §8, §21; BR-7, BR-34; OD-7, OD-13, OD-30).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(152);
+select plan(157);
 
 -- Fixtures (fictional). Members: Musu (deletes her account), Joseph, Prince, Hawa. Staff: a moderator,
 -- an admin, a super admin, a second admin, and a brand-new email account about to become staff.
@@ -263,6 +263,9 @@ select throws_ok($$ select public.staff_update_setting('detection.terms', '{"pri
   'detection term groups can''t be dropped');
 select throws_ok($$ select public.staff_update_setting('verification.pose_prompts', '[1, 2]') $$, '22023', 'INVALID_VALUE',
   'pose prompts must be text');
+select throws_ok($$ select public.staff_update_setting('photos.min_required', '7') $$, '22023', 'INVALID_VALUE',
+  'members must be allowed at least the photos onboarding requires');
+select lives_ok($$ select public.staff_update_setting('relationship.pass_cooldown_days', '0') $$, 'zero is allowed where it means "none"');
 select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
 select throws_ok($$ select public.staff_update_setting('messages.max_per_minute', '0') $$, '22023', 'INVALID_VALUE',
   'a limit can''t be 0 (it would switch the feature off for everyone)');
@@ -345,7 +348,7 @@ select ok((select j::text !~ 'photos/|selfies/|storage_path' from ex), '§6 rule
 
 -- Before deleting: Musu has an open card checkout, Hawa blocked her, Joseph reported her; Prince pays by card.
 set local role service_role;
-select public.start_card_checkout('eeeeeeee-1000-0000-0000-000000000001', 'CARD_WEEKLY', 'fake');
+insert into r select 'musu_ref', (public.start_card_checkout('eeeeeeee-1000-0000-0000-000000000001', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
 insert into r select 'prince_ref', (public.start_card_checkout('eeeeeeee-1000-0000-0000-000000000003', 'CARD_WEEKLY', 'fake') ->> 'reference')::uuid;
 select public.apply_card_event('fake', jsonb_build_object('id', 'evt_p10_1', 'type', 'CHECKOUT_COMPLETED', 'occurred_at', now(),
   'reference', (select id from r where n = 'prince_ref'), 'subscription_ref', 'sub_prince_p10', 'customer_ref', 'cus_prince_p10',
@@ -368,6 +371,13 @@ select is((select status::text from public.subscriptions where user_id = 'eeeeee
   'an open card checkout is closed, so paying it can''t start a plan');
 set local role service_role;
 select is((select count(*)::int from public.member_blocked_list('eeeeeeee-1000-0000-0000-000000000004')), 0, 'BR-7: gone from the blocked list too');
+select is(public.apply_card_event('fake', jsonb_build_object('id', 'evt_p10_late', 'type', 'CHECKOUT_COMPLETED', 'occurred_at', now(),
+  'reference', (select id from r where n = 'musu_ref'), 'subscription_ref', 'sub_musu_late', 'customer_ref', 'cus_musu_late',
+  'charge_id', 'ch_musu_late', 'amount', 3.00, 'currency', 'USD', 'period_end', now() + interval '7 days')) ->> 'result', 'NEEDS_REFUND',
+  'a checkout paid after deletion gives no access: the charge goes on the refund list');
+reset role;
+select ok(public.card_cancel_needed('fake', 'sub_musu_late'), '…and its renewals are stopped');
+set local role service_role;
 reset role;
 select ok((select banned_until > now() from auth.users where id = 'eeeeeeee-1000-0000-0000-000000000001'), 'BR-7: Auth refuses the account');
 select ok(not public.is_in_pool('eeeeeeee-1000-0000-0000-000000000001'), 'BR-7: out of the pool');
@@ -414,6 +424,12 @@ select is((select count(*)::int from public.messages where body = 'Hello Prince'
 select ok(exists (select 1 from public.payments where user_id is null and amount = 1.00), 'OD-7: payment records are kept, unlinked');
 select is((select count(*)::int from public.reports where reported_user_id is null and category = 'SPAM'), 1,
   'reports about a purged member are kept, unlinked');
+set local role authenticated;
+select set_config('request.jwt.claims', (select c from claims where who = 'admin'), true);
+select ok(exists (select 1 from public.staff_reports_queue(p_include_closed => true) where reported_user_id is null and category = 'SPAM'),
+  '…and still listed for staff (closed view)');
+reset role;
+select set_config('request.jwt.claims', '', true);
 update public.app_settings set value = null where key = 'account.deletion_purge_days';
 set local role service_role;
 select is((select count(*)::int from public.accounts_due_for_purge()), 0, '§6 rule 9: nothing is purged while OD-7 is unset');

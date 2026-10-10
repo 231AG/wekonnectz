@@ -31,7 +31,7 @@ type Detail = {
   created_at: string;
   from_conversation: boolean;
   captured_messages: number;
-  reported_user_id: string;
+  reported_user_id: string | null;
   display_name: string | null;
   age: number | null;
   account_status: string;
@@ -340,14 +340,18 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
                 </StaffForm>
               ) : null}
 
-              <MemberActions
-                userId={detail.reported_user_id}
-                reportId={detail.report_id}
-                storedStatus={detail.stored_status}
-                suspendedUntil={detail.suspended_until}
-                hiddenReason={detail.hidden_reason}
-                isAdmin={isAdmin}
-              />
+              {detail.reported_user_id ? (
+                <MemberActions
+                  userId={detail.reported_user_id}
+                  reportId={detail.report_id}
+                  storedStatus={detail.stored_status}
+                  suspendedUntil={detail.suspended_until}
+                  hiddenReason={detail.hidden_reason}
+                  isAdmin={isAdmin}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">This member’s account was deleted and purged.</p>
+              )}
             </div>
           ) : null}
         </section>

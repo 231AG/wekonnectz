@@ -221,17 +221,18 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
 
         <div className="flex flex-col gap-6">
           <Panel title="Actions">
-            {d.status === "DELETED" ? (
-              <p className="text-muted-foreground">This member deleted their account.</p>
-            ) : (
-              <MemberActions
-                userId={d.user_id}
-                storedStatus={d.status}
-                suspendedUntil={d.suspended_until}
-                hiddenReason={d.hidden_reason}
-                isAdmin={isAdmin}
-              />
-            )}
+            {d.deleted_at ? (
+              <p className="text-sm text-muted-foreground">
+                This member deleted their account. It can still be banned if their reports call for it.
+              </p>
+            ) : null}
+            <MemberActions
+              userId={d.user_id}
+              storedStatus={d.status}
+              suspendedUntil={d.suspended_until}
+              hiddenReason={d.hidden_reason}
+              isAdmin={isAdmin}
+            />
           </Panel>
           {isAdmin && d.status !== "DELETED" && d.display_name ? (
             <Panel title="Correct date of birth">

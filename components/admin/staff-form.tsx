@@ -34,6 +34,8 @@ function StaffForm({
   return (
     <form
       ref={form}
+      // Before hydration a submit must still be a POST: a GET would put passwords or dates in the URL.
+      method="post"
       aria-label={label}
       className={cn("flex flex-col gap-3", className)}
       onSubmit={(e) => {

@@ -32,6 +32,9 @@ where key in ('geo.enforcement_mode', 'photos.min_required', 'otp.max_per_phone_
               'subscriptions.manual_extension_max_days', 'card.grace_hours');
 -- Every number setting is a count, length or limit: 0 would switch a feature off for everyone.
 update public.app_settings set min_value = 1 where kind = 'int';
+-- Zero is a real choice for these: no cool-down, no grace period.
+update public.app_settings set min_value = 0
+where key in ('relationship.pass_cooldown_days', 'requests.decline_cooldown_days', 'card.grace_hours');
 update public.app_settings set max_value = 30 where key = 'subscriptions.manual_extension_max_days';
 update public.app_settings set max_value = 168 where key = 'card.grace_hours';
 update public.app_settings set min_value = 3, max_value = 12 where key in ('photos.min_required', 'photos.max_per_user');
@@ -295,6 +298,7 @@ begin
   end if;
   -- BR-28: with a pass stacked behind this one the added days would overlap it; extend the last one.
   if exists (select 1 from public.subscriptions s where s.user_id = v_sub.user_id and s.id <> v_sub.id
+             and s.source = 'MOBILE_MONEY'
              and s.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED') and s.expires_at > v_sub.expires_at) then
     raise exception 'EXTEND_LAST_PASS' using errcode = '22023';
   end if;
@@ -572,6 +576,13 @@ begin
             and not exists (select 1 from jsonb_each(p_value) e, jsonb_array_elements(e.value) t
                             where jsonb_typeof(t) <> 'string' or length(btrim(t #>> '{}')) not between 1 and 60);
   end if;
+  -- Members must be able to upload at least the photos onboarding requires.
+  if coalesce(v_ok, false) and p_key in ('photos.min_required', 'photos.max_per_user') then
+    v_ok := (case when p_key = 'photos.min_required' then (p_value #>> '{}')::int
+                  else (select (value #>> '{}')::int from public.app_settings where key = 'photos.min_required') end)
+            <= (case when p_key = 'photos.max_per_user' then (p_value #>> '{}')::int
+                     else (select (value #>> '{}')::int from public.app_settings where key = 'photos.max_per_user') end);
+  end if;
   if not coalesce(v_ok, false) then
     raise exception 'INVALID_VALUE' using errcode = '22023';
   end if;
@@ -615,7 +626,8 @@ begin
   perform public.require_staff('ADMIN');
   -- Card checkouts charge the processor's price: a card plan needs its price ID, and a new price needs a
   -- new price ID (created at the processor first).
-  if p_source = 'CARD' and nullif(btrim(coalesce(p_processor_price_id, '')), '') is null then
+  if coalesce((select source from public.subscription_plans where id = p_plan_id), p_source) = 'CARD'
+     and nullif(btrim(coalesce(p_processor_price_id, '')), '') is null then
     raise exception 'PRICE_ID_REQUIRED' using errcode = '22023';
   end if;
   if p_plan_id is null then
@@ -1000,7 +1012,9 @@ as $$
   from public.users u
   cross join (select (value #>> '{}')::int as days from public.app_settings
               where key = 'account.deletion_purge_days' and value is not null) r
-  where u.status = 'DELETED' and u.role = 'USER' and u.deleted_at < now() - make_interval(days => r.days)
+  -- A member who deleted and was then banned (Q54) is purged too; the phone blocklist entry stays.
+  where u.status in ('DELETED', 'BANNED') and u.deleted_at is not null and u.role = 'USER'
+    and u.deleted_at < now() - make_interval(days => r.days)
     -- Open reports against the member are decided first (staff may still ban the account).
     and not exists (select 1 from public.reports rp where rp.reported_user_id = u.id and rp.status = 'OPEN')
   order by u.deleted_at
@@ -1031,6 +1045,80 @@ $$;
 alter table public.reports alter column reported_user_id drop not null;
 alter table public.reports drop constraint reports_reported_user_id_fkey,
   add constraint reports_reported_user_id_fkey foreign key (reported_user_id) references public.users(id) on delete set null;
+
+-- Closed reports about a purged account stay visible to staff (member shown as deleted).
+create or replace function public.staff_reports_queue(p_include_closed boolean DEFAULT false, p_limit integer DEFAULT 100, p_member uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(report_id uuid, reported_user_id uuid, category report_category, priority report_priority, status report_status, created_at timestamp with time zone, target_hidden text, reporters_24h bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if not public.is_staff('MODERATOR') then
+    raise exception 'NOT_STAFF' using errcode = '42501';
+  end if;
+  return query
+    select r.id, r.reported_user_id, r.category, r.priority, r.status, r.created_at, u.hidden_reason,
+           (select count(distinct x.reporter_id) from public.reports x
+            where x.reported_user_id = r.reported_user_id and x.status = 'OPEN'
+              and x.created_at > now() - interval '24 hours')
+    from public.reports r
+    left join public.users u on u.id = r.reported_user_id
+    where (p_include_closed or r.status = 'OPEN')
+      and (p_member is null or r.reported_user_id = p_member)
+    order by (r.status = 'OPEN') desc, r.priority, r.created_at
+    limit least(greatest(coalesce(p_limit, 100), 1), 200);
+end;
+$function$;
+
+create or replace function public.staff_report_detail(p_report_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v jsonb;
+begin
+  if not public.is_staff('MODERATOR') then
+    raise exception 'NOT_STAFF' using errcode = '42501';
+  end if;
+  select jsonb_build_object(
+    'report_id', r.id,
+    'category', r.category,
+    'priority', r.priority,
+    'status', r.status,
+    'description', r.description,
+    'photo_id', r.photo_id,
+    'created_at', r.created_at,
+    'from_conversation', r.conversation_id is not null
+                         or exists (select 1 from public.report_messages rm where rm.report_id = r.id),
+    'captured_messages', (select count(*) from public.report_messages rm where rm.report_id = r.id),
+    'reported_user_id', r.reported_user_id,
+    'display_name', p.display_name,
+    'age', public.age_in_years(p.date_of_birth),
+    'account_status', public.effective_account_status(u.status, u.suspended_until),
+    'stored_status', u.status,
+    'suspended_until', case when u.suspended_until > now() then u.suspended_until end,
+    'hidden_reason', u.hidden_reason,
+    'verification', public.latest_verification_status(u.id),
+    'reporters_24h', (select count(distinct x.reporter_id) from public.reports x
+                      where x.reported_user_id = r.reported_user_id and x.status = 'OPEN'
+                        and x.created_at > now() - interval '24 hours'),
+    'other_reports', coalesce((select jsonb_agg(jsonb_build_object('category', o.category, 'status', o.status, 'created_at', o.created_at)
+                                                order by o.created_at desc)
+                               from public.reports o where o.reported_user_id = r.reported_user_id and o.id <> r.id), '[]'::jsonb),
+    'notes', coalesce((select jsonb_agg(jsonb_build_object('note', n.note, 'created_at', n.created_at,
+                                                           'mine', n.author_id = auth.uid()) order by n.created_at)
+                       from public.report_notes n where n.report_id = r.id), '[]'::jsonb)
+  ) into v
+  from public.reports r
+  left join public.users u on u.id = r.reported_user_id
+  left join public.profiles p on p.user_id = r.reported_user_id
+  where r.id = p_report_id;
+  return v;
+end;
+$function$;
 
 -- A ban also reaches an account its owner deleted before staff decided its reports (otherwise deleting
 -- would dodge the phone blocklist). Same as Phase 5 otherwise.
@@ -1123,6 +1211,265 @@ as $$
   order by b.created_at desc;
 $$;
 
+-- A card checkout paid, or a renewal charged, after the account was deleted or banned gives no access:
+-- the charge goes on the refund list (ACCOUNT_CLOSED) and renewals stop. Otherwise unchanged from 7b.
+create or replace function public.card_event_transition(p_processor text, p_event jsonb, p_at timestamp with time zone)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_type    text := p_event ->> 'type';
+  v_sub     public.subscriptions;
+  v_plan    public.subscription_plans;
+  v_ref     uuid;
+  v_end     timestamptz;
+  v_payment uuid;
+  v_status  public.subscription_status;
+  v_charge  public.payments;
+  v_problem text;
+  v_dispute text;
+begin
+  if v_type = 'CHECKOUT_COMPLETED' then
+    begin
+      v_ref := (p_event ->> 'reference')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'UNKNOWN_CHECKOUT' using errcode = '22023';
+    end;
+    select * into v_sub from public.subscriptions
+    where id = v_ref and source = 'CARD' and processor = p_processor
+    for update;
+    if not found then
+      raise exception 'UNKNOWN_CHECKOUT' using errcode = '22023';
+    end if;
+    if v_sub.processor_subscription_id is not null then
+      return 'IGNORED_ALREADY_ACTIVE';
+    end if;
+    if v_sub.status not in ('PENDING', 'EXPIRED') then
+      raise exception 'CHECKOUT_NOT_PENDING' using errcode = '22023';
+    end if;
+    if coalesce(p_event ->> 'subscription_ref', '') = '' then
+      raise exception 'SUBSCRIPTION_REF_REQUIRED' using errcode = '22023';
+    end if;
+    select * into v_plan from public.subscription_plans where id = v_sub.plan_id;
+    v_end := (p_event ->> 'period_end')::timestamptz;
+    if v_end is null or v_end <= p_at then
+      raise exception 'BAD_PERIOD_END' using errcode = '22023';
+    end if;
+    -- Never more than the plan's period (a day's slack for processor billing anchors).
+    v_end := least(v_end, p_at + make_interval(hours => v_plan.duration_hours) + interval '1 day');
+    perform 1 from public.users where id = v_sub.user_id for update;
+    v_sub.processor_subscription_id := p_event ->> 'subscription_ref';
+    v_payment := public.record_card_charge(v_sub, p_event, p_at);
+    if v_payment is null then
+      raise exception 'CHARGE_ALREADY_RECORDED' using errcode = '22023';
+    end if;
+    if coalesce(p_event ->> 'customer_ref', '') <> '' then
+      insert into public.card_customers (user_id, processor, customer_ref)
+      values (v_sub.user_id, p_processor, p_event ->> 'customer_ref')
+      on conflict (user_id) do update set processor = excluded.processor, customer_ref = excluded.customer_ref;
+    end if;
+    -- A paid checkout is activated unless that would break a rule checked when it started: the amount
+    -- is the plan price, one card subscription at a time (a second paid checkout), OD-19.
+    v_problem := case
+      when exists (select 1 from public.users u where u.id = v_sub.user_id and u.status in ('DELETED', 'BANNED')) then 'ACCOUNT_CLOSED'
+      when (p_event ->> 'amount')::numeric <> coalesce(v_sub.locked_price, v_plan.price) then 'AMOUNT_MISMATCH'
+      when public.has_active_card_subscription(v_sub.user_id) then 'CARD_SUBSCRIPTION_ACTIVE'
+      when public.has_active_mobile_money_pass(v_sub.user_id)
+           and not (public.get_setting('card.allow_during_mobile_money_pass'))::boolean then 'MOBILE_MONEY_PASS_ACTIVE'
+    end;
+    if v_problem is not null then
+      update public.subscriptions
+         set status = 'REFUNDED', processor_subscription_id = v_sub.processor_subscription_id, source_payment_id = v_payment,
+             auto_renew = false, cancel_at_period_end = true, last_event_at = p_at, updated_at = now()
+       where id = v_sub.id;
+      perform public.card_needs_refund(v_sub, v_payment, v_problem);
+      return 'NEEDS_REFUND';
+    end if;
+    update public.subscriptions
+       set status = 'ACTIVE', starts_at = least(p_at, now()), expires_at = v_end, period_end = v_end,
+           processor_subscription_id = v_sub.processor_subscription_id, source_payment_id = v_payment,
+           auto_renew = true, cancel_at_period_end = false, last_event_at = p_at, updated_at = now()
+     where id = v_sub.id;
+    return 'ACTIVATED';
+  end if;
+
+  if coalesce(p_event ->> 'subscription_ref', '') = '' then
+    raise exception 'SUBSCRIPTION_REF_REQUIRED' using errcode = '22023';
+  end if;
+  select * into v_sub from public.subscriptions
+  where processor = p_processor and processor_subscription_id = p_event ->> 'subscription_ref'
+  for update;
+  if not found then
+    perform public.card_not_yet_known('UNKNOWN_SUBSCRIPTION', p_at);
+  end if;
+  select * into v_plan from public.subscription_plans where id = v_sub.plan_id;
+
+  -- Money events apply whatever their order; state events older than the last one applied are stale.
+  -- CANCEL_SCHEDULED and SUBSCRIPTION_ENDED only ever move one way, so they are never stale. Dispute events
+  -- are ordered only against other dispute events.
+  if v_type = 'RENEWAL_FAILED' and v_sub.last_event_at is not null and p_at < v_sub.last_event_at then
+    return 'IGNORED_STALE';
+  end if;
+  if v_type in ('DISPUTE_OPENED', 'DISPUTE_CLOSED') then
+    v_dispute := nullif(p_event ->> 'dispute_id', '');
+    if v_dispute is null or length(v_dispute) > 200 then
+      raise exception 'DISPUTE_ID_REQUIRED' using errcode = '22023';
+    end if;
+  end if;
+
+  if v_type = 'RENEWAL_SUCCEEDED' then
+    v_end := (p_event ->> 'period_end')::timestamptz;
+    if v_end is null or v_end <= p_at then
+      raise exception 'BAD_PERIOD_END' using errcode = '22023';
+    end if;
+    -- One period past the paid period end (or the charge, if later), with a day's slack.
+    v_end := least(v_end, greatest(p_at, coalesce(v_sub.period_end, p_at))
+                          + make_interval(hours => v_plan.duration_hours) + interval '1 day');
+    v_payment := public.record_card_charge(v_sub, p_event, p_at);
+    if v_payment is null then
+      return 'IGNORED_CHARGE_RECORDED';
+    end if;
+    -- A charge on a subscription that ended (refunded, not activated) or for the wrong amount: kept on
+    -- record for a refund, no access, renewals cancelled.
+    v_problem := case
+      when v_sub.status = 'REFUNDED' then 'SUBSCRIPTION_REFUNDED'
+      when exists (select 1 from public.users u where u.id = v_sub.user_id and u.status in ('DELETED', 'BANNED')) then 'ACCOUNT_CLOSED'
+      when (p_event ->> 'amount')::numeric <> coalesce(v_sub.locked_price, v_plan.price) then 'AMOUNT_MISMATCH'
+    end;
+    if v_problem is not null then
+      update public.subscriptions
+         set status = case when status in ('ACTIVE', 'PAYMENT_FAILED') then 'CANCELLED'::public.subscription_status
+                           else status end,
+             auto_renew = false, cancel_at_period_end = true, updated_at = now()
+       where id = v_sub.id;
+      perform public.card_needs_refund(v_sub, v_payment, v_problem);
+      return 'NEEDS_REFUND';
+    end if;
+    -- A late charge for a period already covered (e.g. delivered after a later failure): record only.
+    if v_sub.period_end is not null and (p_event ->> 'period_end')::timestamptz <= v_sub.period_end then
+      return 'CHARGE_RECORDED';
+    end if;
+    v_status := case when v_sub.status = 'SUSPENDED' then v_sub.status
+                     when v_sub.cancel_at_period_end then 'CANCELLED'
+                     else 'ACTIVE' end;
+    update public.subscriptions
+       set status = v_status, period_end = v_end, expires_at = v_end, grace_for_period_end = null,
+           last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
+     where id = v_sub.id;
+    return 'RENEWED';
+  end if;
+
+  if v_type = 'RENEWAL_FAILED' then
+    -- BR-40 / OD-20: access continues for the grace period, counted from the failure (not before the paid
+    -- period ends). One grace period per paid period: later failed retries never add another.
+    if v_sub.grace_for_period_end is not distinct from v_sub.period_end then
+      return 'IGNORED_GRACE_USED';
+    end if;
+    if v_sub.status = 'ACTIVE' or (v_sub.status = 'EXPIRED' and v_sub.auto_renew and not v_sub.cancel_at_period_end) then
+      update public.subscriptions
+         set status = 'PAYMENT_FAILED',
+             expires_at = greatest(coalesce(period_end, expires_at), p_at)
+                          + make_interval(hours => (public.get_setting('card.grace_hours'))::int),
+             grace_for_period_end = period_end,
+             last_event_at = p_at, updated_at = now()
+       where id = v_sub.id;
+      return 'PAYMENT_FAILED';
+    end if;
+    update public.subscriptions set last_event_at = greatest(p_at, coalesce(last_event_at, p_at)) where id = v_sub.id;
+    return 'IGNORED_STATE';
+  end if;
+
+  if v_type = 'CANCEL_SCHEDULED' then
+    update public.subscriptions
+       set status = case when status in ('ACTIVE', 'PAYMENT_FAILED') then 'CANCELLED'::public.subscription_status
+                         else status end,
+           cancel_at_period_end = true, auto_renew = false,
+           last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
+     where id = v_sub.id;
+    return 'CANCELLED';
+  end if;
+
+  if v_type = 'SUBSCRIPTION_ENDED' then
+    -- No more renewals. Paid time (and a running grace period) is kept; nothing is cut short.
+    update public.subscriptions
+       set status = case when expires_at <= now() and status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED')
+                           then 'EXPIRED'::public.subscription_status
+                         when status = 'ACTIVE' then 'CANCELLED'::public.subscription_status
+                         else status end,
+           auto_renew = false, cancel_at_period_end = true,
+           last_event_at = greatest(p_at, coalesce(last_event_at, p_at)), updated_at = now()
+     where id = v_sub.id;
+    return 'ENDED';
+  end if;
+
+  if v_type = 'DISPUTE_OPENED' then
+    -- §16: SUSPENDED by a processor dispute; access stops until every open dispute is settled.
+    if v_dispute = any (v_sub.open_disputes) or v_dispute = any (v_sub.closed_disputes) then
+      return 'IGNORED_STATE'; -- already open, or its "closed" arrived first
+    end if;
+    update public.subscriptions
+       set open_disputes = array_append(open_disputes, v_dispute),
+           status = case when status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED', 'EXPIRED')
+                         then 'SUSPENDED'::public.subscription_status else status end,
+           updated_at = now()
+     where id = v_sub.id
+    returning * into v_sub;
+    return case when v_sub.status = 'SUSPENDED' then 'SUSPENDED' else 'IGNORED_STATE' end;
+  end if;
+
+  if v_type = 'DISPUTE_CLOSED' then
+    if v_dispute = any (v_sub.closed_disputes) then
+      return 'IGNORED_STATE';
+    end if;
+    update public.subscriptions
+       set open_disputes = array_remove(open_disputes, v_dispute),
+           closed_disputes = array_append(closed_disputes, v_dispute), updated_at = now()
+     where id = v_sub.id
+    returning * into v_sub;
+    if (p_event ->> 'won')::boolean then
+      if v_sub.status = 'SUSPENDED' and cardinality(v_sub.open_disputes) = 0 then
+        perform public.card_restore_after_dispute(v_sub.id);
+        return 'RESTORED';
+      end if;
+      return 'IGNORED_STATE';
+    end if;
+    v_type := 'REFUNDED'; -- a lost dispute returns the money, whatever the current state: a refund below
+  end if;
+
+  if v_type = 'REFUNDED' then
+    -- Refunds are new events, not edits (§16): the payment's status changes and the trigger logs it.
+    select * into v_charge from public.payments
+    where transaction_key = 'CARD:' || p_processor || ':' || coalesce(p_event ->> 'charge_id', '')
+      and processor_subscription_ref = v_sub.processor_subscription_id
+    for update;
+    if not found then
+      perform public.card_not_yet_known('UNKNOWN_CHARGE', p_at);
+    end if;
+    if v_charge.status <> 'REFUNDED' then
+      update public.payments set status = 'REFUNDED' where id = v_charge.id;
+    end if;
+    -- Access ends when the refunded charge paid for the current period (the latest charge).
+    if v_charge.paid_at >= (select max(p.paid_at) from public.payments p
+                            where p.source = 'CARD' and p.processor_subscription_ref = v_sub.processor_subscription_id
+                              and p.transaction_key like 'CARD:' || p_processor || ':%') then
+      update public.subscriptions
+         set status = 'REFUNDED', auto_renew = false, cancel_at_period_end = true, updated_at = now()
+       where id = v_sub.id;
+      return 'REFUNDED';
+    end if;
+    -- An earlier charge: the current period stays paid. A suspension ends once no dispute is open.
+    if v_sub.status = 'SUSPENDED' and cardinality(v_sub.open_disputes) = 0 then
+      perform public.card_restore_after_dispute(v_sub.id);
+    end if;
+    return 'REFUNDED_EARLIER_CHARGE';
+  end if;
+
+  raise exception 'UNKNOWN_EVENT_TYPE' using errcode = '22023';
+end;
+$function$;
+
 -- Card renewals must stop for an account that is deleted or banned, whatever the subscription's state.
 create or replace function public.card_cancel_needed(p_processor text, p_ref text)
 returns boolean
@@ -1156,7 +1503,10 @@ as $$
   from public.subscriptions s
   where s.user_id = p_user and s.source = 'CARD' and s.processor_subscription_id is not null
     and s.processor_cancelled_at is null
-    and (p_all or public.card_cancel_needed(s.processor, s.processor_subscription_id));
+    -- "All" means every plan that could still renew; ended or refunded ones are left alone, so an
+    -- old subscription the processor already closed never blocks deleting an account.
+    and ((p_all and s.auto_renew and not s.cancel_at_period_end and s.status not in ('PENDING', 'REFUNDED'))
+         or public.card_cancel_needed(s.processor, s.processor_subscription_id));
 $$;
 
 -- Your account: a staff password change is recorded (§22: sensitive staff actions audited).
