@@ -19,14 +19,14 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Card subscriptions  | 4       | 0              | 0              | 1          |
 | Availability        | 6       | 1              | 0              | 0          |
 | Casual discovery    | 7       | 1              | 0              | 0          |
-| Admin console       | 1       | 1              | 9              | 0          |
+| Admin console       | 10      | 1              | 0              | 0          |
 | Notifications       | 1       | 1              | 3              | 0          |
-| Security and launch | 0       | 0              | 7              | 3          |
-| **Total**           | **89**  | **18**         | **22**         | **7**      |
+| Security and launch | 2       | 1              | 5              | 2          |
+| **Total**           | **100** | **19**         | **11**         | **6**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19. Phase 8 code complete; window caps wait on OD-8 and the short-window signal on T-19. Phase 9 code complete; request cap and cool-down wait on OD-9, request signals on T-19.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19. Phase 8 code complete; window caps wait on OD-8 and the short-window signal on T-19. Phase 9 code complete; request cap and cool-down wait on OD-9, request signals on T-19. Phase 10 code complete; deletion retention waits on OD-7, the extension cap on OD-30, the export limit on T-19.
 
 ## Planning
 
@@ -181,16 +181,16 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Admin console
 
 - ✅ Staff accounts (email + password + TOTP), aal2 in DB and pages, admin shell, first-admin script — P3
-- 🔄 Queues: Photo ✅ P3; Verification ✅ P4; Reports & Flags P5; Claims P7
-- ⬜ Dashboard with real figures — P10
-- ⬜ Users (search incl. hashed phone, suspend, ban, restore, DOB correction) — P10 — BR-4, BR-34
-- ⬜ Subscriptions (manual extension of existing only, reason, audited, capped — OD-30) — P10
-- ⬜ Payments & events, card webhook log — P10
-- ⬜ Analytics — P10
-- ⬜ Audit log viewer — P10
-- ⬜ Settings (plans, merchant accounts, limits, terms, interests, areas, categories, flags) — P10
-- ⬜ Staff management (SUPER_ADMIN) — P10
-- ⬜ pgTAP test per §7 permission row — P10
+- ✅ Queues: Photo P3; Verification P4; Reports & Flags P5; Claims P7
+- ✅ Dashboard with real figures — P10
+- ✅ Users (search by name, id, phone; suspend, ban, restore, DOB correction) — P10 — BR-4, BR-34
+- ✅ Subscriptions (manual extension of running mobile money passes, reason, audited, capped in total — OD-30) — P10
+- ✅ Payments & events, card webhook log, record refunds — P10
+- ✅ Analytics — P10
+- ✅ Audit log viewer — P10
+- 🔄 Settings (plans, merchant accounts, limits, terms, interests, areas, flags) — P10 ✅; report categories stay a fixed list (Q50)
+- ✅ Staff management (SUPER_ADMIN) — P10
+- ✅ pgTAP test per §7 permission row — P10
 
 ## Notifications
 
@@ -202,9 +202,9 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 
 ## Security and launch
 
-- ⬜ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
-- ⬜ Account deletion + purge job (incl. never-verified accounts) — P10 ⛔ until OD-7 — BR-7 (use Auth hard delete: soft delete rewrites phone/email and the Phase 1/3 auth.users guards refuse it)
-- ⬜ Data export — P10
+- ✅ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
+- 🔄 Account deletion + purge job — P10 built (BR-7; Auth hard delete); purge runs once OD-7 has a value. Abandoned never-verified sign-ups are not purged yet (P12)
+- ✅ Data export — P10
 - ⬜ Full RLS / pgTAP pass — P12
 - ⬜ CSP, HSTS, X-Frame-Options DENY, Referrer-Policy — P12
 - ⬜ Rate-limit review — P12

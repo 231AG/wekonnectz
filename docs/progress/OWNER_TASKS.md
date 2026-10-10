@@ -34,7 +34,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-24 | Create the phone-hashing secret in each hosted Supabase project (Vault)                                                                                      | Phase 1 hosted verification (T-06); launch               | OPEN                                                                                |
 | T-25 | Decide on CAPTCHA (Cloudflare Turnstile) for sign-in and create the keys                                                                                     | Recommended before launch (Phase 12)                     | OPEN                                                                                |
 | T-26 | Decide whether members may ever change their phone number (Q13)                                                                                              | Nothing now; a future phase if yes                       | OPEN                                                                                |
-| T-27 | Set `CRON_SECRET` in Vercel (Project → Settings → Environment Variables) — used by the selfie-retention and payments jobs                                    | Scheduled jobs on Vercel (selfie retention, Phase 4)     | OPEN                                                                                |
+| T-27 | Set `CRON_SECRET` in Vercel (Project → Settings → Environment Variables) — used by the selfie-retention, payments, availability and account-purge jobs       | Scheduled jobs on Vercel (selfie retention, Phase 4)     | OPEN                                                                                |
 | T-28 | In the hosted Supabase project, turn **off** public access for Realtime (Project Settings → Realtime → "Allow public access") so only private channels exist | Hosted verification of live chat (Phase 6); launch       | OPEN                                                                                |
 | T-29 | Plan prices (OD-1), screenshot retention (OD-18), transaction-ID formats (T-14), wallet note check (OD-22)                                                   | **Phase 7 sign-off**; Casual payments in production      | OPEN                                                                                |
 | T-23 | Approve design tokens v1 (or tell me what to change)                                                                                                         | Phase 0 sign-off only (Phase 1 can start)                | OPEN                                                                                |
@@ -252,7 +252,8 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `availability.max_changes_per_hour`                                        | Window changes per member per hour    | 30 (DEV-ONLY 30 in seed)                                                   | Phase 8   |
 | `requests.daily_cap`                                                       | OD-9                                  | — your call                                                                | Phase 9   |
 | `requests.decline_cooldown_days`                                           | OD-9                                  | — your call                                                                | Phase 9   |
-| `subscriptions.manual_extension_max_days`                                  | OD-30 cap on admin manual extension   | 7 days                                                                     | Phase 10  |
+| `subscriptions.manual_extension_max_days`                                  | OD-30 cap on admin manual extension   | 7 days in total per pass (DEV-ONLY 7 in seed; allowed 1–30)                | Phase 10  |
+| `export.max_per_day`                                                       | Data downloads per member per day     | 5 (DEV-ONLY 5 in seed)                                                     | Phase 10  |
 | `signals.requests_burst`                                                   | "Many requests in a short time"       | 10 in 10 min                                                               | Phase 9   |
 | `signals.duplicate_text_recipients`                                        | "Same text to many members"           | 5 in 24 h                                                                  | Phase 9   |
 
@@ -268,21 +269,21 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 
 ### T-21 — Product decisions by phase
 
-| Decision                                                          | Needed by   |
-| ----------------------------------------------------------------- | ----------- |
-| OD-3 photo visibility in Relationship (rec. A)                    | Phase 3     |
-| Q5 staff login method                                             | Phase 3     |
-| OD-5 ID document before Casual (rec. yes — adds scope to Phase 4) | Phase 4     |
-| OD-6 selfie retention (rec. delete 90 days after approval)        | Phase 4     |
-| Q1 review time text                                               | Phase 4     |
-| Q4 staff access to messages                                       | Phase 5     |
-| ~~OD-10 like cap; Q6 Saved in Relationship~~ (decided)            | Phase 6     |
-| Q10 "Get a pass" copy (follows OD-3)                              | Phase 7     |
-| OD-8 window caps                                                  | Phase 8     |
-| OD-9 request cap + cool-down; Q2 request expiry                   | Phase 9     |
-| OD-7 deletion retention; Q12 manual extension                     | Phase 10    |
-| Q3 notification channels                                          | Phase 11    |
-| Q9, Q11 (confirmations)                                           | Phase 5 / 6 |
+| Decision                                                                                                        | Needed by   |
+| --------------------------------------------------------------------------------------------------------------- | ----------- |
+| OD-3 photo visibility in Relationship (rec. A)                                                                  | Phase 3     |
+| Q5 staff login method                                                                                           | Phase 3     |
+| OD-5 ID document before Casual (rec. yes — adds scope to Phase 4)                                               | Phase 4     |
+| OD-6 selfie retention (rec. delete 90 days after approval)                                                      | Phase 4     |
+| Q1 review time text                                                                                             | Phase 4     |
+| Q4 staff access to messages                                                                                     | Phase 5     |
+| ~~OD-10 like cap; Q6 Saved in Relationship~~ (decided)                                                          | Phase 6     |
+| Q10 "Get a pass" copy (follows OD-3)                                                                            | Phase 7     |
+| OD-8 window caps                                                                                                | Phase 8     |
+| OD-9 request cap + cool-down; Q2 request expiry                                                                 | Phase 9     |
+| OD-7 deletion retention (rec. 30 days; DEV-ONLY 30 in seed; setting `account.deletion_purge_days`, super admin) | Phase 10    |
+| Q3 notification channels                                                                                        | Phase 11    |
+| Q9, Q11 (confirmations)                                                                                         | Phase 5 / 6 |
 
 - **Requested in:** Plan.
 
