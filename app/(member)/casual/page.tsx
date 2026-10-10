@@ -25,7 +25,7 @@ export default async function CasualPage() {
               Your pass is active
             </p>
             <p className="text-[15px] text-muted-foreground">
-              Until {formatLiberiaTime(options.accessUntil)} (GMT). The Available Now pool opens in the next release.
+              Until {formatLiberiaTime(options.accessUntil)} (GMT). Go available to appear in the Available Now pool.
             </p>
           </>
         ) : (
@@ -38,8 +38,13 @@ export default async function CasualPage() {
             </p>
           </>
         )}
-        {member.status === "ACTIVE" ? (
+        {member.status === "ACTIVE" && options?.accessUntil ? (
           <Button asChild variant="casual">
+            <Link href="/casual/availability">Availability</Link>
+          </Button>
+        ) : null}
+        {member.status === "ACTIVE" && !options?.cardActive ? (
+          <Button asChild variant={options?.accessUntil ? "outline" : "casual"}>
             <Link href="/casual/get-access">{options?.accessUntil ? "Add more time" : "Get a pass"}</Link>
           </Button>
         ) : null}

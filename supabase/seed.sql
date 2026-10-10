@@ -99,3 +99,9 @@ on conflict (code) do nothing;
 update public.app_settings set value = '48'::jsonb where key = 'card.grace_hours';                         -- DEV-ONLY
 update public.app_settings set value = 'true'::jsonb where key = 'card.allow_during_mobile_money_pass';    -- DEV-ONLY
 update public.app_settings set value = '24'::jsonb where key = 'card.renewal_reminder_hours';             -- DEV-ONLY
+
+-- Phase 8 availability: values for local development only (OD-8, T-19 open).
+update public.app_settings set value = '12'::jsonb where key = 'availability.max_window_hours';      -- DEV-ONLY
+update public.app_settings set value = '7'::jsonb where key = 'availability.max_lead_days';         -- DEV-ONLY
+update public.app_settings set value = '30'::jsonb where key = 'availability.short_window_minutes';  -- DEV-ONLY
+update public.app_settings set value = '5'::jsonb where key = 'availability.short_windows_per_day'; -- DEV-ONLY

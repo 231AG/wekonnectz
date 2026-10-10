@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions/login";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { formatLiberiaTime } from "@/lib/domain/money";
+import { memberAvailability } from "@/lib/availability/server";
+import { formatWindowTime } from "@/lib/domain/availability";
 import { paymentOptions } from "@/lib/storage/payments";
 import { relationshipSummary } from "@/lib/storage/relationship";
 import { createClient } from "@/lib/supabase/server";
@@ -20,7 +22,7 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** Home (member mock-up 01): Relationship card, Casual card (passes arrive in Phase 7), safety note. */
+/** Home (member mock-up 01): Relationship card, Casual card, availability (Phase 8), safety note. */
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const member = await requireMember();
   const { blocked } = await searchParams;
@@ -55,9 +57,10 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
     );
   }
 
-  const [summary, payments, { data: profile }] = await Promise.all([
+  const [summary, payments, availability, { data: profile }] = await Promise.all([
     relationshipSummary(member.id),
     paymentOptions(member.id),
+    memberAvailability(member.id),
     (await createClient()).from("profiles").select("display_name").eq("user_id", member.id).single(),
   ]);
   const verified = member.onboarding.verification === "VERIFIED";
@@ -121,6 +124,34 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
               : "Get a pass to meet people available now"}
         </span>
       </Link>
+
+      {payments.accessUntil ? (
+        <Link
+          href="/casual/availability"
+          className="flex items-center gap-3 rounded-card border border-border bg-surface-1 p-5 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-ring"
+          data-testid="home-availability"
+        >
+          <span
+            className={`size-3 shrink-0 rounded-full ${availability.inPool ? "bg-success" : "bg-muted-foreground/50"}`}
+            aria-hidden
+          />
+          <span className="flex flex-1 flex-col">
+            <span className="font-bold">
+              {availability.inPool && availability.endAt
+                ? `Available until ${formatWindowTime(availability.endAt)}`
+                : availability.status === "PAUSED"
+                  ? "Availability paused"
+                  : availability.status === "AVAILABLE" && availability.startAt
+                    ? `Scheduled from ${formatWindowTime(availability.startAt)}`
+                    : "You’re not available"}
+            </span>
+            <span className="text-[15px] text-muted-foreground">
+              {availability.inPool ? "You’re in the Available Now pool" : "Go available to appear in the pool"}
+            </span>
+          </span>
+          <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
+        </Link>
+      ) : null}
 
       {summary.unread ? (
         <Link

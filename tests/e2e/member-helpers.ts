@@ -1,4 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { adminClient, createMember, enterDob, loginViaUi, randomLiberianPhone } from "./auth-helpers";
 
@@ -124,4 +126,35 @@ export async function activeMember(
   ).toBeNull();
   expect((await admin.from("users").update({ status: "ACTIVE" }).eq("id", userId)).error).toBeNull();
   return { phone, userId, photoIds };
+}
+
+/**
+ * Gives a member a Casual pass the way production can: a card checkout confirmed by a signed processor
+ * event (fake processor, local only). No shortcut around the database's access rules.
+ */
+export async function givePassViaCard(request: APIRequestContext, userId: string) {
+  const secret = process.env.FAKE_CARD_WEBHOOK_SECRET;
+  expect(secret, "fake card processor not configured (pnpm env:setup)").toBeTruthy();
+  const { fakeDelivery, FAKE_SIGNATURE_HEADER } = await import("../../lib/payments/card/fake");
+  const admin = adminClient();
+  const { data, error } = await admin.rpc("start_card_checkout", {
+    p_user: userId,
+    p_plan_code: "CARD_WEEKLY",
+    p_processor: "fake",
+  });
+  expect(error).toBeNull();
+  const { data: plan } = await admin.from("subscription_plans").select("price").eq("code", "CARD_WEEKLY").single();
+  const { body, signature } = fakeDelivery(secret!, "checkout.completed", {
+    reference: (data as { reference: string }).reference,
+    subscription: `sub_${randomUUID()}`,
+    charge: `ch_${randomUUID()}`,
+    amount: Number(plan!.price),
+    currency: "USD",
+    period_end: Math.floor(Date.now() / 1000) + 7 * 86400,
+  });
+  const res = await request.post("/api/webhooks/card", {
+    headers: { "content-type": "application/json", [FAKE_SIGNATURE_HEADER]: signature },
+    data: body,
+  });
+  expect(await res.json()).toMatchObject({ outcome: "APPLIED" });
 }
