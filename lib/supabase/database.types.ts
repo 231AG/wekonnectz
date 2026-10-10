@@ -25,13 +25,13 @@ export type Database = {
           Tables: {
             "app_settings": {
                   Row: {
-                    "created_at": string,"description": string,"key": string,"updated_at": string,"updated_by": string | null,"value": Json | null
+                    "allowed": Json | null,"created_at": string,"description": string,"key": string,"kind": string,"super_admin_only": boolean,"updated_at": string,"updated_by": string | null,"value": Json | null
                   }
                   Insert: {
-                    "created_at"?: string,"description": string,"key": string,"updated_at"?: string,"updated_by"?: string | null,"value"?: Json | null
+                    "allowed"?: Json | null,"created_at"?: string,"description": string,"key": string,"kind"?: string,"super_admin_only"?: boolean,"updated_at"?: string,"updated_by"?: string | null,"value"?: Json | null
                   }
                   Update: {
-                    "created_at"?: string,"description"?: string,"key"?: string,"updated_at"?: string,"updated_by"?: string | null,"value"?: Json | null
+                    "allowed"?: Json | null,"created_at"?: string,"description"?: string,"key"?: string,"kind"?: string,"super_admin_only"?: boolean,"updated_at"?: string,"updated_by"?: string | null,"value"?: Json | null
                   }
                   Relationships: [
                     
@@ -934,6 +934,11 @@ isOneToOne: false
 "accept_current_documents":
 { Args: { "p_user_id": string,"p_versions": Json }; Returns: undefined
                            },
+"accounts_due_for_purge":
+{ Args: { "p_limit"?: number }; Returns: {
+              "photo_paths": (string)[],"selfie_paths": (string)[],"user_id": string
+            }[]
+                           },
 "add_report_note":
 { Args: { "p_note": string,"p_report_id": string }; Returns: undefined
                            },
@@ -1245,6 +1250,12 @@ isOneToOne: false
               "amount": number,"claim_id": string,"created_at": string,"currency": string,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"rejection_reason": Database["public"]['Enums']["claim_rejection_reason"],"reviewed_at": string,"staff_question": string,"status": Database["public"]['Enums']["claim_status"],"transaction_id": string
             }[]
                            },
+"member_data_export":
+{ Args: { "p_user": string }; Returns: Json
+                           },
+"member_delete_account":
+{ Args: { "p_user": string }; Returns: undefined
+                           },
 "member_passes":
 { Args: { "p_user": string }; Returns: {
               "amount": number,"currency": string,"expires_at": string,"payment_status": Database["public"]['Enums']["payment_status"],"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"source": Database["public"]['Enums']["payment_source"],"starts_at": string,"transaction_id": string
@@ -1381,6 +1392,9 @@ isOneToOne: false
               "body": string,"card": Json,"created_at": string,"expires_at": string,"photo_path": string,"request_id": string
             }[]
                            },
+"require_staff":
+{ Args: { "p_min_role": Database["public"]['Enums']["user_role"] }; Returns: undefined
+                           },
 "resolve_flag":
 { Args: { "p_dismiss": boolean,"p_flag_id": string }; Returns: undefined
                            },
@@ -1441,6 +1455,16 @@ isOneToOne: false
 "set_primary_photo":
 { Args: { "p_photo_id": string,"p_user_id": string }; Returns: undefined
                            },
+"staff_analytics":
+{ Args: { "p_days"?: number }; Returns: {
+              "day": string,"likes": number,"matches": number,"passes_card": number,"passes_mobile_money": number,"reports": number,"requests": number,"requests_accepted": number,"revenue": number,"signups": number,"verified": number
+            }[]
+                           },
+"staff_audit_logs":
+{ Args: { "p_action"?: Database["public"]['Enums']["audit_action"],"p_actor_email"?: string,"p_before"?: string,"p_entity_id"?: string,"p_entity_type"?: string,"p_from"?: string,"p_limit"?: number,"p_to"?: string }; Returns: {
+              "action": Database["public"]['Enums']["audit_action"],"actor": string,"created_at": string,"entity_id": string,"entity_type": string,"log_id": string,"metadata": Json
+            }[]
+                           },
 "staff_claim_detail":
 { Args: { "p_claim": string }; Returns: Json
                            },
@@ -1449,9 +1473,38 @@ isOneToOne: false
               "amount": number,"claim_id": string,"created_at": string,"currency": string,"flags": number,"plan_name": string,"provider": Database["public"]['Enums']["payment_provider"],"status": Database["public"]['Enums']["claim_status"],"user_id": string
             }[]
                            },
+"staff_correct_dob":
+{ Args: { "p_dob": string,"p_reason": string,"p_user": string }; Returns: undefined
+                           },
+"staff_dashboard":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"staff_extend_subscription":
+{ Args: { "p_days": number,"p_reason": string,"p_subscription": string }; Returns: string
+                           },
 "staff_flags_queue":
 { Args: { "p_limit"?: number }; Returns: {
               "account_id": string,"account_status": Database["public"]['Enums']["account_status"],"created_at": string,"display_name": string,"entity_id": string,"entity_type": string,"flag_id": string,"hidden_reason": string,"reason": string,"stored_status": Database["public"]['Enums']["account_status"],"suspended_until": string
+            }[]
+                           },
+"staff_list":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "created_at": string,"email": string,"last_sign_in_at": string,"mfa": boolean,"role": Database["public"]['Enums']["user_role"],"status": Database["public"]['Enums']["account_status"],"user_id": string
+            }[]
+                           },
+"staff_merchant_accounts":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "account_id": string,"active": boolean,"display_name": string,"number_or_code": string,"provider": Database["public"]['Enums']["payment_provider"]
+            }[]
+                           },
+"staff_payment_events":
+{ Args: { "p_payment": string }; Returns: {
+              "actor": string,"event_id": string,"payload": Json,"received_at": string,"signature_valid": boolean,"type": string
+            }[]
+                           },
+"staff_payments":
+{ Args: { "p_limit"?: number,"p_needs_refund"?: boolean,"p_source"?: Database["public"]['Enums']["payment_source"],"p_status"?: Database["public"]['Enums']["payment_status"] }; Returns: {
+              "amount": number,"currency": string,"display_name": string,"needs_refund": boolean,"paid_at": string,"payment_id": string,"plan": string,"provider": Database["public"]['Enums']["payment_provider"],"source": Database["public"]['Enums']["payment_source"],"status": Database["public"]['Enums']["payment_status"],"transaction_id": string,"user_id": string
             }[]
                            },
 "staff_photo_queue":
@@ -1459,8 +1512,19 @@ isOneToOne: false
               "age": number,"approved_count": number,"display_name": string,"is_primary": boolean,"photo_id": string,"sort_order": number,"uploaded_at": string,"user_id": string
             }[]
                            },
+"staff_plans":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "active": boolean,"code": string,"currency": string,"duration_hours": number,"name": string,"plan_id": string,"price": number,"processor_price_id": string,"renews": boolean,"sort_order": number,"source": Database["public"]['Enums']["payment_source"]
+            }[]
+                           },
 "staff_queue_counts":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"staff_record_refund":
+{ Args: { "p_payment": string,"p_reason": string }; Returns: undefined
+                           },
+"staff_register_new":
+{ Args: { "p_role": Database["public"]['Enums']["user_role"],"p_user": string }; Returns: undefined
                            },
 "staff_report_detail":
 { Args: { "p_report_id": string }; Returns: Json
@@ -1475,8 +1539,47 @@ isOneToOne: false
               "category": Database["public"]['Enums']["report_category"],"created_at": string,"priority": Database["public"]['Enums']["report_priority"],"report_id": string,"reported_user_id": string,"reporters_24h": number,"status": Database["public"]['Enums']["report_status"],"target_hidden": string
             }[]
                            },
+"staff_save_area":
+{ Args: { "p_active": boolean,"p_area_id": string,"p_county": string,"p_name": string }; Returns: string
+                           },
+"staff_save_interest":
+{ Args: { "p_active": boolean,"p_interest_id": string,"p_name": string }; Returns: string
+                           },
+"staff_save_merchant_account":
+{ Args: { "p_account_id": string,"p_active": boolean,"p_display_name": string,"p_number_or_code": string,"p_provider": Database["public"]['Enums']["payment_provider"] }; Returns: string
+                           },
+"staff_save_plan":
+{ Args: { "p_active": boolean,"p_code": string,"p_duration_hours": number,"p_name": string,"p_plan_id": string,"p_price": number,"p_processor_price_id": string,"p_sort_order": number,"p_source": Database["public"]['Enums']["payment_source"] }; Returns: string
+                           },
+"staff_set_enabled":
+{ Args: { "p_enabled": boolean,"p_user": string }; Returns: undefined
+                           },
+"staff_set_role":
+{ Args: { "p_role": Database["public"]['Enums']["user_role"],"p_user": string }; Returns: undefined
+                           },
+"staff_settings":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "allowed": Json,"description": string,"key": string,"kind": string,"super_admin_only": boolean,"updated_at": string,"updated_by": string,"value": Json
+            }[]
+                           },
 "staff_sign_in_allowed":
 { Args: { "p_account": string,"p_ip": string }; Returns: boolean
+                           },
+"staff_subscriptions":
+{ Args: { "p_limit"?: number,"p_status"?: Database["public"]['Enums']["subscription_status"] }; Returns: {
+              "cancel_at_period_end": boolean,"display_name": string,"expires_at": string,"plan": string,"source": Database["public"]['Enums']["payment_source"],"starts_at": string,"status": Database["public"]['Enums']["subscription_status"],"subscription_id": string,"user_id": string
+            }[]
+                           },
+"staff_update_setting":
+{ Args: { "p_key": string,"p_value": Json }; Returns: undefined
+                           },
+"staff_user_detail":
+{ Args: { "p_user": string }; Returns: Json
+                           },
+"staff_users_search":
+{ Args: { "p_available"?: boolean,"p_has_access"?: boolean,"p_limit"?: number,"p_phone"?: string,"p_query"?: string,"p_status"?: Database["public"]['Enums']["account_status"],"p_verification"?: string }; Returns: {
+              "age": number,"area": string,"created_at": string,"display_name": string,"effective_status": Database["public"]['Enums']["account_status"],"has_access": boolean,"hidden": boolean,"in_pool": boolean,"status": Database["public"]['Enums']["account_status"],"user_id": string,"verification": string
+            }[]
                            },
 "staff_verification_detail":
 { Args: { "p_verification_id": string }; Returns: Json
@@ -1484,6 +1587,11 @@ isOneToOne: false
 "staff_verification_queue":
 { Args: { "p_limit"?: number }; Returns: {
               "age": number,"display_name": string,"escalated": boolean,"previous_rejections": number,"submitted_at": string,"user_id": string,"verification_id": string
+            }[]
+                           },
+"staff_webhook_log":
+{ Args: { "p_limit"?: number }; Returns: {
+              "event_id": string,"payload": Json,"processor": string,"processor_event_id": string,"received_at": string,"signature_valid": boolean,"type": string
             }[]
                            },
 "start_card_checkout":

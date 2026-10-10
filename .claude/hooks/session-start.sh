@@ -15,6 +15,8 @@ pnpm install --frozen-lockfile --prefer-offline
 
 if ! docker info >/dev/null 2>&1; then
   if command -v dockerd >/dev/null 2>&1; then
+    # A resumed container can keep a pid file from its previous boot; with no daemon running it is stale.
+    pgrep -x dockerd >/dev/null 2>&1 || rm -f /var/run/docker.pid
     (nohup dockerd >/tmp/dockerd.log 2>&1 &)
     for _ in $(seq 1 90); do
       docker info >/dev/null 2>&1 && break

@@ -113,3 +113,9 @@ update public.app_settings set value = '7'::jsonb where key = 'requests.decline_
 update public.app_settings set value = '10'::jsonb where key = 'requests.burst_count';              -- DEV-ONLY
 update public.app_settings set value = '10'::jsonb where key = 'requests.burst_minutes';            -- DEV-ONLY
 update public.app_settings set value = '5'::jsonb where key = 'requests.duplicate_text_recipients'; -- DEV-ONLY
+
+-- DEV-ONLY account lifecycle and admin values until the owner decides OD-7 (retention after deletion),
+-- OD-30 (manual extension cap) and T-19 (export limit).
+update public.app_settings set value = '30'::jsonb where key = 'account.deletion_purge_days';          -- DEV-ONLY
+update public.app_settings set value = '7'::jsonb where key = 'subscriptions.manual_extension_max_days'; -- DEV-ONLY
+update public.app_settings set value = '5'::jsonb where key = 'export.max_per_day';                   -- DEV-ONLY

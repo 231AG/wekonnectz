@@ -97,7 +97,31 @@ select is_empty(
           'log_evidence_view',        -- Phase 7: raises unless is_staff('ADMIN'); audited
           'approve_payment_claim',    -- Phase 7: is_staff('ADMIN'), not own claim; audited; the only access path
           'reject_payment_claim',     -- Phase 7: is_staff('ADMIN'); audited
-          'request_claim_info'        -- Phase 7: is_staff('ADMIN'); audited
+          'request_claim_info',       -- Phase 7: is_staff('ADMIN'); audited
+          'staff_dashboard',          -- Phase 10: ADMIN; counts and totals only
+          'staff_users_search',       -- Phase 10: MODERATOR; phone matched, never returned
+          'staff_user_detail',        -- Phase 10: MODERATOR; payments/audit only for ADMIN
+          'staff_correct_dob',        -- Phase 10: ADMIN; audited, DOB not logged
+          'staff_subscriptions',      -- Phase 10: ADMIN
+          'staff_extend_subscription',-- Phase 10: ADMIN; capped (OD-30); audited
+          'staff_payments',           -- Phase 10: ADMIN
+          'staff_payment_events',     -- Phase 10: ADMIN
+          'staff_webhook_log',        -- Phase 10: ADMIN
+          'staff_record_refund',      -- Phase 10: ADMIN; audited
+          'staff_analytics',          -- Phase 10: ADMIN; aggregates
+          'staff_audit_logs',         -- Phase 10: ADMIN; read-only
+          'staff_settings',           -- Phase 10: ADMIN
+          'staff_update_setting',     -- Phase 10: ADMIN (some keys SUPER_ADMIN); validated; audited
+          'staff_plans',              -- Phase 10: ADMIN
+          'staff_save_plan',          -- Phase 10: ADMIN; audited
+          'staff_merchant_accounts',  -- Phase 10: ADMIN
+          'staff_save_merchant_account',-- Phase 10: ADMIN; audited
+          'staff_save_interest',      -- Phase 10: ADMIN; audited
+          'staff_save_area',          -- Phase 10: ADMIN; audited
+          'staff_list',               -- Phase 10: SUPER_ADMIN
+          'staff_register_new',       -- Phase 10: SUPER_ADMIN; new email account only; audited
+          'staff_set_role',           -- Phase 10: SUPER_ADMIN; not self; audited
+          'staff_set_enabled'         -- Phase 10: SUPER_ADMIN; not self; audited
         ]::text[]) $$,
   'no public function is executable by anon or authenticated'
 );
