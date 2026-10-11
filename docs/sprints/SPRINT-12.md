@@ -38,3 +38,23 @@ Backup restore drill (needs T-08 → T-31). Legal sign-off (T-12). Real SMS prov
 - [ ] Owner: T-19 values (OTP attempts, abandoned days), T-08 + T-31 restore drill, T-12 legal, T-04 SMS
 
 ## Self-audit
+
+- **Round 1** (1 HIGH, 2 MEDIUM, 12 LOW):
+  - 🔴 The code-attempt limit lived only in our server action. Anyone could guess codes straight at Supabase Auth's public `/verify` endpoint. Fixed:
+    - the SMS now carries our own code;
+    - our server checks it, with the limits;
+    - a custom access token hook refuses member sessions our server didn't approve.
+  - 🟠 The staff per-account failure limit could be skipped in the same way. It now lives in the password hook.
+  - 🟠 The abandoned sign-up purge could delete a member whose ban had just been lifted, or one still onboarding with a live session. It now only takes accounts that never went live and have no history, and the idle clock counts session refreshes and onboarding activity.
+  - LOW fixes:
+    - API responses keep the API content policy;
+    - the sweep demands an empty `search_path` and checks column grants and storage policies;
+    - the Discover test covers more rules;
+    - several corrections to the deployment guide and the rate-limit table.
+- **Round 2** (0 HIGH, 0 MEDIUM, 5 LOW): confirmed the fixes; no member path to a session without our check. Taken:
+  - a launch check that the token hook is on;
+  - staff lockout recovery steps;
+  - stale codes cleared after an hour;
+  - the sweep checks that only Supabase Auth can call the hooks.
+
+  Noted, not changed: a tiny race in the one-minute ticket window. The attacker would need Auth's code and to beat our server by milliseconds.

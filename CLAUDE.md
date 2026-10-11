@@ -4,7 +4,7 @@
 
 Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/WeKonnectz_MVP_Build_Spec_v3.pdf` (**source of truth**). Plan: `docs/plan/MASTER_PLAN.md`. Owner workflow: `PROMPT.md`.
 
-**Current phase:** Phase 11 — Notifications, complete (see `docs/sprints/SPRINT-11.md`). Next: Phase 12 — Hardening & launch; waiting for owner go-ahead.
+**Current phase:** Phase 12 — Hardening & launch, complete (see `docs/sprints/SPRINT-12.md`). Remaining launch gates are owner tasks (`docs/DEPLOYMENT.md` → Before real members).
 
 ## Stack (pinned exactly; record changes here)
 
@@ -18,14 +18,14 @@ Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/We
 | tailwindcss / @tailwindcss/postcss    | 4.3.3             | Tokens in `app/globals.css`                                                                                                                            |
 | shadcn/ui conventions                 | `components.json` | Primitives in `components/ui`. Deps: radix-ui 1.6.7, class-variance-authority 0.7.1, clsx 2.1.1, tailwind-merge 3.7.0, lucide-react 1.52.0             |
 | zod                                   | 4.6.5             | One schema per form, reused on the server                                                                                                              |
-| @supabase/supabase-js / @supabase/ssr | 2.117.2 / 0.12.7  |                                                                                                                                                        |
+| @supabase/supabase-js / @supabase/ssr | 2.117.3 / 0.12.7  |                                                                                                                                                        |
 | supabase (CLI)                        | 2.119.0           | dev dependency; local stack needs Docker                                                                                                               |
 | @sentry/nextjs                        | 11.4.0            | Disabled until a DSN is set                                                                                                                            |
 | vitest / @playwright/test             | 5.0.3 / 1.63.0    |                                                                                                                                                        |
 | eslint / eslint-config-next           | 9.39.5 / 16.3.8   | ESLint 10 not used: React plugins don't support it yet                                                                                                 |
 | prettier                              | 3.9.9             | printWidth 120                                                                                                                                         |
 
-Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation), sharp 0.35.5 (Phase 3, image processing), web-push 3.6.7 + @types/web-push 3.6.4 (Phase 11, Web Push / VAPID for OD-25).
+Also installed: libphonenumber-js 1.13.15 (Phase 1, +231 validation), sharp 0.35.5 (Phase 3, image processing), web-push 3.6.7 + @types/web-push 3.6.4 (Phase 11, Web Push / VAPID for OD-25), @axe-core/playwright 4.13.0 (Phase 12, dev: WCAG checks in e2e).
 
 Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion.
 

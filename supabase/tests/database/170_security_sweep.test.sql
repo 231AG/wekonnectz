@@ -2,7 +2,7 @@
 -- widens client access by accident. Per-table and per-function behaviour is tested in 000–160.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 
 -- 1. Clients never write tables directly: every change goes through checked server functions.
 select is_empty(
@@ -29,6 +29,13 @@ select is_empty(
   $$ select policyname from pg_policies where schemaname = 'storage' and tablename = 'objects'
        and roles && array['anon', 'authenticated', 'public']::name[] $$,
   'no storage policy lets clients read or write files directly');
+
+-- 1d. The Supabase Auth hooks run only as Auth itself.
+select is_empty(
+  $$ select p.proname || ':' || r.rolname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       cross join (values ('anon'), ('authenticated'), ('service_role')) r(rolname)
+      where n.nspname = 'public' and p.proname like 'hook\_%' and has_function_privilege(r.rolname, p.oid, 'EXECUTE') $$,
+  'the auth hooks can be called only by Supabase Auth');
 
 -- 2. The tables clients may read at all (each further limited by RLS to their own rows, tested per table).
 select set_eq(

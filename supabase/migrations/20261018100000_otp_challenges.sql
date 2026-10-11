@@ -37,6 +37,8 @@ begin
   if v_phone is null or p_member_code !~ '^[0-9]{6}$' then
     raise exception 'BAD_CHALLENGE' using errcode = '22023';
   end if;
+  -- Codes nobody used are dead after 10 minutes; don't keep them around.
+  delete from public.otp_challenges where sent_at < now() - interval '1 hour';
   insert into public.otp_challenges (phone_hash, auth_code, code_hash, sent_at, ticket_expires_at)
   values (public.phone_hash(v_phone), p_auth_code,
           public.hmac_with_pepper('otp:' || v_phone || ':' || p_member_code), now(), null)
