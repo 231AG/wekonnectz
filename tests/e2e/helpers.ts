@@ -13,6 +13,7 @@ export const SHOTS_P8 = "docs/progress/phase-08/screenshots";
 export const SHOTS_P9 = "docs/progress/phase-09/screenshots";
 export const SHOTS_P10 = "docs/progress/phase-10/screenshots";
 export const SHOTS_P11 = "docs/progress/phase-11/screenshots";
+export const SHOTS_P12 = "docs/progress/phase-12/screenshots";
 
 /**
  * Collects console errors (including CSP violations) and failed requests.

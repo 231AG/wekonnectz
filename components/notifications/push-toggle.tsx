@@ -51,7 +51,7 @@ function PushToggle({ publicKey }: { publicKey: string }) {
         setState(permission === "denied" ? "blocked" : "off");
         return;
       }
-      const reg = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       await navigator.serviceWorker.ready;
       // A subscription left by someone who used this phone before is replaced, never reused.
       await (await reg.pushManager.getSubscription())?.unsubscribe();

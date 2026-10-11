@@ -83,7 +83,7 @@ describe("web push (OD-25)", () => {
 describe("service worker", () => {
   it("opens only our own pages (no //other.site)", async () => {
     const { readFile } = await import("node:fs/promises");
-    const sw = await readFile("public/push-sw.js", "utf8");
+    const sw = await readFile("public/sw.js", "utf8");
     const check = new RegExp(sw.match(/\/\^\\\/\(\?!\\\/\)\//)![0].slice(1, -1));
     expect(check.test("/messages")).toBe(true);
     expect(check.test("//evil.example")).toBe(false);
