@@ -1,18 +1,14 @@
 import type { NextConfig } from "next";
 
-import { buildSecurityHeaders } from "./lib/security/headers";
+import { API_CSP, buildSecurityHeaders } from "./lib/security/headers";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
-      {
-        source: "/:path*",
-        headers: buildSecurityHeaders({
-          isDev: process.env.NODE_ENV !== "production",
-          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        }),
-      },
+      { source: "/:path*", headers: buildSecurityHeaders() },
+      // Pages get a per-request nonce CSP from proxy.ts; API responses run nothing.
+      { source: "/api/:path*", headers: [{ key: "Content-Security-Policy", value: API_CSP }] },
     ];
   },
 };

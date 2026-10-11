@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, Sora } from "next/font/google";
+import { connection } from "next/server";
 
 import "./globals.css";
 
@@ -26,7 +27,9 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Every page renders per request so it carries that request's CSP nonce (§22; see proxy.ts).
+  await connection();
   return (
     <html lang="en" className={`${manrope.variable} ${sora.variable} h-full`}>
       <body className="flex min-h-full flex-col bg-background text-foreground">{children}</body>
