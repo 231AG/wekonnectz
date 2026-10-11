@@ -207,13 +207,6 @@ export async function cancelCardSubscription(userId: string): Promise<boolean> {
   return !error;
 }
 
-/** Renewal reminder hook (§16): what is due now. Notifications are sent from Phase 11. */
-export async function cardRenewalsDue(): Promise<number> {
-  const { data, error } = await createAdminClient().rpc("card_renewals_due");
-  if (error) throw new Error("renewal reminder query failed");
-  return data?.length ?? 0;
-}
-
 /**
  * Stops renewals at the processor for a member's card subscriptions: every one not yet stopped (before
  * an account is deleted), or those card_cancel_needed() asks for (after a refund is recorded). Returns
