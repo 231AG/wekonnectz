@@ -23,11 +23,11 @@ with a valid member JWT cannot skip them (plan §1.2).
 | Uploads          | Magic bytes, size limits, re-encode, EXIF strip, rate limit                                                      | Phase 3 / 7                                                                                                                                               |
 | Webhooks         | Signature, raw-body log, idempotent on event id, replay protection                                               | Phase 7b ✅                                                                                                                                               |
 | Payment evidence | Private bucket, reviewer-only signed URLs, every view audited, SHA-256                                           | Phase 7 ✅                                                                                                                                                |
-| Rate limits      | OTP per phone and per IP; requests, likes, reports, uploads per user per day                                     | OTP (P1), uploads (P3), reports (P5); requests and likes later                                                                                            |
+| Rate limits      | OTP per phone and per IP; requests, likes, reports, uploads per user per day                                     | All built; reviewed in Phase 12 (table below) ✅                                                                                                          |
 | Staff            | Separate accounts, MFA (aal2 checked in the DB), role checks on every admin route/action, audited                | Phase 3                                                                                                                                                   |
 | Privacy          | No precise location; PII out of logs/analytics; export + deletion                                                | Sentry scrubber (Phase 0); export + deletion + purge (Phase 10) ✅                                                                                        |
-| Headers          | CSP, HSTS, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin                                 | Baseline in `lib/security/headers.ts` (Phase 0). Nonce-based CSP in Phase 12.                                                                             |
-| Backups          | PITR or daily backups; restore tested before launch                                                              | Phase 12 (needs T-08)                                                                                                                                     |
+| Headers          | CSP, HSTS, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin                                 | Nonce-based CSP per request from `proxy.ts`; locked-down CSP on `/api/*` (Phase 12) ✅                                                                    |
+| Backups          | PITR or daily backups; restore tested before launch                                                              | Runbook in `DEPLOYMENT.md`; drill needs T-08                                                                                                              |
 
 ## Phase 0 controls in detail
 
@@ -191,6 +191,52 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Nothing private in a notice.** In-app and push texts are fixed per type: no names, no message or request text, no phone numbers (Q58). Payloads hold ids of the member's own items only (a conversation or request), and the inbox strips anything else.
 - **Private actions stay private.** A decline is never notified (Q45); deleted and banned accounts receive nothing (BR-7); a member who turns a category off gets neither the inbox entry nor the push.
 - **Web push (OD-25).** Off until the VAPID keys are set (T-20). Devices are stored server-side only (`push_subscriptions`, no client access), https endpoints only, at most 10 per member. The push payload is the same generic text and an in-app path; the service worker opens only paths on our own origin. Sending happens after the response (`after()`), claims each notice once, and forgets browsers the push service reports gone (404/410). Endpoints are never logged.
+
+## Hardening (Phase 12)
+
+- **Content-Security-Policy with a nonce.** `proxy.ts` makes a fresh nonce for every page request and sends
+  `script-src 'self' 'nonce-…' 'strict-dynamic'` (no `unsafe-inline` for scripts; `unsafe-eval` only in dev).
+  Next.js reads the nonce from the request header and puts it on its own scripts. Styles keep `'unsafe-inline'`
+  (React style attributes); `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'self'`, `object-src 'none'`,
+  `upgrade-insecure-requests` in production. `/api/*` responses get `default-src 'none'`. Every page is rendered per
+  request (`connection()` in the root layout) so no cached page carries a stale nonce.
+- **Database sweep (`170_security_sweep.test.sql`).** Fails if any table gains a client INSERT/UPDATE/DELETE grant,
+  if the set of client-readable tables changes, if anon can read anything but legal documents, if any table lacks
+  RLS, if a SECURITY DEFINER function has no pinned `search_path`, if any function is executable by PUBLIC, if a view
+  appears, if a table joins the Realtime publication, or if a bucket is public or unlimited.
+- **OTP code guessing.** Supabase Auth only sees our server's IP, so its own verify limits can't tell members apart.
+  `otp_verify_allowed()` counts code attempts per phone and per client IP before each `verifyOtp`, and fails closed.
+- **Abandoned sign-ups** (still PENDING, nothing waiting for review, no open report) are purged by the daily job
+  after `account.abandoned_signup_days`, through the same `purge_account_content()` as deleted accounts.
+- **App install and offline (PWA).** One service worker (`/sw.js`, served `no-cache`). It caches only the offline
+  screen and one icon, handles page navigations only (network first), and never caches member pages, API responses,
+  photos or signed URLs.
+- **Accessibility.** axe-core WCAG 2.1 A/AA scans of the public, member and admin pages run in e2e
+  (`a11y.*.spec.ts`).
+- **Dependencies.** `pnpm audit --prod` clean. Dev-only: a `braces` advisory via `eslint-config-next` → `micromatch`
+  (no fixed version yet; never shipped to the browser or server).
+
+### Rate limits (review)
+
+| What                   | Limit (setting)                                                                                       | Where enforced                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| OTP sends              | per phone and per IP per hour (`otp.max_per_phone_per_hour`, `otp.max_per_ip_per_hour`) + 60 s resend | DB, before Auth; Supabase `sms_sent` project cap |
+| OTP code checks        | per phone and per IP per hour (`otp.max_verify_per_phone_per_hour`, `otp.max_verify_per_ip_per_hour`) | DB, before `verifyOtp`                           |
+| Staff sign-in failures | per IP, per account+IP, per account (`staff_login.*`)                                                 | DB, password hook                                |
+| Photo uploads          | per member per hour (`photos.max_uploads_per_hour`), max photos per member                            | DB                                               |
+| Reports                | per member per day (`reports.per_user_per_day`)                                                       | DB                                               |
+| Likes                  | per 24 h (`relationship.daily_like_cap`)                                                              | DB                                               |
+| Messages               | per minute (`messages.max_per_minute`), 1000 characters                                               | DB                                               |
+| Casual requests        | per day (`requests.daily_cap`), decline cooldown, burst flag                                          | DB                                               |
+| Payment claims         | open claims at once (`claims.max_pending`)                                                            | DB                                               |
+| Card checkouts         | one pending checkout per member (a new one expires the old)                                           | DB                                               |
+| Availability changes   | per hour (`availability.max_changes_per_hour`)                                                        | DB                                               |
+| Data exports           | per day (`export.max_per_day`)                                                                        | DB                                               |
+| Push devices           | 10 per member                                                                                         | DB                                               |
+
+Not limited, judged low risk: profile and interest edits, blocks, saves, notification preference changes. Each is a
+small write to the member's own rows behind a signed-in session; the content checks still run on every profile
+edit. Revisit if abuse shows up.
 
 ## Logging rule (§6 rule 7)
 
