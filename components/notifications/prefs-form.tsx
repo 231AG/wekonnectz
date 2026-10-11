@@ -32,7 +32,7 @@ function PrefsForm({ prefs }: { prefs: NotificationPrefs }) {
               </span>
               <input
                 type="checkbox"
-                name={c.key}
+                name={`pref_${c.key}`}
                 defaultChecked={prefs[c.key]}
                 className="size-6 shrink-0 accent-pending"
                 aria-label={c.label}

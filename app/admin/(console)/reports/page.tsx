@@ -133,7 +133,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
         })}
         <Link
           href={href({ closed: !includeClosed })}
-          aria-pressed={!includeClosed}
+          aria-current={!includeClosed ? "true" : undefined}
           className={cn(
             "inline-flex min-h-11 items-center rounded-full border border-border px-4 text-[15px] font-semibold hover:bg-surface-2",
             !includeClosed && "bg-surface-2",

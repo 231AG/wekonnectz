@@ -12,7 +12,7 @@ export type PrefsState = { ok?: string; error?: string };
 /** Notification preferences (§18 user_settings.notification_prefs): one switch per category. */
 export async function saveNotificationPrefs(_prev: PrefsState, formData: FormData): Promise<PrefsState> {
   const member = await requireMember();
-  const prefs = Object.fromEntries(PREF_CATEGORIES.map((c) => [c.key, formData.get(c.key) === "on"]));
+  const prefs = Object.fromEntries(PREF_CATEGORIES.map((c) => [c.key, formData.get(`pref_${c.key}`) === "on"]));
   const { error } = await createAdminClient().rpc("set_notification_prefs", { p_user: member.id, p_prefs: prefs });
   if (error) return { error: "Couldn’t save. Try again." };
   revalidatePath("/account/notifications");
