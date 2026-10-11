@@ -130,6 +130,10 @@ Vercel → Project → Cron Jobs shows each run; a job that returns an error is 
 - Response headers include `Content-Security-Policy` with a nonce and `Strict-Transport-Security`.
 - `https://<domain>/manifest.webmanifest` loads; on a phone, "Add to Home Screen" offers WeKonnectz.
 - `https://<domain>/api/cron/reminders` without the secret returns 401.
+- **The sign-in hook is on.** With the custom access token hook missing, codes guessed at Supabase's public endpoint
+  would open sessions again and nothing in the app would notice. On staging, run
+  `pnpm exec playwright test auth.mobile -g "public endpoint"` with the staging values, or ask me to check: a code
+  verified straight at Supabase must be refused with "Sign in through the WeKonnectz app".
 
 ## 6. First staff account (T-07)
 
@@ -149,6 +153,7 @@ app. Other staff are created from the Staff screen. Delete `.env.production.loca
 - [ ] Production project on a plan with backups + PITR (T-08); **restore drill done** (below)
 - [ ] Legal documents reviewed (T-12) and loaded as new versions
 - [ ] Areas and interests loaded (T-09, T-10); limits approved (T-19); prices and wallets (T-29, T-13)
+- [ ] Custom access token hook confirmed on in the production project (step 5 check)
 - [ ] CAPTCHA decision (T-25)
 - [ ] Sentry DSN set (T-17) so errors are seen
 
@@ -167,3 +172,15 @@ Do this once before launch and after any big schema change. It proves backups ca
 4. Point a Vercel **preview** deployment at the restored project (its own env vars), sign in as staff and open one
    member and one payment.
 5. Write down the date, how long the restore took, and anything that failed. Delete the restored project.
+
+## Staff account locked out
+
+Too many wrong passwords lock a staff account for an hour, even with the right password (this stops guessing from
+many places). Anyone who knows a staff email can cause this. To unlock early, a SUPER_ADMIN runs in the Supabase SQL
+Editor (replace the email):
+
+```sql
+delete from public.rate_limit_counters
+where bucket like 'staff_login.%'
+  and subject_hash = public.hmac_with_pepper('rl:staff_login.account:' || lower('person@yourdomain'));
+```
