@@ -203,15 +203,15 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Security and launch
 
 - ✅ Member My profile: edit, verification, privacy & messaging, blocked users, settings — P10
-- 🔄 Account deletion + purge job — P10 built (BR-7; Auth hard delete); purge runs once OD-7 has a value. Abandoned never-verified sign-ups are not purged yet (P12)
+- 🔄 Account deletion + purge job — P10 built (BR-7; Auth hard delete); purge runs once OD-7 has a value. Abandoned sign-ups purged too (P12)
 - ✅ Data export — P10
-- ⬜ Full RLS / pgTAP pass — P12
-- ⬜ CSP, HSTS, X-Frame-Options DENY, Referrer-Policy — P12
-- ⬜ Rate-limit review — P12
-- ⬜ Backup restore drill — P12 ⛔ until T-08
-- ⬜ PWA install + offline shell — P12
-- ⬜ Accessibility pass — P12
-- ⬜ Legal sign-off — P12 ⛔ until T-12
+- ✅ Full RLS / pgTAP pass — P12 (`170_security_sweep`, `175_hardening`)
+- ✅ CSP (nonce), HSTS, X-Frame-Options DENY, Referrer-Policy — P12
+- ✅ Rate-limit review — P12 (SECURITY.md; OTP code checks now server-only)
+- ⛔ Backup restore drill — runbook written (DEPLOYMENT.md); drill needs T-08 (T-31)
+- ✅ PWA install + offline shell — P12
+- ✅ Accessibility pass — P12 (axe WCAG 2.1 AA on public, member, admin pages)
+- ⛔ Legal sign-off — needs T-12
 
 ## Business-rule coverage map
 

@@ -37,6 +37,8 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-27 | Set `CRON_SECRET` in Vercel (Project → Settings → Environment Variables) — used by the selfie-retention, payments, availability and account-purge jobs       | Scheduled jobs on Vercel (selfie retention, Phase 4)     | OPEN                                                                                |
 | T-28 | In the hosted Supabase project, turn **off** public access for Realtime (Project Settings → Realtime → "Allow public access") so only private channels exist | Hosted verification of live chat (Phase 6); launch       | OPEN                                                                                |
 | T-29 | Plan prices (OD-1), screenshot retention (OD-18), transaction-ID formats (T-14), wallet note check (OD-22)                                                   | **Phase 7 sign-off**; Casual payments in production      | OPEN                                                                                |
+| T-30 | Optional now: put a private staging copy on Vercel — `docs/DEPLOYMENT.md` steps 1–6                                                                          | Hosted check of the staff console and public pages       | OPEN                                                                                |
+| T-31 | Run the backup restore drill once production exists (`docs/DEPLOYMENT.md` → Backup restore drill)                                                            | **Launch** (§22)                                         | OPEN — needs T-08                                                                   |
 | T-23 | Approve design tokens v1 (or tell me what to change)                                                                                                         | Phase 0 sign-off only (Phase 1 can start)                | OPEN                                                                                |
 
 ---
@@ -104,7 +106,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
      - signups off;
      - Phone provider on with the Send-SMS hook;
      - phone confirmations on;
-     - before-user-created and password-verification hooks;
+     - before-user-created, password-verification and custom-access-token hooks (Phase 12);
      - anonymous sign-ins off;
      - Email provider on with "Allow new users to sign up" off (staff only, Phase 3);
      - MFA → TOTP enabled (Phase 3);
@@ -256,6 +258,10 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | `export.max_per_day`                                                       | Data downloads per member per day     | 5 (DEV-ONLY 5 in seed)                                                     | Phase 10  |
 | `signals.requests_burst`                                                   | "Many requests in a short time"       | 10 in 10 min                                                               | Phase 9   |
 | `signals.duplicate_text_recipients`                                        | "Same text to many members"           | 5 in 24 h                                                                  | Phase 9   |
+| `otp.max_verify_per_phone_per_hour`                                        | Code attempts per phone (Phase 12)    | 10 (DEV-ONLY 20 in seed)                                                   | Phase 12  |
+| `otp.max_verify_per_ip_per_hour`                                           | Code attempts per IP (Phase 12)       | 100 — carriers share IPs (DEV-ONLY 500 in seed)                            | Phase 12  |
+| `account.abandoned_signup_days`                                            | Unfinished sign-ups purged after      | 30 days (DEV-ONLY 30 in seed; allowed 7–3650)                              | Phase 12  |
+| Supabase Auth `token_verifications` (per 5 min per IP)                     | Direct code checks at Supabase        | 30                                                                         | Launch    |
 
 - **Steps:** Reply "approve T-19" or list changes.
 - **Blocks:** Each phase in the last column (I can build with DEV-ONLY values but can't call the phase complete without approved values).
@@ -360,3 +366,20 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 - **Why:** Plans, screenshot retention and transaction-ID formats are settings with no production value (§6 rule 9). Until set, members can't submit claims in production. Development uses DEV-ONLY values in `supabase/seed.sql`.
 - **Steps:** Reply with the values. For transaction IDs, send the format (letters/digits, length) — not real customers' IDs.
 - **Blocks:** Phase 7 sign-off; launch of Casual payments.
+
+### T-30 — Staging on Vercel (optional now)
+
+- **What:** Follow `docs/DEPLOYMENT.md` steps 1–6 with the development Supabase project (T-06) and a Vercel project.
+- **Why:** Checks the staff console, public pages, security headers and scheduled jobs on real hosting before launch.
+  Members can't sign up there until a real SMS provider is chosen (T-04).
+- **Steps:** As the guide says. Put every key in Vercel's Environment Variables, never in chat; then tell me the
+  variable names and I'll check they're set without displaying them.
+- **Blocks:** nothing; recommended.
+- **Requested in:** Phase 12.
+
+### T-31 — Backup restore drill
+
+- **What:** Restore a production backup into a new project and check it (`docs/DEPLOYMENT.md` → Backup restore drill).
+- **Why:** §22: backups only count once a restore has worked.
+- **Blocks:** Launch. Needs T-08.
+- **Requested in:** Phase 12.
