@@ -323,6 +323,19 @@ Settings (no values in the migration; DEV-ONLY in `seed.sql`): `account.deletion
 
 Settings: `notifications.pass_expiry_warning_hours` (T-19; DEV-ONLY 24 in `seed.sql`).
 
+### Phase 12 ✅ (`20261018000000_hardening.sql`) — hardening
+
+No new tables.
+
+| Function                               | Callable by  | Purpose                                                                                                                                                 |
+| -------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `otp_verify_allowed(phone, ip)`        | service_role | Counts a code check per phone and per client IP (`rate_limit_hit`); false when either limit is reached; raises while the settings are empty             |
+| `accounts_due_for_purge()` (redefined) | service_role | Deleted / banned accounts past OD-7, **plus** abandoned PENDING sign-ups past `account.abandoned_signup_days` with nothing in review and no open report |
+| `discover_candidates()` (redefined)    | service_role | Same rules as before, as one set-based query (≈700 ms → ≈140 ms for 3,000 members in `scripts/load-check.sql`)                                          |
+
+Settings (SUPER_ADMIN, T-19; DEV-ONLY values in `seed.sql`): `otp.max_verify_per_phone_per_hour`,
+`otp.max_verify_per_ip_per_hour`, `account.abandoned_signup_days`.
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |
