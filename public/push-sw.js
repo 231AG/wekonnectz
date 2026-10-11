@@ -8,7 +8,8 @@ self.addEventListener("push", (event) => {
     data = {};
   }
   const title = typeof data.title === "string" ? data.title : "WeKonnectz";
-  const url = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/home";
+  // Our own pages only: "/x", never "//other.site".
+  const url = typeof data.url === "string" && /^\/(?!\/)/.test(data.url) ? data.url : "/home";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: typeof data.body === "string" ? data.body : "",

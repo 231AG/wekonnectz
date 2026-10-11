@@ -6,22 +6,23 @@
 -- ---------------------------------------------------------------------------
 -- Types and settings
 -- ---------------------------------------------------------------------------
-alter type public.notification_type add value if not exists 'REQUEST_RECEIVED';
-alter type public.notification_type add value if not exists 'REQUEST_ACCEPTED';
-alter type public.notification_type add value if not exists 'MATCH_CREATED';
-alter type public.notification_type add value if not exists 'MESSAGE_RECEIVED';
-alter type public.notification_type add value if not exists 'PASS_EXPIRING';
-alter type public.notification_type add value if not exists 'CARD_RENEWAL_REMINDER';
+-- The new notification types are added in 20261016900000_notification_types.sql (an enum value can't be
+-- used in an index in the transaction that adds it).
 
 insert into public.app_settings (key, value, description, kind, min_value, max_value) values
   ('notifications.pass_expiry_warning_hours', null,
-   'Hours before a pass ends that the member is reminded (§16). No reminder while unset.', 'int', 1, 168)
+   'Hours before a pass ends that the member is reminded (§16). The reminder job runs daily, so at least 24. No reminder while unset.', 'int', 24, 168)
 on conflict (key) do nothing;
 
 -- Push: when a notification was sent to the member's devices (null = not yet / not pushed).
 alter table public.notifications add column pushed_at timestamptz;
 create index notifications_user_unread_idx on public.notifications (user_id, created_at desc) where read_at is null;
 create index notifications_push_due_idx on public.notifications (created_at) where pushed_at is null;
+-- One unread message notice per conversation, even when two messages arrive at once.
+create unique index notifications_one_unread_message_idx on public.notifications (user_id, (payload ->> 'conversation_id'))
+  where type = 'MESSAGE_RECEIVED' and read_at is null;
+-- The card reminder runs from the same daily job.
+update public.app_settings set min_value = 24 where key = 'card.renewal_reminder_hours';
 
 -- ---------------------------------------------------------------------------
 -- Web push subscriptions (OD-25). One row per browser; only the server reads them.
@@ -29,7 +30,9 @@ create index notifications_push_due_idx on public.notifications (created_at) whe
 create table public.push_subscriptions (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references public.users(id) on delete cascade,
-  endpoint     text not null unique check (endpoint ~ '^https://' and length(endpoint) <= 1000),
+  -- Only the browsers' own push services: the server never sends to an address a member chose.
+  endpoint     text not null unique check (length(endpoint) <= 1000 and endpoint ~
+    '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9.-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)/'),
   p256dh       text not null check (length(p256dh) between 20 and 200),
   auth         text not null check (length(auth) between 8 and 100),
   created_at   timestamptz not null default now(),
@@ -111,13 +114,13 @@ begin
     return;
   end if;
   if p_type = 'MESSAGE_RECEIVED' then
-    update public.notifications
-       set created_at = now(), payload = payload || jsonb_build_object('count', coalesce((payload ->> 'count')::int, 1) + 1)
-     where user_id = p_user and type = 'MESSAGE_RECEIVED' and read_at is null
-       and payload ->> 'conversation_id' = p_payload ->> 'conversation_id';
-    if found then
-      return;
-    end if;
+    -- Bumped, and pushed again (the phone replaces the earlier notice for that chat).
+    insert into public.notifications (user_id, type, payload) values (p_user, p_type, p_payload)
+    on conflict (user_id, (payload ->> 'conversation_id')) where type = 'MESSAGE_RECEIVED' and read_at is null
+    do update set created_at = now(), pushed_at = null,
+                  payload = public.notifications.payload
+                            || jsonb_build_object('count', coalesce((public.notifications.payload ->> 'count')::int, 1) + 1);
+    return;
   end if;
   insert into public.notifications (user_id, type, payload) values (p_user, p_type, coalesce(p_payload, '{}'::jsonb));
 end;
@@ -202,6 +205,45 @@ create trigger conversation_members_read_notice after update of last_read_at on 
   for each row when (new.last_read_at is distinct from old.last_read_at)
   execute function public.read_message_notice();
 
+-- A chat that closes (unmatch, block, a deleted account) and a request no longer waiting take their
+-- unread notices with them, so the bell never points at something that is gone.
+create or replace function public.read_closed_notices()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_table_name = 'conversations' then
+    update public.notifications set read_at = now()
+    where read_at is null and type in ('MESSAGE_RECEIVED', 'REQUEST_ACCEPTED')
+      and payload ->> 'conversation_id' = new.id::text;
+  else
+    update public.notifications set read_at = now()
+    where read_at is null and type = 'REQUEST_RECEIVED' and payload ->> 'request_id' = new.id::text;
+  end if;
+  return null;
+end;
+$$;
+create trigger conversations_read_notices after update of status on public.conversations
+  for each row when (new.status = 'CLOSED' and old.status is distinct from 'CLOSED')
+  execute function public.read_closed_notices();
+create trigger message_requests_read_notices after update of status on public.message_requests
+  for each row when (old.status = 'PENDING' and new.status <> 'PENDING')
+  execute function public.read_closed_notices();
+
+-- Review, account and payment notices (Phase 4 / 7) also skip deleted and banned accounts.
+create or replace function public.notify(p_user_id uuid, p_type public.notification_type, p_payload jsonb default '{}')
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.notifications (user_id, type, payload)
+  select p_user_id, p_type, coalesce(p_payload, '{}'::jsonb)
+  where exists (select 1 from public.users u where u.id = p_user_id and u.status not in ('DELETED', 'BANNED'));
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Reminders (§16): before a pass ends, and before a card plan renews. Each is sent once.
 -- ---------------------------------------------------------------------------
@@ -228,7 +270,8 @@ begin
     from public.subscriptions s
     where s.status in ('ACTIVE', 'CANCELLED', 'PAYMENT_FAILED') and s.expires_at > now()
     group by s.user_id
-    having max(s.expires_at) <= now() + make_interval(hours => v_hours)
+    -- An hour of slack so a late daily run never skips a pass.
+    having max(s.expires_at) <= now() + make_interval(hours => v_hours + 1)
        and min(s.starts_at) <= now()
        and not bool_or(s.source = 'CARD' and s.status = 'ACTIVE' and s.auto_renew and not s.cancel_at_period_end)
   loop
@@ -240,6 +283,24 @@ begin
   end loop;
   return v_count;
 end;
+$$;
+
+-- Renewals due for a reminder, with an hour of slack for the daily job (was exact in Phase 7b).
+create or replace function public.card_renewals_due()
+returns table (subscription_id uuid, user_id uuid, renews_at timestamptz)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select s.id, s.user_id, s.period_end
+  from public.subscriptions s
+  cross join (select (value #>> '{}')::int as hours from public.app_settings
+              where key = 'card.renewal_reminder_hours' and value is not null) r
+  where s.source = 'CARD' and s.status = 'ACTIVE' and s.auto_renew and not s.cancel_at_period_end
+    and s.period_end > now() and s.period_end <= now() + make_interval(hours => r.hours + 1)
+  order by s.period_end
+  limit 500;
 $$;
 
 create or replace function public.send_card_renewal_reminders()
@@ -372,6 +433,26 @@ begin
 end;
 $$;
 
+-- Every device failed for a passing reason: send it again on the next run (while still recent).
+create or replace function public.unclaim_push(p_ids uuid[])
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  update public.notifications set pushed_at = null where id = any(p_ids) and read_at is null;
+$$;
+
+create or replace function public.member_push_endpoint_is_mine(p_user uuid, p_endpoint text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.push_subscriptions where user_id = p_user and endpoint = p_endpoint);
+$$;
+
 -- The push service said this browser is gone (404 / 410): forget it.
 create or replace function public.drop_push_endpoint(p_endpoint text)
 returns void
@@ -403,6 +484,13 @@ revoke all on function public.delete_push_subscription(uuid, text) from public, 
 revoke all on function public.member_push_device_count(uuid) from public, anon, authenticated;
 revoke all on function public.claim_push_batch(uuid[], integer) from public, anon, authenticated;
 revoke all on function public.drop_push_endpoint(text) from public, anon, authenticated;
+revoke all on function public.unclaim_push(uuid[]) from public, anon, authenticated;
+revoke all on function public.member_push_endpoint_is_mine(uuid, text) from public, anon, authenticated;
+revoke all on function public.read_closed_notices() from public, anon, authenticated, service_role;
+revoke all on function public.card_renewals_due() from public, anon, authenticated;
+grant execute on function public.unclaim_push(uuid[]) to service_role;
+grant execute on function public.member_push_endpoint_is_mine(uuid, text) to service_role;
+grant execute on function public.card_renewals_due() to service_role;
 
 grant execute on function public.member_notification_prefs(uuid) to service_role;
 grant execute on function public.set_notification_prefs(uuid, jsonb) to service_role;

@@ -9,6 +9,7 @@ import { isAllowedCountry } from "@/lib/domain/geo";
 import { checkLiberianPhone, maskPhone } from "@/lib/domain/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { pushEndpointSchema } from "@/lib/validation/notifications";
 
 const GENERIC_SENT = "If this number has an account, we've sent it a code. No code? Wait a minute and resend.";
 
@@ -71,8 +72,19 @@ export async function verifyLoginCode(prev: PhoneStepState, formData: FormData):
   redirect(nextStepFor(member));
 }
 
-export async function signOut() {
+export async function signOut(formData?: FormData) {
   const supabase = await createClient();
+  // This phone stops getting the member's notifications (a shared phone must not show them to the next
+  // person). The endpoint comes from <PushEndpointField> in the form.
+  const endpoint = pushEndpointSchema.safeParse(formData?.get("pushEndpoint"));
+  if (endpoint.success) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await createAdminClient().rpc("delete_push_subscription", { p_user: user.id, p_endpoint: endpoint.data });
+    }
+  }
   await supabase.auth.signOut();
   redirect("/");
 }

@@ -47,3 +47,15 @@ export async function deletePushSubscription(endpoint: unknown): Promise<void> {
   if (!parsed.success) return;
   await createAdminClient().rpc("delete_push_subscription", { p_user: member.id, p_endpoint: parsed.data });
 }
+
+/** Is this browser's push address registered to the signed-in member (not someone who used the phone before)? */
+export async function pushEndpointIsMine(endpoint: unknown): Promise<boolean> {
+  const member = await requireMember();
+  const parsed = pushEndpointSchema.safeParse(endpoint);
+  if (!parsed.success) return false;
+  const { data } = await createAdminClient().rpc("member_push_endpoint_is_mine", {
+    p_user: member.id,
+    p_endpoint: parsed.data,
+  });
+  return data === true;
+}

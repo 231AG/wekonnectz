@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { signOut } from "@/lib/auth/actions/login";
 import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { PushEndpointField } from "@/components/notifications/push-endpoint-field";
 
 export const metadata = { title: "My profile" };
 
@@ -66,6 +67,7 @@ export default async function MePage() {
         ))}
       </nav>
       <form action={signOut} className="mt-auto">
+        <PushEndpointField />
         <Button type="submit" variant="outline">
           Log out
         </Button>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { deletePushSubscription, savePushSubscription } from "@/lib/notifications/actions";
+import { deletePushSubscription, pushEndpointIsMine, savePushSubscription } from "@/lib/notifications/actions";
 
 type State = "checking" | "unsupported" | "blocked" | "off" | "on" | "working";
 
@@ -33,7 +33,9 @@ function PushToggle({ publicKey }: { publicKey: string }) {
       }
       const reg = await navigator.serviceWorker.getRegistration("/");
       const sub = await reg?.pushManager.getSubscription();
-      if (!cancelled) setState(sub ? "on" : "off");
+      // "On" only if this browser is registered to the member signed in now, not to an earlier user.
+      const mine = sub ? await pushEndpointIsMine(sub.endpoint) : false;
+      if (!cancelled) setState(mine ? "on" : "off");
     })().catch(() => !cancelled && setState("unsupported"));
     return () => {
       cancelled = true;
@@ -51,6 +53,8 @@ function PushToggle({ publicKey }: { publicKey: string }) {
       }
       const reg = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
       await navigator.serviceWorker.ready;
+      // A subscription left by someone who used this phone before is replaced, never reused.
+      await (await reg.pushManager.getSubscription())?.unsubscribe();
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
       const result = await savePushSubscription(sub.toJSON());
       if (!result.ok) {

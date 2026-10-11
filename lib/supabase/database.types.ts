@@ -1326,6 +1326,9 @@ isOneToOne: false
 "member_push_device_count":
 { Args: { "p_user": string }; Returns: number
                            },
+"member_push_endpoint_is_mine":
+{ Args: { "p_endpoint": string,"p_user": string }; Returns: boolean
+                           },
 "member_reference_code":
 { Args: { "p_user": string }; Returns: string
                            },
@@ -1714,6 +1717,9 @@ isOneToOne: false
                            },
 "unblock_user":
 { Args: { "p_target": string,"p_user_id": string }; Returns: undefined
+                           },
+"unclaim_push":
+{ Args: { "p_ids": (string)[] }; Returns: undefined
                            },
 "unhide_member":
 { Args: { "p_target": string }; Returns: undefined

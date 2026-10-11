@@ -65,8 +65,28 @@ describe("web push (OD-25)", () => {
       pushSubscriptionSchema.safeParse({ endpoint: "https://fcm.googleapis.com/fcm/send/abc", keys }).success,
     ).toBe(true);
     expect(pushSubscriptionSchema.safeParse({ endpoint: "http://push.example.test/x", keys }).success).toBe(false);
+    // Only the browsers' push services: the server never calls an address a member chose.
+    expect(pushSubscriptionSchema.safeParse({ endpoint: "https://attacker.example.test/hook", keys }).success).toBe(
+      false,
+    );
+    expect(pushSubscriptionSchema.safeParse({ endpoint: "https://web.push.apple.com/abc", keys }).success).toBe(true);
+    expect(
+      pushSubscriptionSchema.safeParse({ endpoint: "https://updates.push.services.mozilla.com/wpush/v2/abc", keys })
+        .success,
+    ).toBe(true);
     expect(
       pushSubscriptionSchema.safeParse({ endpoint: "https://x.test/y", keys: { ...keys, auth: "no spaces!" } }).success,
     ).toBe(false);
+  });
+});
+
+describe("service worker", () => {
+  it("opens only our own pages (no //other.site)", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const sw = await readFile("public/push-sw.js", "utf8");
+    const check = new RegExp(sw.match(/\/\^\\\/\(\?!\\\/\)\//)![0].slice(1, -1));
+    expect(check.test("/messages")).toBe(true);
+    expect(check.test("//evil.example")).toBe(false);
+    expect(check.test("https://evil.example")).toBe(false);
   });
 });

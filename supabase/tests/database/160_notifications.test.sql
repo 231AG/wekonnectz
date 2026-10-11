@@ -1,7 +1,7 @@
 -- Phase 11: notifications (spec §16, §20; OD-25 in-app + web push).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(40);
+select plan(47);
 
 -- Fixtures (fictional): Musu, Joseph, Prince — verified ACTIVE members looking for Relationship and Casual.
 create function pg_temp.member(p_id uuid, p_name text, p_gender text, p_seeking text) returns void language plpgsql as $$
@@ -46,7 +46,7 @@ select set_config('request.jwt.claims', '{"sub":"cccccccc-1100-0000-0000-0000000
 select throws_ok($$ select * from public.push_subscriptions $$, '42501', null, 'members cannot read push subscriptions');
 select throws_ok($$ select public.member_notifications('cccccccc-1100-0000-0000-000000000002') $$, '42501', null,
   'members cannot read notifications through the server function (the server passes the session user)');
-select throws_ok($$ select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'https://push.example.test/x', repeat('a', 40), repeat('b', 16)) $$,
+select throws_ok($$ select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'https://fcm.googleapis.com/fcm/send/x', repeat('a', 40), repeat('b', 16)) $$,
   '42501', null, 'members cannot register a device for someone else');
 select is((select count(*)::int from public.notifications where user_id <> 'cccccccc-1100-0000-0000-000000000001'), 0,
   'RLS: a member sees only their own notifications');
@@ -73,6 +73,8 @@ returning id as req2 \gset
 update public.message_requests set status = 'DECLINED', responded_at = now() where id = :'req2';
 select is((select count(*)::int from public.notifications where user_id = 'cccccccc-1100-0000-0000-000000000003'), 0,
   'Q45: a declined sender is never notified');
+select ok((select read_at is not null from public.notifications where type = 'REQUEST_RECEIVED' and payload ->> 'request_id' = :'req2'),
+  'a request no longer waiting takes its notice with it');
 
 -- ---------------------------------------------------------------------------
 -- Matches and messages (§11, §12)
@@ -91,6 +93,13 @@ select is(pg_temp.count('cccccccc-1100-0000-0000-000000000001', 'MESSAGE_RECEIVE
 select is((select (payload ->> 'count')::int from public.notifications where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED'), 2,
   '…counting the messages');
 select ok((select payload::text !~ 'Hi Musu|How was' from public.notifications where type = 'MESSAGE_RECEIVED'), '§6 rule 7: no message text');
+update public.notifications set pushed_at = now() where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED';
+set local role service_role;
+select public.send_message('cccccccc-1100-0000-0000-000000000003', (select id from r where n = 'conv2'), 'Are you there?');
+reset role;
+select ok((select pushed_at is null and (payload ->> 'count')::int = 3 from public.notifications
+           where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED'),
+  'a later message bumps the notice and pushes it again');
 select is(pg_temp.count('cccccccc-1100-0000-0000-000000000003', 'MESSAGE_RECEIVED'), 0, 'the sender gets nothing');
 set local role service_role;
 select public.mark_conversation_read('cccccccc-1100-0000-0000-000000000001', (select id from r where n = 'conv2'));
@@ -170,7 +179,12 @@ reset role;
 set local role service_role;
 select throws_ok($$ select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'http://push.example.test/x', repeat('a', 40), repeat('b', 16)) $$,
   '23514', null, 'push endpoints must be https');
-select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'https://push.example.test/joseph', repeat('a', 40), repeat('b', 16));
+select throws_ok($$ select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'https://attacker.example.test/hook', repeat('a', 40), repeat('b', 16)) $$,
+  '23514', null, 'only the browsers'' push services are accepted (the server never calls an address a member chose)');
+select public.save_push_subscription('cccccccc-1100-0000-0000-000000000002', 'https://fcm.googleapis.com/fcm/send/joseph', repeat('a', 40), repeat('b', 16));
+select ok(public.member_push_endpoint_is_mine('cccccccc-1100-0000-0000-000000000002', 'https://fcm.googleapis.com/fcm/send/joseph')
+          and not public.member_push_endpoint_is_mine('cccccccc-1100-0000-0000-000000000001', 'https://fcm.googleapis.com/fcm/send/joseph'),
+  'a browser belongs to one member');
 select is(public.member_push_device_count('cccccccc-1100-0000-0000-000000000002'), 1, 'a device is registered');
 reset role;
 -- A fresh request for Joseph.
@@ -180,17 +194,27 @@ set local role service_role;
 select is((select count(*)::int from public.claim_push_batch(array['cccccccc-1100-0000-0000-000000000002']::uuid[]) where type = 'REQUEST_RECEIVED'), 1,
   'the new notice is claimed for push with the member''s devices');
 select is((select count(*)::int from public.claim_push_batch(array['cccccccc-1100-0000-0000-000000000002']::uuid[])), 0, 'and never pushed twice');
+select public.unclaim_push(array(select id from public.notifications where user_id = 'cccccccc-1100-0000-0000-000000000002' and type = 'REQUEST_RECEIVED' and read_at is null));
+select is((select count(*)::int from public.claim_push_batch(array['cccccccc-1100-0000-0000-000000000002']::uuid[])), 1,
+  'a push that failed on every device is tried again');
 select is((select count(*)::int from public.claim_push_batch(array['cccccccc-1100-0000-0000-000000000001']::uuid[])), 0,
   'members without a device are skipped');
-select public.drop_push_endpoint('https://push.example.test/joseph');
+select public.drop_push_endpoint('https://fcm.googleapis.com/fcm/send/joseph');
 select is(public.member_push_device_count('cccccccc-1100-0000-0000-000000000002'), 0, 'a gone browser is forgotten');
 reset role;
+
+-- A chat that closes (unmatch, block, deletion) reads its notices.
+update public.conversations set status = 'CLOSED', closed_reason = 'UNMATCHED', closed_at = now() where id = (select id from r where n = 'conv2');
+select is((select count(*)::int from public.notifications where payload ->> 'conversation_id' = (select id::text from r where n = 'conv2') and read_at is null), 0,
+  'BR-7: a closed chat leaves no unread notice');
 
 -- BR-7: a deleted member gets nothing.
 update public.users set status = 'DELETED', deleted_at = now() where id = 'cccccccc-1100-0000-0000-000000000003';
 insert into public.message_requests (sender_id, recipient_id, body, body_hash, expires_at)
 values ('cccccccc-1100-0000-0000-000000000001', 'cccccccc-1100-0000-0000-000000000003', 'Hi', md5('w'), now() + interval '2 hours');
 select is(pg_temp.count('cccccccc-1100-0000-0000-000000000003', 'REQUEST_RECEIVED'), 0, 'BR-7: a deleted account gets no notifications');
+select public.notify('cccccccc-1100-0000-0000-000000000003', 'PAYMENT_APPROVED', '{}');
+select is(pg_temp.count('cccccccc-1100-0000-0000-000000000003', 'PAYMENT_APPROVED'), 0, '…not even account or payment notices');
 
 select * from finish();
 rollback;

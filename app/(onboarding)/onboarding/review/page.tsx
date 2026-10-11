@@ -12,6 +12,7 @@ import { MEMBER_HOME, requireOnboardingStep } from "@/lib/auth/session";
 import { maskPhone } from "@/lib/domain/phone";
 import { reviewStatus } from "@/lib/storage/verification";
 import { createClient } from "@/lib/supabase/server";
+import { PushEndpointField } from "@/components/notifications/push-endpoint-field";
 
 export const metadata = { title: "We’re reviewing your profile" };
 
@@ -79,6 +80,7 @@ export default async function UnderReviewPage() {
             <Link href="/account/settings">Account settings</Link>
           </Button>
           <form action={signOut}>
+            <PushEndpointField />
             <Button type="submit" variant="ghost" size="md" className="w-full">
               Log out
             </Button>

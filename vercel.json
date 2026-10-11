@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/account-purge",
       "schedule": "57 3 * * *"
+    },
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "7 9 * * *"
     }
   ]
 }

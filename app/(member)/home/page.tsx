@@ -17,6 +17,7 @@ import { unreadNotifications } from "@/lib/notifications/server";
 import { paymentOptions } from "@/lib/storage/payments";
 import { relationshipSummary } from "@/lib/storage/relationship";
 import { createClient } from "@/lib/supabase/server";
+import { PushEndpointField } from "@/components/notifications/push-endpoint-field";
 
 export const metadata = { title: "Home" };
 
@@ -38,6 +39,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
               <Link href="/messages">Read your messages</Link>
             </Button>
             <form action={signOut}>
+              <PushEndpointField />
               <Button type="submit" variant="outline">
                 Log out
               </Button>
