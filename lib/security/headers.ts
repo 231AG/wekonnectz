@@ -5,7 +5,15 @@
  */
 
 /** Strict CSP for one page response: scripts only with this request's nonce ('strict-dynamic'). */
-export function buildCsp({ isDev, supabaseUrl, nonce }: { isDev: boolean; supabaseUrl?: string; nonce: string }): string {
+export function buildCsp({
+  isDev,
+  supabaseUrl,
+  nonce,
+}: {
+  isDev: boolean;
+  supabaseUrl?: string;
+  nonce: string;
+}): string {
   const supabase = supabaseUrl ? new URL(supabaseUrl).origin : "";
   const supabaseWs = supabase ? supabase.replace(/^http/, "ws") : "";
   const join = (...parts: string[]) => parts.filter(Boolean).join(" ");

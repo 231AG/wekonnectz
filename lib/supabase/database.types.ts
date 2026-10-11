@@ -1362,6 +1362,9 @@ isOneToOne: false
 "otp_send_allowed":
 { Args: { "p_phone": string }; Returns: boolean
                            },
+"otp_verify_allowed":
+{ Args: { "p_ip": string,"p_phone": string }; Returns: boolean
+                           },
 "pass_user":
 { Args: { "p_target": string,"p_viewer": string }; Returns: undefined
                            },

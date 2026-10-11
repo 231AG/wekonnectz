@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { clearPendingDob, getPendingDob, isAgeBlocked, setAgeBlock, setPendingDob } from "@/lib/auth/cookies";
 import { currentRequestCountry, currentRequestIp } from "@/lib/auth/request-context";
+import { otpAttemptAllowed } from "@/lib/auth/otp-guard";
 import { canHoldSession, getMember, nextStepFor } from "@/lib/auth/session";
 import type { AgeGateState, PhoneStepState } from "@/lib/auth/actions/types";
 import { checkAdult, toIsoDate } from "@/lib/domain/age";
@@ -134,6 +135,7 @@ export async function verifySignupCode(prev: PhoneStepState, formData: FormData)
     sentAt: prev.stage === "code" ? prev.sentAt : Date.now(),
   };
   if (code.length !== 6) return { ...codeState, error: MESSAGES.badCode };
+  if (!(await otpAttemptAllowed(phone.e164))) return { ...codeState, error: MESSAGES.rateLimited };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: code, type: "sms" });

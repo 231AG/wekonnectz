@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { currentRequestCountry, currentRequestIp } from "@/lib/auth/request-context";
+import { otpAttemptAllowed } from "@/lib/auth/otp-guard";
 import { canHoldSession, getMember, nextStepFor } from "@/lib/auth/session";
 import type { PhoneStepState } from "@/lib/auth/actions/types";
 import { isAllowedCountry } from "@/lib/domain/geo";
@@ -58,6 +59,7 @@ export async function verifyLoginCode(prev: PhoneStepState, formData: FormData):
     sentAt: prev.stage === "code" ? prev.sentAt : Date.now(),
   };
   if (code.length !== 6) return { ...codeState, error: "That code is wrong or has expired." };
+  if (!(await otpAttemptAllowed(phone.e164))) return { ...codeState, error: "Too many attempts. Try again later." };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: code, type: "sms" });

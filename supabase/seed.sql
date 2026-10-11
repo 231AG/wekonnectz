@@ -122,3 +122,8 @@ update public.app_settings set value = '5'::jsonb where key = 'export.max_per_da
 
 -- DEV-ONLY pass expiry reminder until the owner approves T-19 (§16 says "expiry reminders", no lead time).
 update public.app_settings set value = '24'::jsonb where key = 'notifications.pass_expiry_warning_hours'; -- DEV-ONLY
+
+-- DEV-ONLY Phase 12 limits until the owner approves T-19 / the abandoned sign-up period.
+update public.app_settings set value = '20'::jsonb where key = 'otp.max_verify_per_phone_per_hour';  -- DEV-ONLY
+update public.app_settings set value = '500'::jsonb where key = 'otp.max_verify_per_ip_per_hour';    -- DEV-ONLY
+update public.app_settings set value = '30'::jsonb where key = 'account.abandoned_signup_days';      -- DEV-ONLY
