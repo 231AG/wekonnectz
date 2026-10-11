@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireStaff } from "@/lib/auth/staff";
 import { REJECTION_REASON_KEYS } from "@/lib/photos/reasons";
 import { createClient } from "@/lib/supabase/server";
+import { pushSoon } from "@/lib/notifications/push";
 
 export type ReviewState = { error?: string; done?: "approved" | "rejected" };
 
@@ -21,6 +22,7 @@ const schema = z.discriminatedUnion("decision", [
  */
 export async function reviewPhotoAction(_prev: ReviewState, formData: FormData): Promise<ReviewState> {
   await requireStaff();
+  pushSoon();
   const parsed = schema.safeParse({
     photoId: formData.get("photoId"),
     decision: formData.get("decision"),

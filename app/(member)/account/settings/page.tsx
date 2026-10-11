@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Download, LockKeyhole, Trash2 } from "lucide-react";
+import { Bell, ChevronRight, Download, LockKeyhole, Trash2 } from "lucide-react";
 
 import { BackLink } from "@/components/account/back-link";
 import { MobileScreen, ScreenLead, ScreenTitle } from "@/components/layout/mobile-screen";
@@ -23,6 +23,18 @@ export default async function SettingsPage() {
             <Card className="flex items-center gap-3.5 hover:bg-surface-2">
               <LockKeyhole className="size-6 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
               <span className="flex-1 font-bold">Privacy & messaging</span>
+              <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
+            </Card>
+          </Link>
+        ) : null}
+        {active ? (
+          <Link
+            href="/account/notifications"
+            className="rounded-card focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <Card className="flex items-center gap-3.5 hover:bg-surface-2">
+              <Bell className="size-6 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
+              <span className="flex-1 font-bold">Notifications</span>
               <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
             </Card>
           </Link>

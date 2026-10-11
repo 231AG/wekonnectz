@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { requireMember } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { pushSoon } from "@/lib/notifications/push";
 
 /**
  * Relationship actions (spec §15). The member id comes from the session; like_user() decides
@@ -28,6 +29,7 @@ function messageFor(error: { message: string }): string {
 
 export async function likeMember(targetId: string): Promise<LikeResult> {
   const member = await requireMember();
+  pushSoon();
   const parsed = z.uuid().safeParse(targetId);
   if (!parsed.success) return { error: GENERIC };
   const { data, error } = await createAdminClient().rpc("like_user", { p_viewer: member.id, p_target: parsed.data });

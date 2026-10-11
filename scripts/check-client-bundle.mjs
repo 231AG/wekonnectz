@@ -19,6 +19,7 @@ const FORBIDDEN_NAMES = [
   "SUPABASE_JWT_SECRET",
   "FAKE_CARD_WEBHOOK_SECRET",
   "CARD_WEBHOOK_SECRET",
+  "VAPID_PRIVATE_KEY",
 ];
 const SECRET_KEY_PREFIX = /\bsb_secret_[A-Za-z0-9_-]{10,}/;
 const JWT = /eyJ[A-Za-z0-9_-]{10,}\.(eyJ[A-Za-z0-9_-]{10,})\.[A-Za-z0-9_-]{10,}/g;
@@ -34,6 +35,7 @@ const secretValues = [
   "SMS_API_KEY",
   "FAKE_CARD_WEBHOOK_SECRET",
   "CARD_WEBHOOK_SECRET",
+  "VAPID_PRIVATE_KEY",
 ]
   .map((name) => process.env[name])
   .filter((v) => typeof v === "string" && v.length >= 16);

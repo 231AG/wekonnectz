@@ -23,6 +23,15 @@ const schema = z.object({
   ALLOW_FAKE_CARD_PROCESSOR: z.preprocess(emptyToUndefined, z.enum(["0", "1"]).optional()),
   CARD_PROCESSOR: z.preprocess(emptyToUndefined, z.enum(["fake"]).optional()),
   FAKE_CARD_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
+  // Web push (OD-25, T-20). Off unless both are set with NEXT_PUBLIC_VAPID_PUBLIC_KEY.
+  VAPID_PRIVATE_KEY: z.preprocess(emptyToUndefined, z.string().min(40).optional()),
+  VAPID_SUBJECT: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^(mailto:|https:\/\/)/)
+      .optional(),
+  ),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

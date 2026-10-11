@@ -4,6 +4,7 @@ import { BadgeCheck, ChevronRight, Flame, Heart, ShieldCheck } from "lucide-reac
 
 import { Logo } from "@/components/brand/logo";
 import { MemberShell } from "@/components/layout/member-shell";
+import { BellLink } from "@/components/notifications/bell-link";
 import { MobileScreen, ScreenLead, ScreenTitle } from "@/components/layout/mobile-screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { nextStepFor, requireMember } from "@/lib/auth/session";
 import { formatLiberiaTime } from "@/lib/domain/money";
 import { memberAvailability } from "@/lib/availability/server";
 import { formatWindowTime } from "@/lib/domain/availability";
+import { unreadNotifications } from "@/lib/notifications/server";
 import { paymentOptions } from "@/lib/storage/payments";
 import { relationshipSummary } from "@/lib/storage/relationship";
 import { createClient } from "@/lib/supabase/server";
@@ -57,11 +59,12 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
     );
   }
 
-  const [summary, payments, availability, { data: profile }] = await Promise.all([
+  const [summary, payments, availability, { data: profile }, unread] = await Promise.all([
     relationshipSummary(member.id),
     paymentOptions(member.id),
     memberAvailability(member.id),
     (await createClient()).from("profiles").select("display_name").eq("user_id", member.id).single(),
+    unreadNotifications(member.id),
   ]);
   const verified = member.onboarding.verification === "VERIFIED";
   const relationshipLine = !summary.intentRelationship
@@ -76,6 +79,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
     <MemberShell>
       <header className="flex items-center justify-between">
         <Logo className="h-7 w-auto" />
+        <BellLink unread={unread} />
       </header>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-[34px] leading-tight font-bold">Hi, {profile?.display_name ?? "there"}</h1>

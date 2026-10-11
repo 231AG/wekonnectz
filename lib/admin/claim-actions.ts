@@ -7,6 +7,7 @@ import type { StaffActionState } from "@/lib/admin/report-actions";
 import { requireStaff } from "@/lib/auth/staff";
 import { signEvidence } from "@/lib/storage/payments";
 import { createClient } from "@/lib/supabase/server";
+import { pushSoon } from "@/lib/notifications/push";
 
 /**
  * Payment claims queue (spec §16, §21). ADMIN and above, with TOTP; the database checks the same
@@ -61,6 +62,7 @@ const CHECKS = ["foundInWallet", "amountMatches", "senderMatches", "timeMatches"
 
 export async function approveClaimAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
   await requireStaff("ADMIN");
+  pushSoon();
   const parsed = z
     .object({ claimId: z.uuid(), walletAmount: z.coerce.number().positive().multipleOf(0.01) })
     .safeParse({ claimId: formData.get("claimId"), walletAmount: formData.get("walletAmount") });
@@ -77,6 +79,7 @@ export async function approveClaimAction(_prev: StaffActionState, formData: Form
 
 export async function rejectClaimAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
   await requireStaff("ADMIN");
+  pushSoon();
   const parsed = z
     .object({ claimId: z.uuid(), reason: z.enum(REASONS, { error: "Choose a reason." }) })
     .safeParse({ claimId: formData.get("claimId"), reason: formData.get("reason") || undefined });
@@ -92,6 +95,7 @@ export async function rejectClaimAction(_prev: StaffActionState, formData: FormD
 
 export async function needsInfoAction(_prev: StaffActionState, formData: FormData): Promise<StaffActionState> {
   await requireStaff("ADMIN");
+  pushSoon();
   const parsed = z
     .object({ claimId: z.uuid(), question: z.string().trim().min(1).max(300) })
     .safeParse({ claimId: formData.get("claimId"), question: formData.get("question") });

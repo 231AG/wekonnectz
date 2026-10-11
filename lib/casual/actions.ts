@@ -9,6 +9,7 @@ import { getDetectionTerms } from "@/lib/content/terms";
 import { detect } from "@/lib/domain/detection";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requestSchema } from "@/lib/validation/requests";
+import { pushSoon } from "@/lib/notifications/push";
 
 /**
  * Casual requests and saved profiles (spec §13, §14). The member id comes from the session; the
@@ -39,6 +40,7 @@ function messageFor(error: { message: string }): string {
 
 export async function sendRequest(_prev: RequestFormState, formData: FormData): Promise<RequestFormState> {
   const member = await requireMember();
+  pushSoon();
   const parsed = requestSchema.safeParse({ recipientId: formData.get("recipientId"), body: formData.get("body") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? GENERIC };
   // BR-31 / OD-31: requests are first contact, so the profile rules apply.
@@ -62,6 +64,7 @@ const respondSchema = z.object({
 
 export async function respondToRequest(formData: FormData): Promise<void> {
   const member = await requireMember();
+  pushSoon();
   const parsed = respondSchema.safeParse({ requestId: formData.get("requestId"), action: formData.get("action") });
   if (!parsed.success) redirect("/messages/requests?error=1");
   const { data, error } = await createAdminClient().rpc("respond_to_request", {

@@ -8,6 +8,7 @@ import { requireStaff } from "@/lib/auth/staff";
 import { signVerificationReview } from "@/lib/storage/verification";
 import { createClient } from "@/lib/supabase/server";
 import { VERIFICATION_REASON_KEYS } from "@/lib/verification/reasons";
+import { pushSoon } from "@/lib/notifications/push";
 
 export type VerificationReviewState = { error?: string };
 
@@ -33,6 +34,7 @@ export async function reviewVerificationAction(
   formData: FormData,
 ): Promise<VerificationReviewState> {
   await requireStaff();
+  pushSoon();
   const parsed = schema.safeParse({
     verificationId: formData.get("verificationId"),
     decision: formData.get("decision"),

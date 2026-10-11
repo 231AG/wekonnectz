@@ -9,6 +9,7 @@ import { conversationView, type ChatMessage } from "@/lib/storage/relationship";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ReportCategory } from "@/lib/safety/categories";
 import { conversationReportSchema, messageSchema } from "@/lib/validation/messages";
+import { pushSoon } from "@/lib/notifications/push";
 
 /**
  * Messaging (spec §14). Text only and no links (a send rule). The detection engine runs in
@@ -28,6 +29,7 @@ const GENERIC = "Something went wrong. Try again.";
 
 export async function sendMessage(conversationId: string, body: string): Promise<SendResult> {
   const member = await requireMember();
+  pushSoon();
   const parsed = messageSchema.safeParse({ conversationId, body });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? GENERIC };
   if (containsLink(parsed.data.body)) return { error: "Links can’t be sent in chat." };
