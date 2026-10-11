@@ -28,4 +28,5 @@ SMS or email notifications (OD-25: SMS only for OTP; WhatsApp excluded by §24).
 ## Self-audit
 
 - **Round 1** (0 HIGH, 4 MEDIUM, 9 LOW): later messages in a chat were never pushed (the bump now re-queues the push; one unread notice per chat is enforced by a unique index); one member's bogus push address could stall delivery and be used to make the server call any https URL (push-service allowlist in the action and the database, timeouts, parallel sends, retry when every device fails); reminders could be skipped by a daily job with a short warning time (own mid-morning job, 24-hour minimum, an hour of slack, all batches pushed); a shared phone kept getting the previous member's pushes (sign-out removes this phone's registration; the toggle checks the device belongs to the member signed in now). Also: closed chats and finished requests clear their notices, `notify()` skips deleted / banned accounts, the service worker refuses `//` links.
-- **Round 2**: see the report.
+- **Round 2** (1 MEDIUM, 7 LOW): the triggers that clear notices scanned the whole table (two partial indexes, confirmed with EXPLAIN); a busy chat now re-pushes at most every two minutes.
+- **Round 3**: clean. Noted: a message arriving within two minutes of a push, with nothing after it, updates the in-app count but isn't pushed on its own.
