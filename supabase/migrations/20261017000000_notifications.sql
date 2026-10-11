@@ -21,6 +21,11 @@ create index notifications_push_due_idx on public.notifications (created_at) whe
 -- One unread message notice per conversation, even when two messages arrive at once.
 create unique index notifications_one_unread_message_idx on public.notifications (user_id, (payload ->> 'conversation_id'))
   where type = 'MESSAGE_RECEIVED' and read_at is null;
+-- Closing a chat or finishing a request reads its notices (triggers below): found by id, not by scan.
+create index notifications_unread_by_request_idx on public.notifications ((payload ->> 'request_id'))
+  where type = 'REQUEST_RECEIVED' and read_at is null;
+create index notifications_unread_by_conversation_idx on public.notifications ((payload ->> 'conversation_id'))
+  where type in ('MESSAGE_RECEIVED', 'REQUEST_ACCEPTED') and read_at is null;
 -- The card reminder runs from the same daily job.
 update public.app_settings set min_value = 24 where key = 'card.renewal_reminder_hours';
 
@@ -117,7 +122,10 @@ begin
     -- Bumped, and pushed again (the phone replaces the earlier notice for that chat).
     insert into public.notifications (user_id, type, payload) values (p_user, p_type, p_payload)
     on conflict (user_id, (payload ->> 'conversation_id')) where type = 'MESSAGE_RECEIVED' and read_at is null
-    do update set created_at = now(), pushed_at = null,
+    -- Pushed again at most every two minutes, so a fast chat doesn't buzz the phone for every line.
+    do update set created_at = now(),
+                  pushed_at = case when public.notifications.pushed_at < now() - interval '2 minutes' then null
+                                   else public.notifications.pushed_at end,
                   payload = public.notifications.payload
                             || jsonb_build_object('count', coalesce((public.notifications.payload ->> 'count')::int, 1) + 1);
     return;

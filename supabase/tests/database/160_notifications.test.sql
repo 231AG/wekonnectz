@@ -1,7 +1,7 @@
 -- Phase 11: notifications (spec §16, §20; OD-25 in-app + web push).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(48);
 
 -- Fixtures (fictional): Musu, Joseph, Prince — verified ACTIVE members looking for Relationship and Casual.
 create function pg_temp.member(p_id uuid, p_name text, p_gender text, p_seeking text) returns void language plpgsql as $$
@@ -93,13 +93,19 @@ select is(pg_temp.count('cccccccc-1100-0000-0000-000000000001', 'MESSAGE_RECEIVE
 select is((select (payload ->> 'count')::int from public.notifications where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED'), 2,
   '…counting the messages');
 select ok((select payload::text !~ 'Hi Musu|How was' from public.notifications where type = 'MESSAGE_RECEIVED'), '§6 rule 7: no message text');
-update public.notifications set pushed_at = now() where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED';
+update public.notifications set pushed_at = now() - interval '5 minutes' where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED';
 set local role service_role;
 select public.send_message('cccccccc-1100-0000-0000-000000000003', (select id from r where n = 'conv2'), 'Are you there?');
 reset role;
 select ok((select pushed_at is null and (payload ->> 'count')::int = 3 from public.notifications
            where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED'),
   'a later message bumps the notice and pushes it again');
+update public.notifications set pushed_at = now() where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED';
+set local role service_role;
+select public.send_message('cccccccc-1100-0000-0000-000000000003', (select id from r where n = 'conv2'), 'Hello?');
+reset role;
+select ok((select pushed_at is not null from public.notifications where user_id = 'cccccccc-1100-0000-0000-000000000001' and type = 'MESSAGE_RECEIVED'),
+  '…but not again within two minutes of the last push');
 select is(pg_temp.count('cccccccc-1100-0000-0000-000000000003', 'MESSAGE_RECEIVED'), 0, 'the sender gets nothing');
 set local role service_role;
 select public.mark_conversation_read('cccccccc-1100-0000-0000-000000000001', (select id from r where n = 'conv2'));
