@@ -1,4 +1,7 @@
+import { execFileSync } from "node:child_process";
+
 import { expect, test } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   adminClient,
@@ -329,6 +332,49 @@ test("wrong code shows a neutral error", async ({ page }) => {
   await enterCode(page, code === "000000" ? "111111" : "000000");
   await expect(page.getByRole("alert").filter({ hasText: "That code is wrong or has expired." })).toBeVisible();
   await page.screenshot({ path: `${SHOTS_P1}/login-error-wrong-code.png` });
+});
+
+test("§22: codes can't be guessed at Supabase Auth's public endpoint — the SMS code isn't Auth's, and Auth's own code opens no session", async () => {
+  const phone = randomLiberianPhone();
+  await createMember(phone.e164);
+  const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const since = Date.now();
+  expect((await anon.auth.signInWithOtp({ phone: phone.e164, options: { shouldCreateUser: false } })).error).toBeNull();
+  const smsCode = await readOtp(phone.e164, since);
+
+  // The code the member receives is checked only by our server.
+  const direct = await anon.auth.verifyOtp({ phone: phone.e164, token: smsCode, type: "sms" });
+  expect(direct.data.session).toBeNull();
+
+  // Even Auth's real code (read from the local database here; never sent to anyone) gets no session
+  // without our server's one-minute ticket.
+  const authCode = execFileSync("docker", [
+    "exec",
+    "supabase_db_wekonnectz",
+    "psql",
+    "-U",
+    "postgres",
+    "-tAc",
+    `select auth_code from public.otp_challenges where phone_hash = public.phone_hash('${phone.e164}')`,
+  ])
+    .toString()
+    .trim();
+  expect(authCode).toMatch(/^\d{6}$/);
+  const withAuthCode = await anon.auth.verifyOtp({ phone: phone.e164, token: authCode, type: "sms" });
+  expect(withAuthCode.data.session).toBeNull();
+  expect(withAuthCode.error?.message).toContain("Sign in through the WeKonnectz app");
+
+  // Through our server (code checked, ticket issued) the same code works once.
+  const { data } = await adminClient()
+    .rpc("otp_check_code", { p_phone: phone.e164, p_ip: "e2e", p_code: smsCode })
+    .single();
+  const check = data as { outcome: string; auth_code: string | null };
+  expect(check.outcome).toBe("OK");
+  expect(check.auth_code).toBe(authCode);
+  const viaServer = await anon.auth.verifyOtp({ phone: phone.e164, token: check.auth_code!, type: "sms" });
+  expect(viaServer.data.session).not.toBeNull();
 });
 
 test("BR-6: banning ends an existing session, blocks sign-in, and BR-3: the number cannot sign up again", async ({

@@ -323,15 +323,20 @@ Settings (no values in the migration; DEV-ONLY in `seed.sql`): `account.deletion
 
 Settings: `notifications.pass_expiry_warning_hours` (T-19; DEV-ONLY 24 in `seed.sql`).
 
-### Phase 12 ✅ (`20261018000000_hardening.sql`) — hardening
+### Phase 12 ✅ (`20261018000000_hardening.sql`, `20261018100000_otp_challenges.sql`) — hardening
 
-No new tables.
+| Table            | Key columns                                                       | Client access | Notes                                                                                       |
+| ---------------- | ----------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------- |
+| `otp_challenges` | phone_hash (pk), auth_code, code_hash, sent_at, ticket_expires_at | none          | One per phone: Auth's code, a keyed hash of the code we texted, a one-minute sign-in ticket |
 
-| Function                               | Callable by  | Purpose                                                                                                                                                 |
-| -------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `otp_verify_allowed(phone, ip)`        | service_role | Counts a code check per phone and per client IP (`rate_limit_hit`); false when either limit is reached; raises while the settings are empty             |
-| `accounts_due_for_purge()` (redefined) | service_role | Deleted / banned accounts past OD-7, **plus** abandoned PENDING sign-ups past `account.abandoned_signup_days` with nothing in review and no open report |
-| `discover_candidates()` (redefined)    | service_role | Same rules as before, as one set-based query (≈700 ms → ≈140 ms for 3,000 members in `scripts/load-check.sql`)                                          |
+| Function                                                | Callable by         | Purpose                                                                                                                                                 |
+| ------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_otp_challenge(phone, auth_code, member_code)`   | service_role        | Send-SMS hook: keeps Auth's code and a hash of the code we text                                                                                         |
+| `otp_check_code(phone, ip, code)`                       | service_role        | Counts the attempt per phone and per IP; on a match returns Auth's code and opens the ticket                                                            |
+| `hook_custom_access_token(event)`                       | supabase_auth_admin | Auth hook: a member session opens only with the ticket (once); refresh and staff unaffected                                                             |
+| `hook_password_verification_attempt(event)` (redefined) | supabase_auth_admin | Also counts staff password failures per account and refuses at the limit                                                                                |
+| `accounts_due_for_purge()` (redefined)                  | service_role        | Deleted / banned accounts past OD-7, **plus** abandoned PENDING sign-ups past `account.abandoned_signup_days` with nothing in review and no open report |
+| `discover_candidates()` (redefined)                     | service_role        | Same rules as before, as one set-based query (≈700 ms → ≈140 ms for 3,000 members in `scripts/load-check.sql`)                                          |
 
 Settings (SUPER_ADMIN, T-19; DEV-ONLY values in `seed.sql`): `otp.max_verify_per_phone_per_hour`,
 `otp.max_verify_per_ip_per_hour`, `account.abandoned_signup_days`.

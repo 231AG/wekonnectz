@@ -306,10 +306,11 @@ enabled = true
 uri = "env(SEND_SMS_HOOK_URI)"
 secrets = "env(SEND_SMS_HOOK_SECRET)"
 
-# This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
-# [auth.hook.custom_access_token]
-# enabled = true
-# uri = "pg-functions://<database>/<schema>/<hook_name>"
+# WeKonnectz: a member session opens only after our server checked the sign-in code (Phase 12 audit);
+# a code guessed at Auth's public /verify endpoint gets no session.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/hook_custom_access_token"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 # WeKonnectz: the Send-SMS hook above delivers every SMS, so this provider is never called.

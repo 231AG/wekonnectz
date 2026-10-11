@@ -466,6 +466,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"otp_challenges": {
+                  Row: {
+                    "auth_code": string,"code_hash": string,"phone_hash": string,"sent_at": string,"ticket_expires_at": string | null
+                  }
+                  Insert: {
+                    "auth_code": string,"code_hash": string,"phone_hash": string,"sent_at"?: string,"ticket_expires_at"?: string | null
+                  }
+                  Update: {
+                    "auth_code"?: string,"code_hash"?: string,"phone_hash"?: string,"sent_at"?: string,"ticket_expires_at"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"passes": {
                   Row: {
                     "created_at": string,"id": string,"receiver_id": string,"sender_id": string
@@ -1168,6 +1181,9 @@ isOneToOne: false
 "hook_before_user_created":
 { Args: { "event": Json }; Returns: Json
                            },
+"hook_custom_access_token":
+{ Args: { "event": Json }; Returns: Json
+                           },
 "hook_password_verification_attempt":
 { Args: { "event": Json }; Returns: Json
                            },
@@ -1356,14 +1372,16 @@ isOneToOne: false
 "onboarding_progress_for":
 { Args: { "p_user_id": string }; Returns: Json
                            },
+"otp_check_code":
+{ Args: { "p_code": string,"p_ip": string,"p_phone": string }; Returns: {
+              "auth_code": string,"outcome": string
+            }[]
+                           },
 "otp_ip_allowed":
 { Args: { "p_ip": string }; Returns: boolean
                            },
 "otp_send_allowed":
 { Args: { "p_phone": string }; Returns: boolean
-                           },
-"otp_verify_allowed":
-{ Args: { "p_ip": string,"p_phone": string }; Returns: boolean
                            },
 "pass_user":
 { Args: { "p_target": string,"p_viewer": string }; Returns: undefined
@@ -1412,6 +1430,9 @@ isOneToOne: false
                            },
 "record_card_charge":
 { Args: { "p_at": string,"p_event": Json,"p_sub": Database["public"]['Tables']["subscriptions"]['Row'] }; Returns: string
+                           },
+"record_otp_challenge":
+{ Args: { "p_auth_code": string,"p_member_code": string,"p_phone": string }; Returns: undefined
                            },
 "record_staff_sign_in_failure":
 { Args: { "p_account": string,"p_ip": string }; Returns: undefined

@@ -204,10 +204,23 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
   if the set of client-readable tables changes, if anon can read anything but legal documents, if any table lacks
   RLS, if a SECURITY DEFINER function has no pinned `search_path`, if any function is executable by PUBLIC, if a view
   appears, if a table joins the Realtime publication, or if a bucket is public or unlimited.
-- **OTP code guessing.** Supabase Auth only sees our server's IP, so its own verify limits can't tell members apart.
-  `otp_verify_allowed()` counts code attempts per phone and per client IP before each `verifyOtp`, and fails closed.
-- **Abandoned sign-ups** (still PENDING, nothing waiting for review, no open report) are purged by the daily job
-  after `account.abandoned_signup_days`, through the same `purge_account_content()` as deleted accounts.
+- **OTP code guessing.** Supabase Auth's `/verify` endpoint is public (anon key), and the calls our server makes all
+  come from one IP, so neither our server action nor Auth's own limits alone can stop guessing. So:
+  - the SMS carries **our own code**, not Auth's. The Send-SMS hook keeps Auth's code and a keyed hash of ours
+    (`otp_challenges`, no client access);
+  - our server checks the member's code with `otp_check_code()`: every attempt counts per phone and per client IP,
+    fails closed; only a right code returns Auth's code and opens a **one-minute, single-use ticket**;
+  - the **custom access token hook** refuses to open any member session without that ticket. A code verified straight
+    at `/verify` — even Auth's real one — gets no session (e2e: "codes can't be guessed at Supabase Auth's public
+    endpoint"). Refreshing an existing session and staff sign-ins are unaffected.
+  - Accepted trade-offs: anyone can use up one number's hourly attempts (that member waits an hour; CAPTCHA, T-25,
+    reduces this); carriers in Liberia share IPs (CGNAT), so the per-IP limit must be sized generously (T-19).
+- **Staff passwords.** The per-account failure limit is counted in the password-verification hook, so it also covers
+  sign-ins sent straight to Supabase Auth; the server action adds the per-IP limits. TOTP is still required.
+- **Abandoned sign-ups** are purged by the daily job after `account.abandoned_signup_days` of no activity (sign-in,
+  session refresh, profile, photo or selfie), through the same `purge_account_content()` as deleted accounts — only
+  when the account never went live, staff never acted on it, it has no passes, payments, claims or chats, and nothing
+  is waiting for review (photos, selfie, open report or flag).
 - **App install and offline (PWA).** One service worker (`/sw.js`, served `no-cache`). It caches only the offline
   screen and one icon, handles page navigations only (network first), and never caches member pages, API responses,
   photos or signed URLs.
@@ -218,21 +231,21 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 
 ### Rate limits (review)
 
-| What                   | Limit (setting)                                                                                       | Where enforced                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| OTP sends              | per phone and per IP per hour (`otp.max_per_phone_per_hour`, `otp.max_per_ip_per_hour`) + 60 s resend | DB, before Auth; Supabase `sms_sent` project cap |
-| OTP code checks        | per phone and per IP per hour (`otp.max_verify_per_phone_per_hour`, `otp.max_verify_per_ip_per_hour`) | DB, before `verifyOtp`                           |
-| Staff sign-in failures | per IP, per account+IP, per account (`staff_login.*`)                                                 | DB, password hook                                |
-| Photo uploads          | per member per hour (`photos.max_uploads_per_hour`), max photos per member                            | DB                                               |
-| Reports                | per member per day (`reports.per_user_per_day`)                                                       | DB                                               |
-| Likes                  | per 24 h (`relationship.daily_like_cap`)                                                              | DB                                               |
-| Messages               | per minute (`messages.max_per_minute`), 1000 characters                                               | DB                                               |
-| Casual requests        | per day (`requests.daily_cap`), decline cooldown, burst flag                                          | DB                                               |
-| Payment claims         | open claims at once (`claims.max_pending`)                                                            | DB                                               |
-| Card checkouts         | one pending checkout per member (a new one expires the old)                                           | DB                                               |
-| Availability changes   | per hour (`availability.max_changes_per_hour`)                                                        | DB                                               |
-| Data exports           | per day (`export.max_per_day`)                                                                        | DB                                               |
-| Push devices           | 10 per member                                                                                         | DB                                               |
+| What                   | Limit (setting)                                                                                                                                           | Where enforced                                               |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| OTP sends              | per phone and per IP per hour (`otp.max_per_phone_per_hour`, `otp.max_per_ip_per_hour`) + 60 s resend                                                     | DB, before Auth; Supabase `sms_sent` project cap             |
+| OTP code checks        | per phone and per IP per hour (`otp.max_verify_per_phone_per_hour`, `otp.max_verify_per_ip_per_hour`)                                                     | DB (`otp_check_code`); sessions need its ticket (token hook) |
+| Staff sign-in failures | per IP and per account+IP (`staff_login.max_per_ip_per_hour`, `…max_per_account_per_hour`); per account from any IP (`…max_per_account_all_ips_per_hour`) | server action (IP); password hook (account)                  |
+| Photo uploads          | per member per hour (`photos.max_uploads_per_hour`), max photos per member                                                                                | DB                                                           |
+| Reports                | per member per day (`reports.per_user_per_day`)                                                                                                           | DB                                                           |
+| Likes                  | per 24 h (`relationship.daily_like_cap`)                                                                                                                  | DB                                                           |
+| Messages               | per minute (`messages.max_per_minute`), 1000 characters                                                                                                   | DB                                                           |
+| Casual requests        | per day (`requests.daily_cap`), decline cooldown, burst flag                                                                                              | DB                                                           |
+| Payment claims         | open claims at once (`claims.max_pending`)                                                                                                                | DB                                                           |
+| Card checkouts         | one pending checkout per member (a new one expires the old)                                                                                               | DB                                                           |
+| Availability changes   | per hour (`availability.max_changes_per_hour`)                                                                                                            | DB                                                           |
+| Data exports           | per day (`export.max_per_day`)                                                                                                                            | route, counted in the DB                                     |
+| Push devices           | 10 per member                                                                                                                                             | DB                                                           |
 
 Not limited, judged low risk: profile and interest edits, blocks, saves, notification preference changes. Each is a
 small write to the member's own rows behind a signed-in session; the content checks still run on every profile

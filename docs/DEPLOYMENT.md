@@ -50,7 +50,7 @@ Authentication → Sign In / Providers:
 - Phone provider: on, **confirm phone: on**. SMS goes through the Send-SMS hook below, so the provider's own SMS
   settings are unused.
 - Email provider: on (staff only), with sign-ups off. Minimum password length 12; lower + upper case + digits.
-- OTP expiry for SMS: 5–10 minutes is enough (the screen offers "resend" after 60 s). Resend interval 60 s.
+- SMS OTP expiry: **5 minutes** (our server refuses codes older than 10 minutes anyway) (the screen offers "resend" after 60 s). Resend interval 60 s.
 
 Authentication → Multi-factor: **TOTP on**. Phone MFA off.
 
@@ -60,6 +60,7 @@ Authentication → Hooks:
 | ----------------------------- | -------- | ----------------------------------------------- |
 | Before user created           | Postgres | `public.hook_before_user_created`               |
 | Password verification attempt | Postgres | `public.hook_password_verification_attempt`     |
+| Custom access token           | Postgres | `public.hook_custom_access_token`               |
 | Send SMS                      | HTTPS    | `https://<your-domain>/api/auth/hooks/send-sms` |
 
 When you add the Send SMS hook, Supabase generates a secret that starts with `v1,whsec_`. Put it in Vercel as
@@ -71,6 +72,8 @@ own per-phone and per-IP limits run first (see `SECURITY.md` → Rate limits). S
 - SMS sent per hour (whole project): sized to launch traffic, e.g. 500 (T-19).
 - Sign-ups and sign-ins per 5 min per IP: e.g. 300.
 - Token refreshes per 5 min per IP: e.g. 300.
+- Token verifications per 5 min per IP: **low, e.g. 30**. Our server makes one verify per correct code; guesses
+  sent straight to Supabase are refused by the custom access token hook anyway (they never open a session).
 
 Project Settings → Realtime: **turn off "Allow public access"** (T-28).
 
@@ -81,27 +84,27 @@ Storage: the buckets, size limits and policies come from the migrations. Nothing
 1. vercel.com → Add New → Project → import the GitHub repository. Framework: Next.js (detected). Install command
    `pnpm install`, build command `pnpm build` (defaults).
 2. **Plan.** Vercel's free Hobby plan is for non-commercial use only; WeKonnectz takes payments, so production
-   should be on **Pro**. Hobby is fine for a private staging copy. All our cron jobs are daily, which Hobby allows.
+   should be on **Pro**. Hobby is fine for a private staging copy. All five of our cron jobs are daily, which Hobby allows (Hobby runs each one some time within its hour; Pro runs it on the minute).
 3. Settings → Functions → region: the one nearest your Supabase region (e.g. `lhr1` for London, `fra1` for Frankfurt).
    Every page talks to the database, so this matters more than being near users.
 4. Settings → Environment Variables (Production, and Preview if you use previews):
 
-| Variable                        | Value                                                     | Secret? |
-| ------------------------------- | --------------------------------------------------------- | ------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → API → URL                   | No      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page → anon / publishable key                        | No      |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Same page → service_role / secret key                     | **Yes** |
-| `APP_COOKIE_SECRET`             | 32+ random characters (password-manager generator)        | **Yes** |
-| `SEND_SMS_HOOK_SECRET`          | The `v1,whsec_…` value from the Send SMS hook             | **Yes** |
-| `SMS_PROVIDER`                  | `fake` for now (staging only). Changes when T-04 is done. | No      |
-| `CRON_SECRET`                   | 32+ random characters (T-27)                              | **Yes** |
-| `CARD_PAYMENTS_ENABLED`         | `0`                                                       | No      |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`  | From `pnpm exec web-push generate-vapid-keys` (T-20)      | No      |
-| `VAPID_PRIVATE_KEY`             | Same command (T-20)                                       | **Yes** |
-| `VAPID_SUBJECT`                 | `mailto:` + a support address you read                    | No      |
-| `NEXT_PUBLIC_SENTRY_DSN`        | Optional, from Sentry (T-17)                              | No      |
+| Variable                        | Value                                                                                         | Secret? |
+| ------------------------------- | --------------------------------------------------------------------------------------------- | ------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → API → URL                                                       | No      |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page → anon / publishable key                                                            | No      |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Same page → service_role / secret key                                                         | **Yes** |
+| `APP_COOKIE_SECRET`             | 32+ random characters (password-manager generator)                                            | **Yes** |
+| `SEND_SMS_HOOK_SECRET`          | The `v1,whsec_…` value from the Send SMS hook                                                 | **Yes** |
+| `SMS_PROVIDER`                  | `fake` for now — Preview deployments only (it refuses Production). Changes when T-04 is done. | No      |
+| `CRON_SECRET`                   | 32+ random characters (T-27)                                                                  | **Yes** |
+| `CARD_PAYMENTS_ENABLED`         | `0`                                                                                           | No      |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`  | From `pnpm exec web-push generate-vapid-keys` (T-20)                                          | No      |
+| `VAPID_PRIVATE_KEY`             | Same command (T-20)                                                                           | **Yes** |
+| `VAPID_SUBJECT`                 | `mailto:` + a support address you read                                                        | No      |
+| `NEXT_PUBLIC_SENTRY_DSN`        | Optional, from Sentry (T-17)                                                                  | No      |
 
-**Never set** on Vercel: `GEO_TRUST_HEADER`, `DEV_GEO_COUNTRY`, `ALLOW_FAKE_CARD_PROCESSOR`, `CARD_PROCESSOR`,
+Leave `SMS_DEV_OUTBOX_DIR` unset. **Never set** on Vercel: `GEO_TRUST_HEADER`, `DEV_GEO_COUNTRY`, `ALLOW_FAKE_CARD_PROCESSOR`, `CARD_PROCESSOR`,
 `FAKE_CARD_WEBHOOK_SECRET`, `ENABLE_UI_KIT`. On Vercel the Liberia check reads Vercel's own country header.
 
 5. Deploy. Then Settings → Domains → add your domain (T-16). HTTPS is automatic.

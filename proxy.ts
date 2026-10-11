@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { buildCsp } from "./lib/security/headers";
+import { API_CSP, buildCsp } from "./lib/security/headers";
 
 /**
  * 1. A fresh nonce and strict Content-Security-Policy for every page (§22): Next.js reads the nonce
@@ -10,14 +10,15 @@ import { buildCsp } from "./lib/security/headers";
  * Not an authorization layer: every page and server action checks the member itself (§6).
  */
 export async function proxy(request: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = buildCsp({
-    isDev: process.env.NODE_ENV !== "production",
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    nonce,
-  });
+  // API routes return data, never pages: they keep the locked-down policy (next.config.ts) and no nonce.
+  const csp = request.nextUrl.pathname.startsWith("/api/")
+    ? API_CSP
+    : buildCsp({
+        isDev: process.env.NODE_ENV !== "production",
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        nonce: Buffer.from(crypto.randomUUID()).toString("base64"),
+      });
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
   const next = () => {
     const r = NextResponse.next({ request: { headers: requestHeaders } });

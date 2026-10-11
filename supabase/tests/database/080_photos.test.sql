@@ -226,7 +226,9 @@ select ok(not public.staff_sign_in_allowed('198.51.100.7', 'mod@example.test'),
   'failed attempts are limited per account from one IP (any letter case)');
 select ok(public.staff_sign_in_allowed('203.0.113.50', 'mod@example.test'),
   'the real staff member on another connection is not locked out');
-select public.record_staff_sign_in_failure('198.51.100.8', 'mod@example.test');
+-- Account-wide failures are counted by the password hook since Phase 12 (175_hardening), wherever
+-- the sign-in comes from; three of them here.
+select public.rate_limit_hit('staff_login.account', 'mod@example.test', 3600, 2147483647) from generate_series(1, 3);
 select ok(not public.staff_sign_in_allowed('203.0.113.50', 'mod@example.test'),
   'an account-wide backstop stops guessing spread over many IPs');
 

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { currentRequestCountry, currentRequestIp } from "@/lib/auth/request-context";
-import { otpAttemptAllowed } from "@/lib/auth/otp-guard";
+import { checkOtpCode } from "@/lib/auth/otp-guard";
 import { canHoldSession, getMember, nextStepFor } from "@/lib/auth/session";
 import type { PhoneStepState } from "@/lib/auth/actions/types";
 import { isAllowedCountry } from "@/lib/domain/geo";
@@ -59,10 +59,14 @@ export async function verifyLoginCode(prev: PhoneStepState, formData: FormData):
     sentAt: prev.stage === "code" ? prev.sentAt : Date.now(),
   };
   if (code.length !== 6) return { ...codeState, error: "That code is wrong or has expired." };
-  if (!(await otpAttemptAllowed(phone.e164))) return { ...codeState, error: "Too many attempts. Try again later." };
+  const check = await checkOtpCode(phone.e164, code);
+  if (check.outcome === "LIMITED") return { ...codeState, error: "Too many attempts. Try again later." };
+  if (check.outcome === "UNAVAILABLE")
+    return { ...codeState, error: "Sign-in is temporarily unavailable. Try again later." };
+  if (check.outcome !== "OK") return { ...codeState, error: "That code is wrong or has expired." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: code, type: "sms" });
+  const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: check.authCode, type: "sms" });
   // A banned account is refused by Supabase Auth itself (BR-6); show the same neutral message.
   if (error) return { ...codeState, error: "That code is wrong or has expired." };
 

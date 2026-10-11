@@ -2,7 +2,7 @@
 -- widens client access by accident. Per-table and per-function behaviour is tested in 000–160.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(11);
 
 -- 1. Clients never write tables directly: every change goes through checked server functions.
 select is_empty(
@@ -13,6 +13,22 @@ select is_empty(
       where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm')
         and has_table_privilege(r.rolname, c.oid, p.priv) $$,
   'no client role can insert, update, delete or truncate any public table');
+
+-- 1b. …not even single columns (a column grant would bypass the table-level check above).
+select is_empty(
+  $$ select c.relname || ':' || r.rolname || ':' || p.priv
+       from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       cross join (values ('anon'), ('authenticated')) r(rolname)
+       cross join unnest(array['INSERT', 'UPDATE']) p(priv)
+      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm')
+        and has_any_column_privilege(r.rolname, c.oid, p.priv) $$,
+  'no client role holds a column-level insert or update grant');
+
+-- 1c. Files are reached only through signed URLs made by the server after an access check.
+select is_empty(
+  $$ select policyname from pg_policies where schemaname = 'storage' and tablename = 'objects'
+       and roles && array['anon', 'authenticated', 'public']::name[] $$,
+  'no storage policy lets clients read or write files directly');
 
 -- 2. The tables clients may read at all (each further limited by RLS to their own rows, tested per table).
 select set_eq(
@@ -36,8 +52,8 @@ select is_empty(
 select is_empty(
   $$ select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.prosecdef
-        and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%') $$,
-  'every SECURITY DEFINER function pins its search_path');
+        and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c = 'search_path=""') $$,
+  'every SECURITY DEFINER function pins an empty search_path');
 
 -- 5. Nothing is executable by PUBLIC (every function grants explicitly).
 select is_empty(

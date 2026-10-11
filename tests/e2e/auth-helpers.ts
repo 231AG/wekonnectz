@@ -92,7 +92,13 @@ export async function signInMemberViaApi(e164: string) {
   const since = Date.now();
   const { error: otpError } = await client.auth.signInWithOtp({ phone: e164, options: { shouldCreateUser: false } });
   expect(otpError).toBeNull();
-  const { error } = await client.auth.verifyOtp({ phone: e164, token: await readOtp(e164, since), type: "sms" });
+  // The SMS carries our code; the server checks it and hands back Auth's code (as the sign-in screen does).
+  const { data } = await adminClient()
+    .rpc("otp_check_code", { p_phone: e164, p_ip: "e2e", p_code: await readOtp(e164, since) })
+    .single();
+  const check = data as { outcome: string; auth_code: string | null } | null;
+  expect(check?.outcome).toBe("OK");
+  const { error } = await client.auth.verifyOtp({ phone: e164, token: check!.auth_code!, type: "sms" });
   expect(error).toBeNull();
   return client;
 }

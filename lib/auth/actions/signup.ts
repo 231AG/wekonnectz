@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { clearPendingDob, getPendingDob, isAgeBlocked, setAgeBlock, setPendingDob } from "@/lib/auth/cookies";
 import { currentRequestCountry, currentRequestIp } from "@/lib/auth/request-context";
-import { otpAttemptAllowed } from "@/lib/auth/otp-guard";
+import { checkOtpCode } from "@/lib/auth/otp-guard";
 import { canHoldSession, getMember, nextStepFor } from "@/lib/auth/session";
 import type { AgeGateState, PhoneStepState } from "@/lib/auth/actions/types";
 import { checkAdult, toIsoDate } from "@/lib/domain/age";
@@ -135,10 +135,13 @@ export async function verifySignupCode(prev: PhoneStepState, formData: FormData)
     sentAt: prev.stage === "code" ? prev.sentAt : Date.now(),
   };
   if (code.length !== 6) return { ...codeState, error: MESSAGES.badCode };
-  if (!(await otpAttemptAllowed(phone.e164))) return { ...codeState, error: MESSAGES.rateLimited };
+  const check = await checkOtpCode(phone.e164, code);
+  if (check.outcome === "LIMITED") return { ...codeState, error: MESSAGES.rateLimited };
+  if (check.outcome === "UNAVAILABLE") return { ...codeState, error: MESSAGES.unavailableService };
+  if (check.outcome !== "OK") return { ...codeState, error: MESSAGES.badCode };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: code, type: "sms" });
+  const { error } = await supabase.auth.verifyOtp({ phone: phone.e164, token: check.authCode, type: "sms" });
   if (error) return { ...codeState, error: error.status === 429 ? MESSAGES.rateLimited : MESSAGES.badCode };
 
   const member = await getMember();

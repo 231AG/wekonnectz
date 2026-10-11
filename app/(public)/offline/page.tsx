@@ -13,8 +13,13 @@ export default function OfflinePage() {
           <WifiOff className="size-9 text-muted-foreground" strokeWidth={1.8} aria-hidden />
         </div>
         <ScreenTitle>You’re offline</ScreenTitle>
-        <ScreenLead>Check your data or Wi-Fi, then try again. Your messages are safe and will load when you’re back.</ScreenLead>
-        <a href="/home" className="inline-flex min-h-11 items-center font-bold text-pending underline underline-offset-4">
+        <ScreenLead>
+          Check your data or Wi-Fi, then try again. Your messages are safe and will load when you’re back.
+        </ScreenLead>
+        <a
+          href="/home"
+          className="inline-flex min-h-11 items-center font-bold text-pending underline underline-offset-4"
+        >
           Try again
         </a>
       </div>

@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { verifyStandardWebhook } from "@/lib/auth/webhook-signature";
@@ -12,6 +14,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * 2. The destination (`sms.phone`) must be the account's own number: phone changes are not
  *    allowed in the MVP (a new number would bypass BR-2/BR-3), so no SMS goes to a new number.
  * 3. +231 only (BR-2), per-phone hourly limit (§22), then the SMS provider adapter.
+ * 4. The SMS carries our own code, never Auth's: Auth's code is kept server-side and used only after
+ *    our server checks the member's code with its attempt limits (Phase 12; see otp_check_code).
  * Never logs the phone number or the code (§6 rule 7).
  */
 
@@ -74,8 +78,16 @@ export async function POST(request: Request) {
   if (error) return fail(500, "Sign-in is temporarily unavailable.");
   if (!allowed) return fail(429, "Too many codes requested for this number. Try again later.");
 
+  const memberCode = randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const { error: challengeError } = await admin.rpc("record_otp_challenge", {
+    p_phone: phone.e164,
+    p_auth_code: code,
+    p_member_code: memberCode,
+  });
+  if (challengeError) return fail(500, "Sign-in is temporarily unavailable.");
+
   try {
-    await getSmsProvider().sendOtp({ phoneE164: phone.e164, code });
+    await getSmsProvider().sendOtp({ phoneE164: phone.e164, code: memberCode });
   } catch {
     return fail(502, "We couldn't send the code. Try again shortly.");
   }
