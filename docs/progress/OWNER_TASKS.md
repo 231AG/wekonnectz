@@ -28,7 +28,7 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 | T-17 | Create a Sentry project                                                                                                                                      | Before launch (Phase 0 works without it)                 | OPEN                                                                                |
 | T-18 | Research and choose a card processor (OD-4, 15, 19, 20)                                                                                                      | Phase 7c only (not launch)                               | OPEN                                                                                |
 | T-19 | Approve threshold and limit values                                                                                                                           | **Phase 1 sign-off** (OTP limits), then per row below    | OPEN                                                                                |
-| T-20 | Web push keys (OD-25 = in-app + web push)                                                                                                                    | Phase 11                                                 | OPEN                                                                                |
+| T-20 | Web push keys (OD-25 = in-app + web push) — steps below                                                                                                      | Phone notifications (in-app works without)               | OPEN                                                                                |
 | T-21 | Remaining product decisions: OD-5, 6 (Phase 4), OD-8 (Phase 8), OD-9 (Phase 9), OD-7 (Phase 10)                                                              | Per row below                                            | OPEN                                                                                |
 | T-22 | Create the `main` branch on GitHub                                                                                                                           | **Phase 0 PR and CI** (a PR needs a base branch)         | OPEN                                                                                |
 | T-24 | Create the phone-hashing secret in each hosted Supabase project (Vault)                                                                                      | Phase 1 hosted verification (T-06); launch               | OPEN                                                                                |
@@ -263,8 +263,12 @@ Status key: `OPEN` · `DONE (verified by Claude)` · `DONE (confirmed by owner)`
 
 ### T-20 — Web push keys (OD-25: web push confirmed)
 
-- **What:** Nothing yet — I'll generate VAPID keys with a script on your machine and you put them in env as `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`.
-- **Blocks:** Phase 11.
+- **What:** Create the web push keys once and put them in Vercel (Project → Settings → Environment Variables). Never paste them in chat.
+- **Steps:**
+  1. On your computer, in the project folder: `pnpm exec web-push generate-vapid-keys`.
+  2. In Vercel set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (the public key), `VAPID_PRIVATE_KEY` (the private key — secret) and `VAPID_SUBJECT` (`mailto:` plus an address you read, e.g. `mailto:support@yourdomain`).
+  3. Redeploy. Tell me "T-20 done" and I'll check the variables exist without printing them.
+- **Blocks:** phone notifications only (in-app notifications work without it). Phase 11 is otherwise complete.
 - **Requested in:** Plan.
 
 ### T-21 — Product decisions by phase

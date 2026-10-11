@@ -25,7 +25,7 @@ Verified, adults-only (18+) connection platform for Liberia. Spec: `docs/spec/We
 | eslint / eslint-config-next           | 9.39.5 / 16.3.8   | ESLint 10 not used: React plugins don't support it yet                                                                                                 |
 | prettier                              | 3.9.9             | printWidth 120                                                                                                                                         |
 
-Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation), sharp 0.35.5 (Phase 3, image processing).
+Also installed: libphonenumber-js 1.13.14 (Phase 1, +231 validation), sharp 0.35.5 (Phase 3, image processing), web-push 3.6.7 + @types/web-push 3.6.4 (Phase 11, Web Push / VAPID for OD-25).
 
 Planned, not yet installed (added in the phase that needs them, with a reason in the commit): react-hook-form, @tanstack/react-query, framer-motion.
 

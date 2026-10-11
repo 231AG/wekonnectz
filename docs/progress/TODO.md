@@ -20,13 +20,13 @@ Phase numbers match `docs/plan/MASTER_PLAN.md`. BR = business rule (§19).
 | Availability        | 6       | 1              | 0              | 0          |
 | Casual discovery    | 7       | 1              | 0              | 0          |
 | Admin console       | 10      | 1              | 0              | 0          |
-| Notifications       | 1       | 1              | 3              | 0          |
+| Notifications       | 4       | 1              | 0              | 0          |
 | Security and launch | 2       | 1              | 5              | 2          |
-| **Total**           | **100** | **19**         | **11**         | **6**      |
+| **Total**           | **103** | **19**         | **8**          | **6**      |
 
 ⛔ = not started and waiting on an owner decision or task.
 
-Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19. Phase 8 code complete; window caps wait on OD-8 and the short-window signal on T-19. Phase 9 code complete; request cap and cool-down wait on OD-9, request signals on T-19. Phase 10 code complete; deletion retention waits on OD-7, the extension cap on OD-30, the export limit on T-19.
+Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1 code complete; hosted verification and limit values pending. Phase 2 code complete; real lists and term review pending. Phase 3 code complete; upload limit value and hosted staff set-up pending. Phase 4 code complete; pose list, escalation threshold (T-19) and selfie retention (OD-6) pending. Phase 5 code complete; report limits (T-19) and Q23–Q28 sign-off pending. Phase 6 code complete; message rate limit and capture count (T-19) pending. Phase 7 code complete; prices, retention, transaction-ID formats pending (T-29). Phase 7b scaffold complete with a fake processor; real processor waits on OD-4 (Phase 7c), grace period and card-during-pass on OD-20 / OD-19. Phase 8 code complete; window caps wait on OD-8 and the short-window signal on T-19. Phase 9 code complete; request cap and cool-down wait on OD-9, request signals on T-19. Phase 10 code complete; deletion retention waits on OD-7, the extension cap on OD-30, the export limit on T-19. Phase 11 code complete; phone notifications wait on the web push keys (T-20), the pass reminder time on T-19.
 
 ## Planning
 
@@ -195,10 +195,10 @@ Plan approved 5 Oct 2026. Phase 0 code complete (CI not run: no `main`). Phase 1
 ## Notifications
 
 - ✅ `notifications` table + `notify()` — P4
-- 🔄 Review outcome notifications ✅ P4 (photo rejected, selfie decided, profile live); claim decisions P7
-- ⬜ Notifications screen + preferences — P11
-- ⬜ Requests, matches, messages, expiry and renewal reminders — P11
-- ⬜ Delivery: in-app + web push (OD-25) — P11
+- ✅ Review outcome notifications (P4) and claim decisions (P7)
+- ✅ Notifications screen (bell on Home) + preferences — P11
+- ✅ Requests, matches, messages, expiry and renewal reminders — P11
+- 🔄 Delivery: in-app ✅; web push built, on once the keys are set (T-20) — P11 (OD-25)
 
 ## Security and launch
 

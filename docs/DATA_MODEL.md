@@ -305,6 +305,24 @@ No new tables. `app_settings` gains `kind` (int · bool · object · array · en
 
 Settings (no values in the migration; DEV-ONLY in `seed.sql`): `account.deletion_purge_days` (OD-7), `subscriptions.manual_extension_max_days` (OD-30), `export.max_per_day` (T-19).
 
+### Phase 11 ✅ (`20261017000000_notifications.sql`) — notifications
+
+| Table                | Key columns                                     | Client access | Notes                                                                                                                |
+| -------------------- | ----------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `push_subscriptions` | user_id, endpoint (https, unique), p256dh, auth | none          | One row per browser (OD-25); at most 10 per member; server-only                                                      |
+| `notifications` (+)  | `pushed_at`                                     | own rows (P4) | New types: REQUEST_RECEIVED, REQUEST_ACCEPTED, MATCH_CREATED, MESSAGE_RECEIVED, PASS_EXPIRING, CARD_RENEWAL_REMINDER |
+
+| Function                                                                                          | Callable by  | Purpose                                                                                       |
+| ------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `notify_member(user, type, payload)`                                                              | internal     | Skips deleted / banned accounts and switched-off categories; one message notice per chat      |
+| triggers on `message_requests`, `matches`, `messages`, `conversation_members`                     | internal     | Request received / accepted (never declined), match, message; reading a chat reads its notice |
+| `send_pass_expiry_warnings()` / `send_card_renewal_reminders()`                                   | service_role | §16 reminders from the daily job, each once                                                   |
+| `member_notifications` / `member_unread_notifications` / `member_mark_notifications_read`         | service_role | Inbox for the session user; payloads without other members' ids or staff reasons              |
+| `member_notification_prefs` / `set_notification_prefs`                                            | service_role | Four categories; account notices always on                                                    |
+| `save_push_subscription` / `delete_push_subscription` / `claim_push_batch` / `drop_push_endpoint` | service_role | Web push devices and a claim-once outbox                                                      |
+
+Settings: `notifications.pass_expiry_warning_hours` (T-19; DEV-ONLY 24 in `seed.sql`).
+
 ## Planned (spec §18)
 
 | Table                              | Phase |     | Table                                                 | Phase |

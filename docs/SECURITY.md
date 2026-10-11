@@ -186,6 +186,12 @@ The **+231 OTP is the real control**; the IP-country check is a pre-filter that 
 - **Reports outlive a purge** (unlinked), and a deleted account can still be banned so deleting never dodges the phone blocklist (Q54).
 - **Data export.** `/api/me/export` returns the signed-in member's own data from the session (never an id parameter): profile, settings, consents, photo and verification metadata, matches (names only), messages and requests they sent, availability windows, reports they filed, claims, payments, subscriptions and notifications. No storage paths, nothing from other members' side, no moderation notes, and a decline shows as "expired" (Q45). `Cache-Control: no-store`; limited by `export.max_per_day`.
 
+## Notifications (Phase 11)
+
+- **Nothing private in a notice.** In-app and push texts are fixed per type: no names, no message or request text, no phone numbers (Q58). Payloads hold ids of the member's own items only (a conversation or request), and the inbox strips anything else.
+- **Private actions stay private.** A decline is never notified (Q45); deleted and banned accounts receive nothing (BR-7); a member who turns a category off gets neither the inbox entry nor the push.
+- **Web push (OD-25).** Off until the VAPID keys are set (T-20). Devices are stored server-side only (`push_subscriptions`, no client access), https endpoints only, at most 10 per member. The push payload is the same generic text and an in-app path; the service worker opens only paths on our own origin. Sending happens after the response (`after()`), claims each notice once, and forgets browsers the push service reports gone (404/410). Endpoints are never logged.
+
 ## Logging rule (§6 rule 7)
 
 Never log phone numbers, dates of birth, storage paths, selfie paths or message text — in app logs,
